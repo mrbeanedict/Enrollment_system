@@ -1,0 +1,404 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fraunces:opsz,wght@9..144,450;9..144,560;9..144,650&display=swap');
+
+/* Student LMS sign-in page (learningportal/lms_login.php) — the
+   glassmorphism split-panel login shared with login.php's redesign, but
+   fully re-themed to this app's actual palette (login.php still runs on
+   css_staff.css's darker teal --brand-* set) and pushed further: heavier
+   blur/saturation, a real inner highlight, and a softer glass frame around
+   the gradient side instead of a flat edge-to-edge fill. */
+
+:root {
+  --color-primary: #386641;
+  --color-primary-hover: #2F5636;
+  --color-primary-active: #24422A;
+  --color-dark: #1C2628;
+  --color-muted: #9FB8B8;
+  --color-info: #CADEDE;
+  --color-accent: #FEFAE0;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  color: #1A1A2E;
+}
+
+/* ─── Page shell — tonal backdrop the glass panel diffuses against ───────── */
+
+body.auth-page {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Extra bottom padding (beyond the 24px on the other three sides) lifts
+     the centered .auth-shell clear of .auth-footer-credit, which is
+     position:fixed at the very bottom of the viewport and would otherwise
+     sit flush against — or overlap — the card on shorter screens. */
+  padding: 24px 24px 72px;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 4px),
+    linear-gradient(160deg, #FBFDF9 0%, #EDF5EE 32%, #D9E8DE 66%, #C3DACB 100%);
+  background-attachment: fixed;
+  overflow: hidden;
+}
+
+/* ─── Animated backdrop — liquid color fields ─────────────────────────────
+   Real DOM elements (not animated background-position) so the motion is
+   GPU-composited via transform, not repainted gradients. Each field runs
+   two independent animations at once: one drifting its position/scale,
+   one continuously reshaping its border-radius through lopsided values —
+   that second one is what turns a moving circle into something that
+   reads as fluid/liquid instead of a ball bouncing around. Different
+   durations per field (and per animation) keep them out of sync, since
+   real liquid never pulses in unison. */
+.auth-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.auth-backdrop .backdrop-blob {
+  position: absolute;
+  filter: blur(85px);
+  will-change: transform, border-radius;
+}
+.backdrop-blob-cream {
+  width: 50vw; aspect-ratio: 1; top: -16%; left: -12%;
+  background: var(--color-accent); opacity: 0.9;
+  animation: backdrop-drift-a 18s ease-in-out infinite, backdrop-morph-1 13s ease-in-out infinite;
+}
+.backdrop-blob-info {
+  width: 42vw; aspect-ratio: 1; top: -2%; right: -14%;
+  background: var(--color-info); opacity: 0.85;
+  animation: backdrop-drift-b 22s ease-in-out infinite, backdrop-morph-2 17s ease-in-out infinite;
+}
+.backdrop-blob-primary {
+  width: 52vw; aspect-ratio: 1; bottom: -20%; left: 4%;
+  background: var(--color-primary); opacity: 0.7;
+  animation: backdrop-drift-c 20s ease-in-out infinite, backdrop-morph-3 15s ease-in-out infinite;
+}
+.backdrop-blob-dark {
+  width: 40vw; aspect-ratio: 1; bottom: -18%; right: -10%;
+  background: var(--color-dark); opacity: 0.55;
+  animation: backdrop-drift-a 16s ease-in-out infinite reverse, backdrop-morph-2 19s ease-in-out infinite reverse;
+}
+/* A fifth, smaller warm accent drifting through the middle distance —
+   the four corner fields alone leave the center comparatively static;
+   this is what keeps motion visible even directly behind the card. */
+.backdrop-blob-glow {
+  width: 30vw; aspect-ratio: 1; top: 32%; left: 38%;
+  background: var(--color-primary-hover); opacity: 0.45;
+  animation: backdrop-drift-b 14s ease-in-out infinite reverse, backdrop-morph-1 11s ease-in-out infinite reverse;
+}
+
+@keyframes backdrop-drift-a {
+  0%   { transform: translate(0, 0) scale(1) rotate(0deg); }
+  33%  { transform: translate(8%, 10%) scale(1.22) rotate(8deg); }
+  66%  { transform: translate(-6%, 4%) scale(0.88) rotate(-6deg); }
+  100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+}
+@keyframes backdrop-drift-b {
+  0%   { transform: translate(0, 0) scale(1) rotate(0deg); }
+  33%  { transform: translate(-10%, 8%) scale(0.82) rotate(-10deg); }
+  66%  { transform: translate(6%, -6%) scale(1.2) rotate(7deg); }
+  100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+}
+@keyframes backdrop-drift-c {
+  0%   { transform: translate(0, 0) scale(1) rotate(0deg); }
+  33%  { transform: translate(6%, -10%) scale(1.16) rotate(9deg); }
+  66%  { transform: translate(-8%, -3%) scale(0.9) rotate(-8deg); }
+  100% { transform: translate(0, 0) scale(1) rotate(0deg); }
+}
+
+/* Lopsided, ever-shifting corner radii — each keyframe leaves every corner
+   a different value so the shape never settles into a circle or a
+   symmetric blob, the way a real drop of liquid keeps folding. */
+@keyframes backdrop-morph-1 {
+  0%, 100% { border-radius: 42% 58% 65% 35% / 45% 40% 60% 55%; }
+  25%      { border-radius: 58% 42% 38% 62% / 55% 65% 35% 45%; }
+  50%      { border-radius: 65% 35% 55% 45% / 40% 60% 40% 60%; }
+  75%      { border-radius: 35% 65% 45% 55% / 60% 45% 55% 40%; }
+}
+@keyframes backdrop-morph-2 {
+  0%, 100% { border-radius: 60% 40% 30% 70% / 55% 35% 65% 45%; }
+  25%      { border-radius: 35% 65% 60% 40% / 40% 55% 45% 60%; }
+  50%      { border-radius: 48% 52% 68% 32% / 62% 48% 52% 38%; }
+  75%      { border-radius: 55% 45% 40% 60% / 45% 60% 40% 55%; }
+}
+@keyframes backdrop-morph-3 {
+  0%, 100% { border-radius: 50% 50% 45% 55% / 60% 40% 60% 40%; }
+  25%      { border-radius: 65% 35% 60% 40% / 45% 55% 45% 55%; }
+  50%      { border-radius: 40% 60% 35% 65% / 55% 65% 35% 45%; }
+  75%      { border-radius: 58% 42% 55% 45% / 38% 48% 52% 62%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-backdrop .backdrop-blob { animation: none; border-radius: 50%; }
+}
+
+/* ─── Glass shell — split panel ───────────────────────────────────────────── */
+
+.auth-shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(240px, 0.68fr) minmax(380px, 1fr);
+  width: 100%;
+  max-width: 1080px;
+  min-height: 620px;
+  max-height: 92vh;
+  /* Lower fill opacity than a typical "milky" glass panel — this lets the
+     backdrop blobs' actual color tint the card instead of just haze, which
+     is what sells "frosted" over "translucent white plastic". */
+  background: rgba(255,255,255,0.32);
+  backdrop-filter: blur(46px) saturate(220%);
+  -webkit-backdrop-filter: blur(46px) saturate(220%);
+  border: 1px solid rgba(255,255,255,0.7);
+  border-radius: 32px;
+  box-shadow:
+    0 40px 100px -24px rgba(28,38,40,0.45),
+    0 8px 24px -8px rgba(28,38,40,0.2),
+    inset 0 1px 0 rgba(255,255,255,0.85),
+    inset 0 -1px 0 rgba(28,38,40,0.06);
+  overflow: hidden;
+}
+/* Thin top sheen — the one classic glass cue that sells the effect. */
+.auth-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.95), transparent);
+  z-index: 3;
+}
+/* Fogged-glass grain — a faint fractal-noise texture blended over the
+   panel so it reads as actual etched/frosted glass rather than a clean
+   blurred photo. Kept extremely low-opacity so it never competes with
+   the form content sitting on top of it. */
+.auth-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+@media (max-width: 860px) {
+  .auth-shell { grid-template-columns: 1fr; max-height: none; min-height: 0; }
+}
+
+/* ─── Left: gradient panel, framed inside its own rounded inset ──────────── */
+
+.auth-gradient-side {
+  padding: 22px;
+  display: flex;
+}
+@media (max-width: 860px) { .auth-gradient-side { display: none; } }
+
+.auth-gradient-frame {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 34px;
+  border-radius: 24px;
+  overflow: hidden;
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+}
+
+.gradient-bg {
+  position: absolute; inset: 0; z-index: 0; overflow: hidden;
+  background: linear-gradient(165deg, var(--color-accent) 0%, #E4EFC9 14%, var(--color-info) 34%, #6FA48F 58%, var(--color-primary) 78%, var(--color-dark) 100%);
+}
+.gradient-bg .blob { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.75; }
+.gradient-bg .blob-cream { width: 60%; aspect-ratio: 1; top: -14%; left: -12%; background: var(--color-accent); }
+.gradient-bg .blob-info { width: 55%; aspect-ratio: 1; top: 8%; right: -14%; background: var(--color-info); }
+.gradient-bg .blob-primary { width: 65%; aspect-ratio: 1; bottom: -18%; left: 8%; background: var(--color-primary); }
+.gradient-bg .blob-dark { width: 55%; aspect-ratio: 1; bottom: -20%; right: -10%; background: var(--color-dark); opacity: 0.85; }
+
+.gradient-top { position: relative; z-index: 2; }
+.brand-logo2 { display: block; width: 100%; height: auto; }
+
+.gradient-bottom { position: relative; z-index: 2; max-width: 420px; }
+.gradient-eyebrow { font-size: 0.78rem; color: var(--color-accent); font-weight: 600; margin-bottom: 10px; display: block; }
+.gradient-tagline {
+  margin: 0; font-family: 'Fraunces', serif; font-weight: 560; font-size: clamp(1.4rem,2.6vw,1.9rem);
+  line-height: 1.32; color: #fff;
+}
+
+@media (max-width: 1080px) { .auth-gradient-side { padding: 18px; } }
+
+/* ─── Right: login form ───────────────────────────────────────────────────── */
+
+.auth-form-side {
+  background: transparent;
+  padding: 40px clamp(28px, 4vw, 56px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.auth-form-inner { width: 100%; max-width: 360px; text-align: center; }
+
+.auth-eyebrow { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--color-primary); font-weight: 700; }
+
+/* log_ui.png's crest fills nearly its whole frame — scale to fit rather
+   than the older crop-into-a-larger-canvas technique other auth pages
+   still use for a different, more zoomed-out crest asset. */
+.auth-mark {
+  width: 104px;
+  height: 104px;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 18px;
+}
+.auth-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 16px rgba(28,38,40,0.22));
+}
+
+.auth-form-inner h1 { margin: 10px 0 0; font-family: 'Fraunces', serif; font-weight: 560; letter-spacing: -0.01em; color: var(--color-dark); font-size: 1.9rem; line-height: 1.25; }
+.auth-lead { margin: 10px auto 0; line-height: 1.6; color: #3E4B4B; font-size: 0.9rem; max-width: 32ch; }
+
+.auth-shell form { margin-top: 30px; display: flex; flex-direction: column; gap: 18px; text-align: left; }
+.field label {
+  display: block; font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+  font-weight: 700; color: #3E4B4B; margin-bottom: 8px;
+}
+/* Password label + Caps Lock note share one row instead of the note
+   stacking below the field — appearing/disappearing on the same line as
+   the label can't change the field's height, where stacking it under the
+   input used to push the card taller every time it toggled. */
+.field-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.field-label-row label { margin-bottom: 0; }
+.field-input { position: relative; }
+.field-input input {
+  width: 100%;
+  background: rgba(255,255,255,0.65);
+  border: 1px solid rgba(28,38,40,0.14);
+  border-radius: 10px;
+  padding: 13px 14px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.92rem;
+  color: var(--color-dark);
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.field-input input::placeholder { color: #6B8080; }
+.field-input input:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(56,102,65,0.16);
+}
+.toggle-eye {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: #6B8080; cursor: pointer; padding: 4px; display: flex;
+}
+.toggle-eye:hover { color: #3E4B4B; }
+
+/* Always rendered, never removed from flow — JS only flips `visibility`
+   (see lms_login.php), so the label row's height and the space either
+   side of it stay fixed whether the note is showing or not. Toggling
+   `display`/`hidden` instead would resize the row every keystroke. */
+.capslock-note {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #9A6B00;
+  visibility: hidden;
+}
+.capslock-note svg { flex-shrink: 0; }
+
+.field-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: -6px;
+}
+.remember-me {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.82rem;
+  color: #3E4B4B;
+  cursor: pointer;
+  user-select: none;
+}
+.remember-me input { accent-color: var(--color-primary); width: 14px; height: 14px; cursor: pointer; }
+.forgot-link { font-size: 0.82rem; color: var(--color-primary); font-weight: 700; text-decoration: none; }
+.forgot-link:hover { text-decoration: underline; }
+
+/* Always rendered (see lms_login.php) with the exact same box — border,
+   background, padding all included — whether or not there's a message,
+   and only `visibility` toggled for the empty state. That reserves the
+   same slot in every state, so a failed login can't grow the form and
+   shove the vertically-centered card upward the way a conditionally
+   rendered/removed element would. */
+.auth-error {
+  font-size: 0.82rem; text-align: left; color: #C0392B; background: rgba(253,240,239,0.9);
+  border: 0.5px solid #F5C6C2; border-radius: 8px; padding: 10px 14px;
+}
+.auth-error.is-empty { visibility: hidden; }
+.auth-error a { color: #C0392B; font-weight: 700; }
+
+.btn-login {
+  margin-top: 4px; width: 100%; background: var(--color-dark); color: #fff; border: none;
+  padding: 14px 16px; font-size: 0.95rem; font-weight: 700; cursor: pointer;
+  box-shadow: 0 10px 24px rgba(28,38,40,0.32), 0 2px 6px rgba(28,38,40,0.22);
+  transition: background .15s ease, box-shadow .15s ease, transform .1s ease;
+  font-family: 'Inter', sans-serif;
+}
+.btn-login:hover { background: #0F1A1B; box-shadow: 0 14px 30px rgba(28,38,40,0.38), 0 3px 8px rgba(28,38,40,0.26); }
+.btn-login:active { transform: translateY(1px); }
+
+.switch-role { margin-top: 24px; font-size: 0.85rem; color: #4A5757; }
+.switch-role a { color: var(--color-primary); font-weight: 700; text-decoration: none; }
+.switch-role a:hover { text-decoration: underline; }
+
+.auth-footer-credit {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; font-size: 11px;
+  color: rgba(255,255,255,0.6); background: rgba(16,32,22,0.65); padding: 0.9rem 1rem; text-align: center;
+}
+
+/* ─── Page loader (shown briefly on submit) ───────────────────────────────── */
+
+.page-loader {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.88);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.15s ease, visibility 0.15s;
+}
+.page-loader.show { opacity: 1; visibility: visible; pointer-events: auto; }
+.page-loader-spinner {
+  width: 44px; height: 44px;
+  border: 4px solid var(--color-info);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: page-loader-spin 0.7s linear infinite;
+}
+@keyframes page-loader-spin { to { transform: rotate(360deg); } }

@@ -1,0 +1,2180 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+:root {
+  --brand-primary: #1E4D3B;
+  --brand-primary-hover: #163829;
+  --brand-primary-active: #102A1D;
+  --brand-accent: #2F6B4F;
+  --brand-gradient: #4C8A6C;
+  --brand-tint: #EAF3EE;
+
+  /* Single source of truth for the sidebar's solid color. The photo block
+     blends into this exact value (see .staff-sidebar-photo below) so if
+     the sidebar background ever changes, the photo blend follows it
+     automatically instead of drifting out of sync. */
+  --staff-sidebar-bg: #FAFAF8;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: #F5F5F7;
+  min-height: 100vh;
+  color: #1A1A2E;
+}
+
+/* ─── Staff sidebar layout ────────────────────────────────────────────────── */
+
+body.staff-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #F5F5F7;
+}
+
+.staff-sidebar {
+  width: 0;
+  background: var(--staff-sidebar-bg);
+  border-right: 0 solid #E8E8E2;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  overflow: hidden;
+  z-index: 300;
+  transition: width 0.2s ease;
+}
+
+.staff-sidebar.open {
+  width: 232px;
+  border-right-width: 0.5px;
+  overflow-y: auto;
+}
+
+.staff-sidebar-overlay {
+  display: none;
+}
+
+.btn-staff-sidebar-toggle {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: 0.5px solid #E0E0EC;
+  border-radius: 7px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.btn-staff-sidebar-toggle span {
+  display: block;
+  width: 16px;
+  height: 1.5px;
+  margin: 0 auto;
+  background: #5A5A72;
+  border-radius: 1px;
+}
+
+.staff-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 1.4rem 1.25rem 1rem;
+  border-bottom: 0.5px solid #EBEBE4;
+}
+
+/* logo.png is a full brand lockup (crest + school name) on a large mostly-
+   blank canvas, not a standalone icon — crop just the crest region into this
+   small slot via explicit scale + offset (no image-editing tool available
+   to pre-crop a real icon file). */
+.sidebar-logo-crop {
+  width: 32px;
+  height: 32px;
+  overflow: hidden;
+  border-radius: 6px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.sidebar-logo-crop img {
+  position: absolute;
+  width: 129px;
+  height: 86px;
+  left: -18px;
+  top: -25px;
+  max-width: none;
+}
+
+.staff-sidebar-brand-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-primary);
+  line-height: 1.2;
+}
+
+.staff-sidebar-brand-role {
+  font-size: 10px;
+  color: #8A8A7E;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.staff-sidebar-nav {
+  flex: 1;
+  padding: 0.75rem 0;
+}
+
+.staff-nav-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #ADADA0;
+  padding: 0.85rem 1.25rem 0.35rem;
+  display: block;
+}
+
+.staff-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0.55rem 1.25rem;
+  font-size: 13px;
+  font-weight: 400;
+  color: #5A5A50;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+  position: relative;
+}
+
+.staff-nav-link:hover {
+  background: #F0F0EA;
+  color: var(--brand-primary);
+}
+
+.staff-nav-link.active {
+  background: var(--brand-tint);
+  color: var(--brand-primary);
+  font-weight: 500;
+}
+
+.staff-nav-link.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  background: var(--brand-accent);
+  border-radius: 0 2px 2px 0;
+}
+
+.staff-nav-link svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.staff-nav-link.active svg { opacity: 1; }
+
+.staff-nav-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  background: #E67E22;
+  color: #fff;
+  border-radius: 20px;
+  padding: 1px 7px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.staff-sidebar-status {
+  padding: 0.5rem 1.25rem 0.75rem;
+}
+
+.staff-status-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.staff-status-label { color: #7A7A6E; }
+.staff-status-val   { color: #3A3A32; font-weight: 500; }
+.staff-status-val.ok     { color: #1E7A46; }
+.staff-status-val.warn   { color: #B5650F; }
+
+/* ─── Sidebar building photo ─────────────────────────────────────────────── */
+
+/* ui.png is a screenshot on a plain white canvas, not a transparent PNG —
+   left as-is it sits inside the sidebar as a visible white rectangle. Two
+   things fix that together:
+     1. mix-blend-mode: multiply on the <img>, over a backdrop painted the
+        exact sidebar color (--staff-sidebar-bg). White pixels (255,255,255)
+        are the identity value for multiply, so they disappear into the
+        backdrop and only the non-white content of the image stays visible —
+        the same trick used to drop a white background out of a logo.
+     2. A soft mask-image fade on all four edges so even where the photo's
+        real (non-white) content reaches the edge, it tapers into the
+        sidebar color instead of ending on a hard rectangle line.
+   If --staff-sidebar-bg is ever changed, this blend follows it automatically. */
+
+.staff-sidebar-photo {
+  height: 150px;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  background: var(--staff-sidebar-bg);
+}
+
+.staff-sidebar-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: bottom;
+  display: block;
+  mix-blend-mode: multiply;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 22%, black 80%, transparent 100%),
+                       linear-gradient(90deg, transparent 0%, black 10%, black 90%, transparent 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(180deg, transparent 0%, black 22%, black 80%, transparent 100%),
+              linear-gradient(90deg, transparent 0%, black 10%, black 90%, transparent 100%);
+  mask-composite: intersect;
+}
+
+.staff-sidebar-photo::before,
+.staff-sidebar-photo::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 40px;
+  pointer-events: none;
+}
+
+.staff-sidebar-photo::before {
+  top: 0;
+  background: linear-gradient(180deg, var(--staff-sidebar-bg) 0%, transparent 100%);
+}
+
+.staff-sidebar-photo::after {
+  bottom: 0;
+  background: linear-gradient(0deg, var(--staff-sidebar-bg) 0%, transparent 100%);
+}
+
+.staff-sidebar-footer {
+  padding: 0.75rem 1rem;
+  border-top: 0.5px solid #EBEBE4;
+}
+
+.staff-sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0.6rem;
+}
+
+.staff-sidebar-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--brand-accent), var(--brand-gradient));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.staff-sidebar-username {
+  font-size: 12px;
+  font-weight: 500;
+  color: #5A5A50;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.staff-btn-logout {
+  width: 100%;
+  height: 34px;
+  background: #F0F0EA;
+  border: 0.5px solid #E0E0D8;
+  border-radius: 7px;
+  color: #55554B;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-decoration: none;
+}
+
+.staff-btn-logout:hover {
+  background: rgba(192,57,43,0.12);
+  border-color: rgba(192,57,43,0.3);
+  color: #C0392B;
+}
+
+.staff-main {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.staff-topbar {
+  background: #ffffff;
+  border-bottom: 0.5px solid #E8E8F0;
+  padding: 0 1.25rem 0 1rem;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.staff-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.staff-topbar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1A1A2E;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.staff-topbar-subtitle {
+  font-size: 11px;
+  font-weight: 400;
+  color: #8A8A9A;
+}
+
+.staff-topbar-date {
+  font-size: 12px;
+  color: #8A8A9A;
+}
+
+.staff-content {
+  padding: 1.75rem 2rem 3rem;
+  flex: 1;
+}
+
+/* ─── Dashboard: stat cards ───────────────────────────────────────────────── */
+
+.staff-welcome {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1A1A2E;
+  margin-bottom: 0.2rem;
+}
+
+.staff-welcome-sub {
+  font-size: 13px;
+  color: #8A8A9A;
+  margin-bottom: 1.5rem;
+}
+
+.staff-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.staff-stat-card {
+  background: #ffffff;
+  border: 0.5px solid #E8E8F0;
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+}
+
+.staff-stat-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #8A8A9A;
+  margin-bottom: 0.5rem;
+}
+
+.staff-stat-value {
+  font-size: 26px;
+  font-weight: 600;
+  color: #1A1A2E;
+  line-height: 1;
+}
+
+.staff-stat-value.warn { color: #B5650F; }
+
+/* ─── Layout wrapper ──────────────────────────────────────────────────────── */
+
+.page-wrap {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+/* admission.php and client.php use body directly — apply same padding */
+body > .page-eyebrow,
+body > .page-title,
+body > .page-sub,
+body > .panel,
+body > .notice,
+body > form,
+body > .route-grid,
+body > .sections-card {
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
+body > .route-grid,
+body > .sections-card,
+body > form {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* ─── Page header ─────────────────────────────────────────────────────────── */
+
+.page-eyebrow {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brand-accent);
+  margin-bottom: 0.35rem;
+  padding-top: 2rem;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #1A1A2E;
+  margin-bottom: 0.2rem;
+}
+
+.page-sub {
+  font-size: 13px;
+  color: #8A8A9A;
+  margin-bottom: 1.75rem;
+}
+
+/* ─── Notice banners ──────────────────────────────────────────────────────── */
+
+.notice {
+  font-size: 13px;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 1rem;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.notice-error {
+  background: #FDF0EF;
+  border: 0.5px solid #F5C6C2;
+  color: #C0392B;
+}
+
+.notice-error a {
+  color: #C0392B;
+  font-weight: 500;
+}
+
+.notice-info {
+  background: var(--brand-tint);
+  border: 0.5px solid #C9C2F0;
+  color: #5B4DB5;
+}
+
+/* ─── Route toggle (client.php) ───────────────────────────────────────────── */
+
+.route-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 1.25rem;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.route-btn {
+  background: #ffffff;
+  border: 0.5px solid #D4D4E0;
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+  width: 100%;
+}
+
+.route-btn:hover { border-color: var(--brand-accent); }
+
+.route-btn.active {
+  border: 1.5px solid var(--brand-accent);
+  background: var(--brand-tint);
+}
+
+.route-btn.active .route-btn-label { color: #5B4DB5; }
+
+.route-btn-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1A1A2E;
+  margin-bottom: 3px;
+}
+
+.route-btn-desc {
+  font-size: 12px;
+  color: #8A8A9A;
+}
+
+/* ─── Panel card ──────────────────────────────────────────────────────────── */
+
+.panel {
+  background: #ffffff;
+  border: 0.5px solid #D4D4E0;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.panel-sub {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8A8A9A;
+  margin-bottom: 0.9rem;
+}
+
+/* ─── Form cards ──────────────────────────────────────────────────────────── */
+
+section.card {
+  background: #ffffff;
+  border: 0.5px solid #D4D4E0;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+section.card h2 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1A1A2E;
+  margin-bottom: 1.1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 0.5px solid #EBEBF0;
+}
+
+fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 1.1rem;
+}
+
+fieldset:last-child { margin-bottom: 0; }
+
+legend {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8A8A9A;
+  margin-bottom: 0.75rem;
+  width: 100%;
+  padding-bottom: 0.4rem;
+  border-bottom: 0.5px solid #F0F0F5;
+}
+
+/* ─── Labels ──────────────────────────────────────────────────────────────── */
+
+label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: #5A5A72;
+  margin-bottom: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+label:first-of-type { margin-top: 0; }
+
+/* ─── 2-column field row ──────────────────────────────────────────────────── */
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 14px;
+}
+
+.field-row .field-col { min-width: 0; }
+
+.field-row .field-col label:first-of-type { margin-top: 0.5rem; }
+
+/* 3-column variant for name + suffix */
+.field-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 0.5fr;
+  gap: 0 14px;
+}
+
+.field-row-3 .field-col { min-width: 0; }
+
+/* Nested blocks (PSGC address rows, checkbox items) contain their own
+   <label> elements, so a field right after one is technically that
+   parent's ":first-of-type" label and would lose its top margin. Restore
+   consistent spacing before the next value starts. */
+.adm-psgc-row + label {
+  margin-top: 0.75rem;
+}
+
+.check-item {
+  margin-top: 0.75rem;
+}
+
+.check-item:first-child {
+  margin-top: 0;
+}
+
+/* The master "submit all documents later" checkbox (admission.php) sits
+   directly above the first requirement's upload card — .check-item and
+   .upload-group both only carry margin-top, so with nothing but two zero
+   bottom-margins between them they read as touching. */
+#allDocsLaterWrap {
+  margin-bottom: 1rem;
+}
+
+.req {
+  color: #C0392B;
+  font-weight: 600;
+  margin-left: 1px;
+}
+
+.field-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: #ADADBD;
+}
+
+/* ─── Inputs ──────────────────────────────────────────────────────────────── */
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+input[type="number"],
+input[type="date"],
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #D4D4E0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 0 12px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #1A1A2E;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+input[type="number"],
+input[type="date"],
+select {
+  height: 40px;
+}
+
+textarea {
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.5;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--brand-accent);
+  box-shadow: 0 0 0 3px rgba(47, 107, 79, 0.14);
+  background: #ffffff;
+}
+
+input::placeholder,
+textarea::placeholder { color: #ADADBD; }
+
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238A8A9A' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  cursor: pointer;
+}
+
+/* ─── Error states ────────────────────────────────────────────────────────── */
+
+input.input-error,
+select.input-error,
+textarea.input-error {
+  border-color: #E74C3C;
+  background: #FFFAFA;
+}
+
+input.input-error:focus,
+select.input-error:focus,
+textarea.input-error:focus {
+  box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.12);
+}
+
+.field-error {
+  display: block;
+  font-size: 11px;
+  color: #C0392B;
+  margin-top: 4px;
+  margin-bottom: 2px;
+}
+
+/* ─── File inputs / requirement uploads ──────────────────────────────────── */
+
+input[type="file"] {
+  width: 100%;
+  border: 1px solid #D4D4E0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 7px;
+  font-size: 12.5px;
+  font-family: inherit;
+  color: #5A5A72;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+input[type="file"]:hover { border-color: #ADADBD; }
+
+input[type="file"]:focus {
+  border-color: var(--brand-accent);
+  box-shadow: 0 0 0 3px rgba(47, 107, 79, 0.14);
+  background: #ffffff;
+  outline: none;
+}
+
+/* Branded "Choose File" button — matches .btn-secondary's shape/weight so
+   the native picker control doesn't look like a foreign browser widget
+   dropped into an otherwise fully-styled form. */
+input[type="file"]::file-selector-button {
+  height: 30px;
+  padding: 0 14px;
+  margin-right: 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--brand-primary);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+input[type="file"]::file-selector-button:hover { background: var(--brand-primary-hover); }
+
+input[type="file"].input-error {
+  border-color: #E74C3C;
+  background: #FFFAFA;
+}
+
+input[type="file"].input-error::file-selector-button { background: #C0392B; }
+
+.upload-group {
+  border: 0.5px solid #EBEBF0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.upload-group:hover { border-color: #D4D4E0; }
+
+.upload-group:last-child { margin-bottom: 0; }
+
+.upload-group label:first-of-type { margin-top: 0; }
+
+.upload-control .field-hint { display: block; margin-top: 4px; }
+
+/* File input greys out (rather than disappearing) once "submit later" is
+   checked, so the group's height doesn't jump and the two controls stay
+   visually paired. */
+.upload-control input[type="file"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #F0F0F2;
+}
+.upload-control input[type="file"]:disabled::file-selector-button {
+  background: #B9B9C4;
+  cursor: not-allowed;
+}
+
+/* "I'll submit this in person later" — sits directly under the file
+   control, same left edge and font size as the hint text above it so the
+   two read as one stacked unit rather than two unrelated rows. */
+.upload-later-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 0.5px solid #F0F0F5;
+  font-size: 12px;
+  font-weight: 500;
+  color: #5A5A72;
+  cursor: pointer;
+  user-select: none;
+}
+
+.upload-later-check input[type="checkbox"] {
+  accent-color: var(--brand-primary);
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.upload-later-check span { line-height: 1.3; }
+
+/* Whole-group error state — mirrors .input-error but scoped to the group
+   so the border reflects "this item has no file AND no later-checkbox",
+   not just a bad file (that case still uses .input-error on the input). */
+.upload-group.upload-group-error {
+  border-color: #E74C3C;
+  background: #FFFAFA;
+}
+
+.upload-group.upload-group-error .upload-later-check {
+  border-top-color: #F5C6C2;
+}
+
+/* ─── Dashed hint / callout card (admission.php) ─────────────────────────
+   Shared "soft dashed card" look used both for the plain informational
+   hint above the requirement list and for the master "submit all in
+   person" checkbox below it, so the two read as one family instead of a
+   plain paragraph next to a plain form control. */
+.adm-hint-card,
+p.field-hint.adm-hint-card {
+  display: block;
+  padding: 12px 14px;
+  border: 1px dashed rgba(56,102,65,0.35);
+  border-radius: 10px;
+  background: rgba(56,102,65,0.06);
+  color: #3E4F45;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ─── Requirement upload dropzone + file card (admission.php) ───────────── */
+
+.upload-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  padding: 18px 12px;
+  border: 1.5px dashed #D4D4E0;
+  border-radius: 8px;
+  background: #FBFBFD;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.upload-dropzone:hover,
+.upload-dropzone.is-dragover {
+  border-color: var(--brand-primary);
+  background: #F2F8F5;
+}
+
+.upload-dropzone-icon {
+  width: 22px;
+  height: 22px;
+  color: #8A8AA0;
+  margin-bottom: 2px;
+}
+
+.upload-dropzone-text {
+  font-size: 12.5px;
+  color: #5A5A72;
+}
+
+.upload-dropzone-text strong {
+  color: var(--brand-primary);
+}
+
+.upload-dropzone .field-hint {
+  margin-top: 2px;
+}
+
+.upload-dropzone-disabled,
+.upload-dropzone-disabled:hover {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: #E3E3EC;
+  background: #F0F0F2;
+}
+
+/* Collapses the whole card (requirement label + upload control) away once
+   "I'll submit this in person later" is checked, instead of leaving a
+   disabled dropzone sitting there at full size — with 6 requirement cards
+   on the page, keeping every checked one full-height meant a lot of extra
+   scrolling to reach Submit. Animates via grid-template-rows (1fr -> 0fr)
+   rather than height/padding directly, since animating layout properties
+   like height causes reflow jank — the row-track approach only
+   repaints/composites. The body's single child still needs min-height:0 +
+   overflow:hidden to actually shrink with its grid row instead of
+   clamping to its own content size. */
+.upload-group-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition: grid-template-rows 0.22s ease, opacity 0.18s ease;
+}
+.upload-group-body > * {
+  min-height: 0;
+  overflow: hidden;
+}
+.upload-group.is-later .upload-group-body {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+/* Compact stand-in shown only while collapsed, so a checked item stays
+   identifiable instead of the page just showing a row of identical
+   "submit this in person later" checkboxes with no requirement name
+   attached to any of them. */
+.upload-group-collapsed-summary {
+  display: none;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12.5px;
+}
+.upload-group.is-later .upload-group-collapsed-summary {
+  display: flex;
+}
+.upload-group-collapsed-name {
+  font-weight: 600;
+  color: #1A1A2E;
+}
+.upload-group-collapsed-badge {
+  flex-shrink: 0;
+  color: var(--brand-primary);
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.upload-group.upload-group-error .upload-dropzone {
+  border-color: #E74C3C;
+  background: #FFFAFA;
+}
+
+.upload-file-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 0.5px solid #E3E3EC;
+  border-radius: 8px;
+  background: #FBFBFD;
+}
+
+.upload-file-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: #8A8AA0;
+}
+
+.upload-file-icon-pdf { background: #E74C3C; }
+.upload-file-icon-img { background: #3B82C4; }
+.upload-file-icon-doc { background: #2E5FA3; }
+.upload-file-icon-generic { background: #8A8AA0; }
+
+.upload-file-body { flex: 1; min-width: 0; }
+
+.upload-file-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.upload-file-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #2A2A3A;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-file-percent {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #5A5A72;
+}
+
+.upload-file-done {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2E9E5B;
+}
+
+.upload-file-done svg { width: 14px; height: 14px; }
+
+.upload-progress-track {
+  margin-top: 7px;
+  height: 6px;
+  border-radius: 3px;
+  background: #EAEAF0;
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  background: var(--brand-primary);
+  transition: width 0.12s linear;
+}
+
+.upload-progress-fill.is-complete { background: #2E9E5B; }
+
+.upload-file-meta {
+  margin-top: 5px;
+  font-size: 11.5px;
+  color: #8A8AA0;
+}
+
+.upload-file-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.upload-change-btn,
+.upload-remove-btn {
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 0.5px solid transparent;
+}
+
+.upload-change-btn {
+  background: #F0F0F5;
+  color: #43435A;
+  border-color: #E3E3EC;
+}
+.upload-change-btn:hover { background: #E6E6EE; }
+
+.upload-remove-btn {
+  background: #FDF0EF;
+  color: #C0392B;
+  border-color: #F0B8B2;
+}
+.upload-remove-btn:hover { background: #F5C6C2; }
+
+/* ─── Post-submit success card (admission.php) ───────────────────────────── */
+
+.success-box { text-align: center; }
+
+/* Wraps the eyebrow/title/sub + the success card together so the *screen*
+   fills the remaining desktop height and centers that group — the card
+   itself stays a normal, uniform size instead of being stretched tall. */
+.success-screen {
+  min-height: calc(100vh - 64px - 300px); /* 64px = nav clearance, 300px ≈ footer height below it */
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  max-width: 760px;
+  margin: 0 auto;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+.success-screen .page-eyebrow,
+.success-screen .page-title,
+.success-screen .page-sub {
+  padding-top: 0;
+  max-width: none;
+}
+
+/* ─── Divider ─────────────────────────────────────────────────────────────── */
+
+.divider {
+  border: none;
+  border-top: 0.5px solid #EBEBF0;
+  margin: 1rem 0;
+}
+
+/* ─── Field label (client.php standalone labels) ─────────────────────────── */
+
+.field-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #5A5A72;
+  margin-bottom: 0.5rem;
+}
+
+/* ─── Student Number search ──────────────────────────────────────────────── */
+
+.student-number-row {
+  display: flex;
+  gap: 8px;
+}
+
+.student-number-row input {
+  flex: 1;
+  width: auto;
+}
+
+.student-number-search-wrap {
+  position: relative;
+}
+
+.student-number-row input#student-number-input {
+  min-width: 0;
+}
+
+.student-number-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: #FFFFFF;
+  border: 1px solid #E4E4EA;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(20,20,30,.10);
+  z-index: 30;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.student-number-suggestions.hidden {
+  display: none;
+}
+
+.suggestion-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.suggestion-item:hover,
+.suggestion-item:focus {
+  background: #F5F5F7;
+}
+
+.suggestion-item + .suggestion-item {
+  border-top: 1px solid #F0F0F4;
+}
+
+.suggestion-student-number {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1A1A1F;
+  white-space: nowrap;
+}
+
+.suggestion-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: #4A4A57;
+}
+
+.suggestion-meta {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--brand-primary);
+  white-space: nowrap;
+}
+
+.btn-search {
+  height: 40px;
+  padding: 0 18px;
+  background: var(--brand-primary);
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.btn-search:hover { background: var(--brand-primary-hover); }
+
+/* ─── Student Number result states ───────────────────────────────────────── */
+
+.student-number-found {
+  display: flex;
+  align-items: center;
+  background: #EBF7F2;
+  border: 0.5px solid #A8D9C5;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 10px;
+  gap: 10px;
+}
+
+.student-number-found-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #1A6B4A;
+}
+
+.student-number-found-meta {
+  font-size: 12px;
+  color: #1A6B4A;
+  opacity: 0.75;
+  font-family: 'Courier New', monospace;
+}
+
+.student-number-not-found {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FDF0EF;
+  border: 0.5px solid #F5C6C2;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 10px;
+  gap: 10px;
+}
+
+.student-number-not-found span {
+  font-size: 13px;
+  color: #C0392B;
+}
+
+.btn-admit-link {
+  font-size: 12px;
+  color: #5B4DB5;
+  font-weight: 500;
+  border: 0.5px solid var(--brand-accent);
+  border-radius: 8px;
+  padding: 5px 10px;
+  white-space: nowrap;
+  text-decoration: none;
+  background: #ffffff;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.btn-admit-link:hover { background: var(--brand-tint); }
+
+/* ─── Grade / Strand radio ────────────────────────────────────────────────── */
+
+.radio-row,
+.strand-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 1rem;
+}
+
+.radio-opt,
+.strand-opt,
+.sex-opt {
+  flex: 1;
+  position: relative;
+}
+
+.radio-opt input[type=radio],
+.strand-opt input[type=radio],
+.sex-opt input[type=radio] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.radio-opt label,
+.strand-opt label,
+.sex-opt label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 40px;
+  border: 0.5px solid #D4D4E0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #5A5A72;
+  cursor: pointer;
+  background: #FAFAFC;
+  transition: all 0.12s;
+  user-select: none;
+  margin-top: 0;
+  padding: 0;
+}
+
+.strand-opt label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+
+  height: auto;
+  min-height: 60px;
+  line-height: normal;
+
+  padding: 12px 6px;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.radio-opt input[type=radio]:checked + label,
+.strand-opt input[type=radio]:checked + label {
+  border-color: var(--brand-accent);
+  background: var(--brand-tint);
+  color: var(--brand-accent);
+  border-width: 1.5px;
+}
+
+/* Same "activated" treatment as the Strand cards elsewhere on this page —
+   thicker border + soft shadow all around, rather than a filled tint —
+   instead of the plain color/tint swap the other pill groups use. */
+.sex-opt input[type=radio]:checked + label {
+  border-color: var(--brand-accent);
+  border-width: 2px;
+  background: #FFFFFF;
+  color: var(--brand-accent);
+  box-shadow: 0 0 0 1px rgba(56,102,65,0.25), 0 6px 16px rgba(56,102,65,0.22);
+}
+
+.radio-opt label:hover,
+.strand-opt label:hover,
+.sex-opt label:hover { border-color: #ADADBD; }
+
+/* sex radio row */
+.sex-row {
+  display: flex;
+  gap: 8px;
+  /* The native <input type="date"> next to this row can render a hair
+     taller than its declared height depending on browser/OS font
+     rasterization, which visibly drops these pills a couple px below its
+     top edge — nudge up to compensate rather than chase exact native
+     control metrics across browsers. */
+  margin-top: -2px;
+}
+
+.sex-row.input-error .sex-opt label {
+  border-color: #E74C3C;
+}
+
+/* ─── Locked display fields ───────────────────────────────────────────────── */
+
+.grade-locked,
+.strand-locked {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  background: #FAFAFC;
+  border: 0.5px solid #D4D4E0;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.grade-locked-val,
+.strand-locked-val {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1A1A2E;
+}
+
+.grade-locked-note,
+.strand-locked-note {
+  font-size: 11px;
+  color: #8A8A9A;
+}
+
+.strand-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.strand-slot {
+  font-size: 11px;
+  color: #8A8A9A;
+  white-space: nowrap;
+}
+
+.slot-full {
+  color: #D14343;
+}
+
+.slot-low {
+  color: #C98A1D;
+}
+
+.slot-ok {
+  color: #2E9E5B;
+}
+
+/* ─── Checkbox items ──────────────────────────────────────────────────────── */
+
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #D4D4E0;
+  border-radius: 8px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+  user-select: none;
+}
+
+.check-item:hover { border-color: #ADADBD; }
+
+.check-item.checked {
+  border-color: var(--brand-accent);
+  background: var(--brand-tint);
+}
+
+.check-item input[type=checkbox] {
+  margin-top: 2px;
+  accent-color: var(--brand-primary);
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.check-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1A1A2E;
+  margin-bottom: 1px;
+}
+
+.check-desc {
+  font-size: 11px;
+  color: #8A8A9A;
+}
+
+/* ─── Sections card ───────────────────────────────────────────────────────── */
+
+.sections-card {
+  background: #ffffff;
+  border: 0.5px solid #D4D4E0;
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.sections-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.sections-title {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8A8A9A;
+}
+
+.open-badge {
+  font-size: 11px;
+  font-weight: 500;
+  background: #EBF7F2;
+  color: #1A6B4A;
+  border-radius: 20px;
+  padding: 3px 10px;
+}
+
+.sections-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+/* ─── Section card ────────────────────────────────────────────────────────── */
+
+.sec-card {
+  background: #FAFAFC;
+  border: 0.5px solid #D4D4E0;
+  border-radius: 8px;
+  padding: 0.7rem 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.sec-card:hover:not(.sec-full) { border-color: var(--brand-accent); }
+
+.sec-card.sec-selected {
+  border: 1.5px solid var(--brand-accent);
+  background: var(--brand-tint);
+}
+
+.sec-card.sec-full {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sec-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1A1A2E;
+  margin-bottom: 2px;
+}
+
+.sec-room {
+  font-size: 11px;
+  color: #8A8A9A;
+  margin-bottom: 7px;
+}
+
+.slots-txt { font-size: 11px; font-weight: 500; }
+.slots-ok   { color: #1A7A5E; }
+.slots-low  { color: #A05C10; }
+.slots-full { color: #C0392B; }
+
+.slots-bar {
+  height: 3px;
+  border-radius: 2px;
+  background: #EBEBF0;
+  margin-top: 5px;
+  overflow: hidden;
+}
+
+.slots-fill          { height: 100%; border-radius: 2px; }
+.slots-fill-ok       { background: #2ECC71; }
+.slots-fill-low      { background: #E67E22; }
+.slots-fill-full     { background: #C0392B; }
+
+/* ─── Proceed row ─────────────────────────────────────────────────────────── */
+
+.proceed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 0.5px solid #EBEBF0;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.proceed-info {
+  font-size: 12px;
+  color: #8A8A9A;
+}
+
+.proceed-info strong {
+  color: #5B4DB5;
+  font-weight: 500;
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────────────── */
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 20px;
+  background: var(--brand-primary);
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: none;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.btn-primary:hover  { background: var(--brand-primary-hover); }
+.btn-primary:active { background: var(--brand-primary-active); }
+.btn-primary:disabled,
+.btn-primary[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 18px;
+  background: #ffffff;
+  border: 0.5px solid #D4D4E0;
+  border-radius: 8px;
+  color: #5A5A72;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+
+.btn-secondary:hover {
+  border-color: var(--brand-accent);
+  color: #5B4DB5;
+  background: var(--brand-tint);
+}
+
+.btn-proceed {
+  background: var(--brand-primary);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-proceed:hover {
+  background: #5B4BD6;
+}
+
+/* ─── Form actions row ────────────────────────────────────────────────────── */
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0;
+  margin-bottom: 2rem;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+/* ─── Review table ────────────────────────────────────────────────────────── */
+
+.review-note {
+  font-size: 13px;
+  color: #8A8A9A;
+  margin-bottom: 1rem;
+}
+
+.review-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.review-table tr {
+  border-bottom: 0.5px solid #F0F0F5;
+}
+
+.review-table tr:last-child { border-bottom: none; }
+
+.review-table th {
+  text-align: left;
+  font-weight: 500;
+  color: #5A5A72;
+  padding: 7px 12px 7px 0;
+  width: 38%;
+  vertical-align: top;
+}
+
+.review-table td {
+  color: #1A1A2E;
+  padding: 7px 0;
+  vertical-align: top;
+  word-break: break-word;
+}
+
+/* ─── Subject listing table (subject_section.php) ────────────────────────── */
+
+.subj-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 0.25rem;
+}
+
+.subj-table thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #8A8A9A;
+  padding: 8px 12px;
+  border-bottom: 0.5px solid #EBEBF0;
+}
+
+.subj-table thead th:first-child,
+.subj-table tbody td:first-child {
+  padding-left: 0;
+}
+
+.subj-table thead th:last-child,
+.subj-table tbody td:last-child {
+  padding-right: 0;
+}
+
+.subj-table tbody td {
+  padding: 11px 12px;
+  color: #1A1A2E;
+  border-bottom: 0.5px solid #F0F0F5;
+  vertical-align: middle;
+}
+
+.subj-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.subj-table tbody tr:hover {
+  background: #FAFAFC;
+}
+
+.room-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5B4DB5;
+  background: var(--brand-tint);
+  border-radius: 20px;
+  padding: 2px 8px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* ─── Utility ─────────────────────────────────────────────────────────────── */
+
+.hidden { display: none !important; }
+
+/* ─── Responsive sidebar (mobile off-canvas) ─────────────────────────────── */
+
+/* ─── Responsive: sidebar stacks above content on small screens ──────────
+   No JS, no collapse/off-canvas state — matches the "just static" ask. ── */
+
+@media (max-width: 900px) {
+  body.staff-layout { flex-direction: column; }
+  .staff-sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    border-right: none;
+    border-bottom: 0.5px solid #E8E8E2;
+  }
+  .staff-sidebar-photo { display: none; }
+}
+
+/* ─── Login page (admin/staff/teacher) — mirror of the student portal's
+       split login layout, but flipped: the ombre brand panel sits on the
+       LEFT and the form sits on the RIGHT. Same font stack + shape language
+       as css_student.css's .auth-* rules, restyled to the staff palette. ── */
+
+body.auth-page {
+  margin: 0;
+  background: #FFFFFF;
+  color: #1A1A2E;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-shell { flex: 1; display: flex; min-height: 0; }
+
+/* ============ RIGHT (visually): LOGIN FORM ============ */
+.auth-form-side {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 40px 32px; background: #FFFFFF; overflow-y: auto;
+}
+.auth-form-inner { width: 100%; max-width: 380px; text-align: center; }
+
+.auth-eyebrow { font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brand-primary); font-weight: 700; }
+.auth-mark {
+  width: 96px; height: 96px; border-radius: 22px;
+  display: flex; align-items: center; justify-content: center; margin: 0 auto 18px;
+  overflow: hidden;
+  position: relative;
+}
+/* log_ui.png's actual crest occupies only the center ~28%x69% of a much
+   larger, low-contrast blurred canvas — object-fit:cover (or a plain
+   centered transform:scale) still leaves it tiny/washed out or crops it
+   unevenly. Crop to the crest's real bounding box explicitly instead,
+   same technique as .sidebar-logo-crop img elsewhere in this codebase
+   (values scaled up proportionally from the 56px badge size). */
+.auth-mark img {
+  position: absolute;
+  width: 207px; height: 139px;
+  left: -57px; top: -24px;
+  max-width: none;
+  filter: brightness(1.1) contrast(1.08) saturate(1.1);
+}
+.auth-form-inner h1 { margin: 10px 0 0; font-family: 'Fraunces', serif; font-weight: 560; letter-spacing: -0.01em; font-size: 1.9rem; color: #1A1A2E; line-height: 1.25; }
+.auth-lead { margin: 10px auto 0; line-height: 1.6; color: #5C6E6E; font-size: 0.9rem; max-width: 32ch; }
+
+.auth-shell form { margin-top: 30px; display: flex; flex-direction: column; gap: 18px; text-align: left; }
+.auth-shell .field label {
+  display: block; font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+  font-weight: 700; color: #5A5A72; margin-bottom: 8px;
+}
+.auth-shell .field-input { position: relative; }
+.auth-shell .field-input input {
+  width: 100%; background: #FAFAFC; border: 1px solid #D4D4E0; border-radius: 10px;
+  padding: 13px 14px; font-family: 'Inter', sans-serif; font-size: 0.92rem; color: #1A1A2E;
+  height: auto;
+}
+.auth-shell .field-input input::placeholder { color: #ADADBD; }
+.auth-shell .field-input input:focus { outline: 2px solid var(--brand-primary); outline-offset: 1px; border-color: var(--brand-primary); box-shadow: none; }
+.auth-shell .toggle-eye {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; color: #ADADBD; cursor: pointer; padding: 4px; display: flex;
+}
+.auth-shell .toggle-eye:hover { color: #5A5A72; }
+
+.auth-shell .auth-error {
+  font-size: 0.82rem; text-align: left; color: #C0392B; background: #FDF0EF;
+  border: 0.5px solid #F5C6C2; border-radius: 8px; padding: 10px 14px;
+}
+.auth-shell .auth-error a { color: #C0392B; font-weight: 700; }
+
+.auth-shell .btn-login {
+  margin-top: 4px; width: 100%; background: var(--brand-primary-active); color: #fff; border: none; border-radius: 0px;
+  padding: 14px 16px; font-size: 0.95rem; font-weight: 700; cursor: pointer;
+  box-shadow: 0 10px 24px rgba(16,42,29,0.32), 0 2px 6px rgba(16,42,29,0.22);
+  transition: background .15s ease, box-shadow .15s ease, transform .1s ease;
+  font-family: 'Inter', sans-serif;
+}
+.auth-shell .btn-login:hover { background: #0C2016; box-shadow: 0 14px 30px rgba(16,42,29,0.38), 0 3px 8px rgba(16,42,29,0.26); }
+.auth-shell .btn-login:active { transform: translateY(1px); }
+
+.auth-shell .switch-role { margin-top: 24px; font-size: 0.85rem; color: #8A8A9A; }
+.auth-shell .switch-role a { color: var(--brand-primary); font-weight: 700; text-decoration: none; }
+.auth-shell .switch-role a:hover { text-decoration: underline; }
+
+/* ============ LEFT (visually): OMBRE PANEL ============ */
+.auth-gradient-side {
+  flex: 1; position: relative; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 40px; color: #fff;
+}
+@media (max-width: 860px) { .auth-gradient-side { display: none; } }
+
+.gradient-bg {
+  position: absolute; inset: 0; z-index: 0; overflow: hidden;
+  background: linear-gradient(165deg, #FEFAE0 0%, #E4EFC9 14%, #CADEDE 34%, var(--brand-gradient) 58%, var(--brand-accent) 78%, var(--brand-primary-active) 100%);
+}
+.gradient-bg .blob { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.75; }
+.gradient-bg .blob-cream { width: 60%; aspect-ratio: 1; top: -14%; left: -12%; background: #FEFAE0; }
+.gradient-bg .blob-info { width: 55%; aspect-ratio: 1; top: 8%; right: -14%; background: #BFE0DC; }
+.gradient-bg .blob-primary { width: 65%; aspect-ratio: 1; bottom: -18%; left: 8%; background: var(--brand-accent); }
+.gradient-bg .blob-dark { width: 55%; aspect-ratio: 1; bottom: -20%; right: -10%; background: var(--brand-primary-active); opacity: 0.85; }
+
+.gradient-top { position: relative; z-index: 2; }
+.brand-logo2 { display: block; width: 100%; max-width: 260px; height: auto; }
+
+.gradient-bottom { position: relative; z-index: 2; max-width: 420px; }
+.gradient-eyebrow { font-size: 0.78rem; color: #FEFAE0; font-weight: 600; margin-bottom: 10px; display: block; }
+.gradient-tagline {
+  margin: 0; font-size: clamp(1.4rem,2.6vw,1.9rem); font-weight: 600;
+  line-height: 1.32; color: #fff;
+}
+
+@media (max-width: 1080px) { .auth-gradient-side { padding: 32px; } }
+
+/* ─── Staff/admin/teacher login (photo landing + blurred modal) ──────────── */
+
+body.auth-page.auth-landing-page {
+  display: block; padding: 0; height: 100vh;
+}
+
+.bg-photo {
+  position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0;
+}
+.bg-scrim {
+  position: fixed; inset: 0; z-index: 1;
+  background: linear-gradient(180deg, rgba(16,32,22,0.45) 0%, rgba(16,32,22,0.72) 100%);
+}
+
+.landing {
+  position: fixed; inset: 0; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 1.5rem; transition: opacity 0.2s;
+}
+.landing.hidden { opacity: 0; pointer-events: none; }
+
+/* Plain, uncropped crest — same recipe as teacherportal/teacher_login.php's
+   .landing-mark (a small object-fit:contain logo), not the older
+   cropped/zoomed-into-a-larger-canvas treatment .auth-mark uses elsewhere. */
+.landing-mark {
+  width: 92px; height: 92px; margin: 0 auto 18px;
+  display: flex; align-items: center; justify-content: center;
+  filter: drop-shadow(0 8px 18px rgba(0,0,0,0.35));
+}
+.landing-mark img { width: 100%; height: 100%; object-fit: contain; }
+
+.landing-eyebrow {
+  font-size: 11.5px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+  color: #CADEDE; margin-bottom: 10px;
+}
+.landing-title {
+  font-family: 'Fraunces', serif; font-weight: 600; font-size: 32px; color: #fff;
+  line-height: 1.2; max-width: 520px; text-shadow: 0 2px 16px rgba(0,0,0,0.3);
+}
+.landing-sub {
+  font-size: 13.5px; color: rgba(255,255,255,0.72); margin-top: 10px; margin-bottom: 2.25rem; max-width: 420px;
+}
+
+.btn-open-login {
+  height: 46px; padding: 0 34px; border: none; border-radius: 12px;
+  background: linear-gradient(150deg, var(--brand-primary), var(--brand-primary-active));
+  color: #fff; font-size: 14px; font-weight: 700; font-family: inherit; letter-spacing: 0.2px;
+  cursor: pointer; box-shadow: 0 12px 28px rgba(16,42,29,0.45), inset 0 1px 0 rgba(255,255,255,0.18);
+  transition: background .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+.btn-open-login:hover  { background: linear-gradient(150deg, var(--brand-primary-hover), var(--brand-primary-active)); transform: translateY(-1px); }
+.btn-open-login:active { background: var(--brand-primary-active); transform: translateY(0); }
+
+.login-modal {
+  position: fixed; inset: 0; z-index: 3;
+  display: flex; align-items: center; justify-content: center; padding: 1.5rem;
+  background: rgba(10,20,14,0.3); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  opacity: 0; pointer-events: none; transition: opacity 0.25s;
+}
+.login-modal.open { opacity: 1; pointer-events: auto; }
+.login-modal .modal { margin: 0; transform: scale(0.96) translateY(6px); transition: transform 0.25s; }
+.login-modal.open .modal { transform: scale(1) translateY(0); }
+
+/* Dark frosted-glass card — same recipe as teacherportal/teacher_login.php's
+   .modal, re-themed onto this file's own --brand-* palette. */
+.modal {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  padding: 40px 36px 32px;
+  border-radius: 24px;
+  background: rgba(255,255,255,0.14);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.30);
+  box-shadow: 0 24px 60px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.25);
+  max-height: calc(100vh - 3rem);
+  overflow-y: auto;
+}
+
+.close-btn {
+  position: absolute; top: 18px; right: 18px; width: 30px; height: 30px; border-radius: 50%;
+  background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.18);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: background .15s ease;
+}
+.close-btn:hover { background: rgba(255,255,255,0.20); }
+.close-btn svg { width: 13px; height: 13px; stroke: rgba(255,255,255,0.85); stroke-width: 2.4; }
+
+.crest { width: 76px; height: 76px; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; }
+.crest img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 8px 18px rgba(0,0,0,0.35)); }
+
+.school-name { text-align: center; font-size: 11.5px; font-weight: 700; letter-spacing: 1.2px; color: #CADEDE; margin: 0 0 8px; }
+.modal h1 { text-align: center; font-family: 'Fraunces', serif; font-weight: 600; font-size: 26px; color: #fff; margin: 0 0 12px; letter-spacing: -0.2px; }
+.lede { text-align: center; font-size: 13.5px; line-height: 1.6; color: rgba(255,255,255,0.72); margin: 0 0 28px; padding: 0 6px; }
+
+.modal form { display: flex; flex-direction: column; }
+.modal .field { margin-bottom: 16px; }
+.modal .field-label {
+  display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.6px;
+  color: #CADEDE; margin-bottom: 8px;
+}
+.field-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.field-label-row .field-label { margin-bottom: 0; }
+.capslock-note {
+  display: flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.4px; text-transform: uppercase; color: #FFD98A; visibility: hidden;
+}
+.capslock-note svg { flex-shrink: 0; }
+
+.field-options { display: flex; align-items: center; justify-content: space-between; flex-wrap: nowrap; gap: 12px; margin: -4px 0 16px; }
+.remember-me { display: flex; align-items: center; flex-shrink: 0; gap: 7px; font-size: 12.5px; color: rgba(255,255,255,0.7); cursor: pointer; user-select: none; white-space: nowrap; }
+.remember-me input { accent-color: var(--brand-primary); width: 14px; height: 14px; cursor: pointer; }
+.forgot-link { flex-shrink: 0; font-size: 12.5px; color: #FEFAE0; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.forgot-link:hover { text-decoration: underline; }
+
+.input-wrap { position: relative; }
+.modal input {
+  width: 100%; padding: 13px 14px; font-family: 'Inter', sans-serif; font-size: 14.5px; color: #fff;
+  background: rgba(255,255,255,0.08); border: 1.5px solid rgba(255,255,255,0.20); border-radius: 12px;
+  outline: none; transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.modal input::placeholder { color: rgba(255,255,255,0.40); }
+.modal input:focus {
+  border-color: #FEFAE0; background: rgba(255,255,255,0.13);
+  box-shadow: 0 0 0 4px rgba(254,250,224,0.14);
+}
+#password { padding-right: 44px; }
+#password:not(:placeholder-shown) { letter-spacing: 2px; }
+
+.eye-btn {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; background: none; border: none;
+}
+.eye-btn svg { width: 17px; height: 17px; stroke: #9FB8B8; stroke-width: 2; }
+
+.modal .auth-error {
+  font-size: 0.82rem; text-align: left; color: #FFD9D4; background: rgba(192,57,43,0.28);
+  border: 1px solid rgba(255,150,140,0.35); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px;
+}
+.modal .auth-error a { color: #fff; font-weight: 700; }
+
+.modal .login-btn {
+  width: 100%; padding: 14px; margin-top: 6px; border: none; border-radius: 12px;
+  background: linear-gradient(150deg, var(--brand-primary), var(--brand-primary-active));
+  color: #fff; font-size: 15px; font-weight: 700; letter-spacing: 0.2px; cursor: pointer;
+  box-shadow: 0 12px 28px rgba(16,42,29,0.45), inset 0 1px 0 rgba(255,255,255,0.18);
+  transition: background .15s ease, transform .15s ease, box-shadow .15s ease;
+}
+.modal .login-btn:hover {
+  background: linear-gradient(150deg, var(--brand-primary-hover), var(--brand-primary-active));
+  transform: translateY(-1px); box-shadow: 0 16px 34px rgba(16,42,29,0.5);
+}
+.modal .login-btn:active { background: var(--brand-primary-active); transform: translateY(0); }
+
+.forgot { text-align: center; margin-top: 20px; font-size: 13px; color: rgba(255,255,255,0.55); }
+.forgot a { color: #FEFAE0; font-weight: 700; text-decoration: none; }
+.forgot a:hover { text-decoration: underline; }
+
+.landing-footer-credit {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; font-size: 11px;
+  color: rgba(255,255,255,0.6); background: rgba(16,32,22,0.5); padding: 0.9rem 1rem; text-align: center;
+}
+
+/* ─── Page loader (shown briefly during login/logout) ────────────────────── */
+
+.page-loader {
+  position: fixed; inset: 0; z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.88);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 0.15s ease, visibility 0.15s;
+}
+.page-loader.show { opacity: 1; visibility: visible; pointer-events: auto; }
+.page-loader-spinner {
+  width: 44px; height: 44px;
+  border: 4px solid var(--brand-tint);
+  border-top-color: var(--brand-primary);
+  border-radius: 50%;
+  animation: page-loader-spin 0.7s linear infinite;
+}
+@keyframes page-loader-spin { to { transform: rotate(360deg); } }
+
+.auth-footer-credit {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  background: var(--brand-primary-active);
+  padding: 0.9rem 1rem;
+  text-align: center;
+}

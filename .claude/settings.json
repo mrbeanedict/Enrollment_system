@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -b 'C:\\\\Users\\\\ADMIN\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--xampp-htdocs-Enrollment-system\\\\0217d671-51b2-4dad-91c7-4692e2f59104\\\\scratchpad/sched_cj.txt' http://localhost/Enrollment_system/scheduler/scheduling --data-urlencode update_schedule=1 --data-urlencode section_id=4 --data-urlencode subject_id=5 --data-urlencode teacher_id=2 --data-urlencode day=Fri --data-urlencode start_time=07:30:00 --data-urlencode end_time=08:30:00 --data-urlencode room= -o /dev/null -D 'C:\\\\Users\\\\ADMIN\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--xampp-htdocs-Enrollment-system\\\\0217d671-51b2-4dad-91c7-4692e2f59104\\\\scratchpad/upd_headers2.txt' -w '%{http_code}\\\\n')",
+      "Bash(/c/xampp/mysql/bin/mysql.exe -u root enroll_db -e \"SELECT subject_id, teacher_id, day FROM section_subjects WHERE section_id=4 AND subject_id=5;\")",
+      "Bash(/c/xampp/mysql/bin/mysql.exe -u root enroll_db -e \"SELECT * FROM teacher_assignments WHERE section_id=4 AND subject_id=5;\")",
+      "Bash(curl -s -L -b TEACHER_SESSID=testteachersessB1234567890abcd http://localhost/Enrollment_system/ajax/teacher_save_score --data-urlencode item_id=166 --data-urlencode student_id=1 --data-urlencode subject_id=1 --data-urlencode section_id=49 --data-urlencode school_year=2026-2027 --data-urlencode quarter=1 --data-urlencode score=8)",
+      "Bash(curl -s -L -b TEACHER_SESSID=testteachersessA1234567890abcd http://localhost/Enrollment_system/ajax/teacher_save_score --data-urlencode item_id=166 --data-urlencode student_id=1 --data-urlencode subject_id=1 --data-urlencode section_id=49 --data-urlencode school_year=2026-2027 --data-urlencode quarter=1 --data-urlencode score=8)"
+    ]
+  }
+}

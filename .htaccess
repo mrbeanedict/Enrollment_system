@@ -1,0 +1,31 @@
+# Prevent Apache from listing folder contents when no index file is present
+# (httpd.conf enables "Options Indexes" server-wide for htdocs).
+Options -Indexes
+
+# Session cookie hardening. Secure is left off since this dev environment
+# is plain HTTP (turning it on would silently break every login — the
+# cookie wouldn't be sent at all); enable it once this is served over
+# HTTPS. SameSite=Lax still blocks the cookie being sent on cross-site
+# POSTs (the main CSRF vector) while allowing normal top-level navigation.
+<IfModule mod_php.c>
+    php_flag  session.cookie_httponly On
+    php_value session.cookie_samesite "Lax"
+</IfModule>
+
+# Security response headers.
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+RewriteEngine On
+
+# Remove .php from URLs
+RewriteCond %{THE_REQUEST} \s/+(.+?)\.php[\s?] [NC]
+RewriteRule ^(.+)\.php$ /Enrollment_system/$1 [R=301,L,NE]
+
+# Internally add .php when the extension is omitted
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}.php -f
+RewriteRule ^(.+?)/?$ $1.php [L]

@@ -1,0 +1,56 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-09-07T10:07:14.862Z",
+        "reason": "PRODUCT.md: Inter is a confirmed, binding brand typeface for UI text across the whole product, not an incidental AI-default pick"
+      },
+      {
+        "rule": "overused-font",
+        "value": "fraunces",
+        "createdAt": "2026-09-07T10:07:15.171Z",
+        "reason": "PRODUCT.md: Fraunces is a confirmed, binding brand typeface for headings across the whole product, not an incidental AI-default pick"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "css/css_admin.css"
+        ],
+        "createdAt": "2026-09-07T11:29:00.293Z",
+        "reason": "pre-existing single-element progress-fill bar (fee_settings.php tuition/misc/voucher recalculation) - standard progress-bar width transition, not a layout-thrash risk at this scale; unrelated to staff-directory work"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "css/css_student.css"
+        ],
+        "createdAt": "2026-09-10T13:07:28.032Z",
+        "reason": "Sidebar collapse/expand is a user-triggered toggle (not scroll/frequent), animating width/padding/margin/border-radius by design to morph pill nav-links into icon circles — same accepted pattern as css_admin.css's layout-transition=* ignore"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "css/css_student.css"
+        ],
+        "createdAt": "2026-09-11T15:22:45.003Z",
+        "reason": "pre-existing LMS dashboard todo/lesson list item accent (.lms-todo-item/.lms-lesson-item border-left), not part of any task this session touched; re-flags repeatedly on unrelated edits to this file"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "css/css_teacher.css"
+        ],
+        "createdAt": "2026-09-11T15:57:21.490Z",
+        "reason": "pre-existing collapsible-sidebar width/padding transitions (.teacher-sidebar and related elements), deliberate design predating this session's notification-bell work; unrelated code, re-flags on unrelated edits to this file"
+      }
+    ]
+  }
+}

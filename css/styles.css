@@ -1,0 +1,1115 @@
+:root{
+    /* palette */
+    --muted:#9FB8B8;
+    --info:#CADEDE;
+    --cream:#FEFAE0;
+    --primary:#386641;
+    --dark:#1C2628;
+
+    --bg:#F5FAFA;
+    --paper:#FFFFFF;
+    --ink:var(--dark);
+    --ink-soft:#5C7373;
+    --border:var(--info);
+    --border-soft:rgba(202,222,222,0.5);
+
+    --accent:var(--primary);
+    --accent-deep:#24402A;
+    --accent-active:var(--dark);
+    --accent-bg:rgba(56,102,65,0.08);
+
+    --nav-dark:var(--dark);
+    --nav-text:rgba(255,255,255,0.78);
+    --nav-text-hover:#ffffff;
+    --nav-portal-text:var(--color-dark);
+    --nav-portal-text-hover:var(--color-primary);
+
+    --radius-lg:16px;
+    --radius-md:12px;
+    --shadow-soft:0 1px 3px rgba(28,38,40,0.06);
+
+    /* palette names as specified — used for the nav/hero/button rules below */
+    --color-primary:#386641;
+    --color-primary-hover:#2F5636;
+    --color-primary-active:#24422A;
+    --color-dark:#1C2628;
+    --color-muted:#9FB8B8;
+    --color-info:#CADEDE;
+    --color-accent:#FEFAE0;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    padding-top:64px; /* clears the fixed, edge-to-edge nav below */
+  }
+  h1,h2,h3{
+    font-family:'Inter',sans-serif;
+    margin:0;
+    color:var(--ink);
+    line-height:1.2;
+    font-weight:600;
+  }
+  p{line-height:1.65;color:var(--ink-soft);font-weight:400;}
+  a{color:inherit;}
+  .eyebrow{
+    font-size:0.72rem;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--accent);
+    font-weight:600;
+  }
+  .wrap{max-width:1140px;margin:0 auto;padding:0 28px;}
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    font-family:'Inter',sans-serif;
+    font-weight:600;
+    font-size:0.95rem;
+    padding:12px 24px;
+    border-radius:9px;
+    border:0.5px solid transparent;
+    cursor:pointer;
+    text-decoration:none;
+    transition:background 0.18s ease, border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .btn-primary{
+    border-radius:999px;
+    background:linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%);
+    color:#ffffff;
+    box-shadow:0 10px 22px rgba(56,102,65,0.25);
+  }
+  .btn-primary:hover{
+    background:linear-gradient(135deg, #4A8A54 0%, var(--color-primary) 100%);
+    box-shadow:0 16px 34px rgba(56,102,65,0.4);
+    transform:translateY(-3px);
+  }
+  .btn-primary:active{transform:translateY(-1px);}
+  .btn-ghost{background:transparent;color:var(--ink);border:0.5px solid var(--border);}
+  .btn-ghost:hover{background:var(--paper);border-color:var(--accent);}
+
+/* ---------- NAV ---------- */
+/* Fixed, edge-to-edge, solid bar — static at the top of the page (not a
+   floating pill), so it never overlaps the page content below it. Same
+   internal proportions (grid, gap, padding) as student/index.php's
+   nav-inner, just without the outer margin/border-radius that made it
+   float. */
+nav{
+  position:fixed;
+  top:0;
+  left:0;
+  right:0;
+  z-index:50;
+  background:rgba(255,255,255,0.92);
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  box-shadow:0 4px 20px rgba(28,38,40,0.08);
+  border-bottom:1px solid var(--border-soft);
+}
+nav .wrap{
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  align-items:center;
+  column-gap:24px;
+  padding:8px clamp(28px,4vw,64px);
+  max-width:1600px;
+  margin:0 auto;
+}
+
+.brand{display:flex;align-items:center;gap:8px;flex-shrink:0;grid-column:1;}
+.brand img{
+  display:block;
+  height:28px;
+  width:auto;      /* preserves logo_mini2.png's 504:55 wordmark ratio —
+                       much wider/shorter than logo2.png, so it needs a
+                       smaller height to avoid rendering overly wide */
+  flex-shrink:0;
+}
+.brand-icon{
+  height:26px;     /* log_ui.png's crest is near-square (~680:630), so a
+                       hair under the wordmark's 28px keeps both marks
+                       optically level instead of the icon overhanging it */
+}
+
+/* Middle grid track is 1fr on both sides of the logo/actions, so this
+   stays visually centered on the page no matter how wide the logo is. */
+.nav-links{
+  display:none;
+  grid-column:2;
+  justify-self:center;
+  gap:2px;
+  align-items:center;
+  flex-shrink:0;
+}
+@media(min-width:820px){.nav-links{display:flex;}}
+
+.nav-links a{
+  font-weight:500;
+  font-size:0.88rem;
+  text-decoration:none;
+  color:var(--nav-text);
+  padding:8px 16px;
+  border-radius:999px;
+  white-space:nowrap;
+  transition:background 0.15s ease, color 0.15s ease;
+}
+.nav-links a:hover,
+.nav-links a:focus-visible{
+  background:rgba(255,255,255,0.16);
+  color:var(--nav-text-hover);
+}
+.nav-links a.active{
+  background:rgba(255,255,255,0.16);
+  color:var(--nav-text-hover);
+}
+
+.nav-right{
+  display:none;
+  grid-column:3;
+  justify-self:end;
+  align-items:center;
+  gap:20px;
+}
+@media(min-width:820px){.nav-right{display:flex;}}
+
+.nav-portal-link{
+  font-weight:500;
+  font-size:0.88rem;
+  color:var(--nav-portal-text);
+  text-decoration:none;
+  white-space:nowrap;
+  transition:color 0.15s ease;
+}
+.nav-portal-link:hover{color:var(--nav-portal-text-hover);}
+
+.nav-cta.btn-primary{
+  border-radius:999px;
+  padding:10px 22px;
+}
+
+  /* ---------- HERO ---------- */
+  .hero{position:relative;}
+  .hero-bg{
+    position:relative;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    background:url('/Enrollment_system/images/background/ui_landscape_clear.png') center/cover no-repeat, var(--color-accent);
+    overflow:hidden;
+  }
+  .hero-inner {
+    width: 100%;
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 96px clamp(28px, 5vw, 64px) 128px;
+
+    display: grid;
+    grid-template-columns: 58% 42%;
+    align-items: center;
+  }
+
+  .hero-copy {
+    max-width: 560px;
+    padding-left: clamp(16px, 4vw, 56px);
+  }
+  .hero-copy h1{font-size:clamp(2.2rem,4.6vw,3.2rem);letter-spacing:-0.01em;color:var(--color-dark);margin-top:10px;white-space:normal;}
+  .hero-copy .accent{color:var(--color-primary);}
+  .hero-copy p.lead{font-size:1.08rem;margin-top:18px;max-width:46ch;color:var(--ink-soft);}
+  .hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px;}
+  .btn-outline-light{
+    border-radius:999px;
+    background:transparent;
+    color:var(--color-dark);
+    border:1.5px solid var(--color-dark);
+  }
+  .btn-outline-light:hover{
+    background:var(--color-dark);
+    color:#ffffff;
+    border-color:var(--color-dark);
+    box-shadow:0 12px 26px rgba(28,38,40,0.28);
+    transform:translateY(-3px);
+  }
+  .btn-outline-light:active{transform:translateY(-1px);}
+
+  @media(max-width:819px){
+    .hero-bg{background-position:center center;}
+  }
+
+  /* ---------- SECTION SHELL ---------- */
+  section{padding:60px 0;}
+  .section-head{max-width:640px;margin:0 0 36px;}
+  .section-head h2{font-size:clamp(1.6rem,3vw,2.1rem);margin-top:8px;letter-spacing:-0.01em;}
+  .section-head p{margin-top:10px;font-size:1rem;}
+  .section-alt{background:var(--paper);border-top:0.5px solid var(--border);border-bottom:0.5px solid var(--border);}
+
+  /* ---------- WHY GREENFIELD ---------- */
+  .why-section{padding:88px 0;}
+  .why-layout{
+    display:grid;
+    grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);
+    gap:clamp(44px,7vw,96px);
+    align-items:center;
+  }
+  .why-copy{max-width:520px;}
+  .why-copy h2{
+    font-size:clamp(2rem,4vw,3rem);
+    letter-spacing:-0.025em;
+    margin-top:10px;
+  }
+  .why-intro{
+    color:var(--ink);
+    font-size:clamp(1.05rem,1.7vw,1.25rem);
+    font-weight:500;
+    line-height:1.45;
+    margin:16px 0 8px;
+  }
+  .why-description{
+    font-size:0.95rem;
+    max-width:48ch;
+    margin:0;
+  }
+  .why-points{
+    display:flex;
+    flex-direction:column;
+    gap:17px;
+    margin-top:28px;
+  }
+  .why-point{
+    display:grid;
+    grid-template-columns:24px 1fr;
+    gap:11px;
+    align-items:start;
+  }
+  .why-point-icon{
+    width:20px;
+    height:20px;
+    margin-top:2px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background:var(--accent-bg);
+    color:var(--accent);
+    font-size:0.72rem;
+    font-weight:700;
+  }
+  .why-point h3{
+    font-size:0.92rem;
+    margin:0 0 2px;
+  }
+  .why-point p{
+    font-size:0.78rem;
+    line-height:1.45;
+    margin:0;
+  }
+  .why-cta{margin-top:28px;padding:10px 18px;font-size:0.84rem;}
+  .why-image-wrap{width:100%;}
+  .why-image{
+    display:block;
+    width:100%;
+    height:auto;
+    max-height:620px;
+    object-fit:cover;
+    border-radius:var(--radius-lg);
+  }
+
+  @media(max-width:820px){
+    .why-section{padding:64px 0;}
+    .why-layout{grid-template-columns:1fr;gap:38px;}
+    .why-copy{max-width:none;}
+    .why-image{max-height:520px;}
+  }
+  
+/* ---------- JOURNEY ---------- */
+  .journey{
+    position:relative;
+    padding-top:8px;
+    --j-muted:#9FB8B8;
+    --j-info:#CADEDE;
+    --j-cream:#FEFAE0;
+    --j-primary:#386641;
+    --j-dark:#1C2628;
+  }
+
+  .journey-steps{
+    display:flex;
+    align-items:stretch;
+    gap:0;
+    flex-wrap:wrap;
+  }
+
+  .journey-step{
+    flex:1 1 190px;
+    display:flex;
+    flex-direction:column;
+    background:var(--paper);
+    border:0.5px solid var(--border);
+    border-radius:var(--radius-md);
+    padding:22px 20px;
+    box-shadow:var(--shadow-soft);
+    position:relative;
+    z-index:1;
+    transition:transform 0.22s cubic-bezier(.2,.8,.3,1.3),
+               background 0.22s ease,
+               border-color 0.22s ease,
+               box-shadow 0.22s ease;
+  }
+  .journey-step:hover{
+    transform:scale(1.08);
+    z-index:2;
+    background:var(--j-dark);
+    border-color:var(--j-dark);
+    box-shadow:0 16px 34px rgba(28,38,40,0.28);
+  }
+
+  .journey-step-top{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:16px;
+  }
+  .journey-step-icon{
+    width:46px;height:46px;
+    border-radius:50%;
+    background:var(--j-info);
+    color:var(--j-primary);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+    transition:background 0.22s ease, color 0.22s ease;
+  }
+  .journey-step:hover .journey-step-icon{
+    background:var(--j-cream);
+    color:var(--j-dark);
+  }
+  .journey-step-num{
+    width:22px;height:22px;
+    border-radius:50%;
+    background:var(--j-primary);
+    color:#ffffff;
+    font-size:0.72rem;
+    font-weight:700;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-shrink:0;
+    transition:background 0.22s ease, color 0.22s ease;
+  }
+  .journey-step:hover .journey-step-num{
+    background:var(--j-cream);
+    color:var(--j-dark);
+  }
+
+  .journey-step h3{
+    font-size:0.98rem;
+    margin-bottom:6px;
+    letter-spacing:-0.005em;
+    transition:color 0.22s ease;
+  }
+  .journey-step:hover h3{color:var(--j-cream);}
+
+  .journey-step p{
+    font-size:0.84rem;
+    margin:0;
+    line-height:1.55;
+    transition:color 0.22s ease;
+  }
+  .journey-step:hover p{color:var(--j-info);}
+
+  .journey-arrow{
+    display:none;
+    align-items:center;
+    justify-content:center;
+    flex:0 0 28px;
+    color:var(--j-muted);
+    opacity:0.7;
+  }
+  @media(min-width:900px){
+    .journey-arrow{display:flex;}
+    .journey-step{flex-basis:0;}
+  }
+
+  @media(max-width:899px){
+    .journey-steps{flex-direction:column;gap:14px;}
+    .journey-step{flex-basis:auto;}
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .journey-step{transition:none;}
+    .journey-step:hover{transform:none;}
+  }
+  
+  /* ---------- STRANDS ---------- */
+  .grades{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+  @media(min-width:720px){.grades{grid-template-columns:repeat(3,1fr);}}
+  .grade-card{border-radius:var(--radius-md);padding:20px 18px;border:0.5px solid var(--border);background:var(--paper);display:block;text-decoration:none;cursor:pointer;transition:border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;}
+  .grade-card:hover{border-color:var(--accent);box-shadow:var(--shadow-soft);transform:translateY(-2px);}
+  .grade-card:active{transform:translateY(0);}
+  .grade-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .grade-card .grade-tag{display:inline-block;font-size:0.68rem;font-weight:600;padding:2px 8px;border-radius:20px;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.04em;}
+  .grade-card h3{font-size:1.02rem;margin-bottom:6px;font-weight:600;}
+  .grade-card p{font-size:0.88rem;margin:0;}
+
+  /* ---------- STRAND GALLERY ---------- */
+  .strand-gallery{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    align-items:start;
+    gap:22px;
+  }
+
+  .strand-col,
+  .strand-col-inner{
+    display:block;
+    text-decoration:none;
+  }
+  .strand-col{margin-top:0;}
+  .strand-gallery > .strand-col:nth-child(1){margin-top:0;}
+  .strand-gallery > .strand-col:nth-child(3){margin-top:58px;}
+  .strand-gallery > .strand-col:nth-child(4){margin-top:18px;}
+  .strand-gallery > .strand-col:nth-child(5){margin-top:88px;}
+
+  .strand-col-heading{margin-top:0;}
+  .strand-col-heading h2{
+    font-family:'Fraunces',serif;
+    font-weight:560;
+    font-size:1.4rem;
+    line-height:1.28;
+    letter-spacing:-0.01em;
+    margin-bottom:22px;
+  }
+
+  .strand-photo{
+    display:block;
+    aspect-ratio:3/4.3;
+    border-radius:var(--radius-lg);
+    border:0.5px solid var(--border);
+    background-size:cover;
+    background-position:center;
+    box-shadow:var(--shadow-soft);
+    transition:border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
+  }
+  .strand-col:hover .strand-photo,
+  .strand-col-inner:hover .strand-photo{
+    border-color:var(--accent);
+    box-shadow:0 14px 28px rgba(28,38,40,0.18);
+    transform:translateY(-4px);
+  }
+  .strand-col:active .strand-photo,
+  .strand-col-inner:active .strand-photo{transform:translateY(-1px);}
+  .strand-col:focus-visible .strand-photo,
+  .strand-col-inner:focus-visible .strand-photo{outline:2px solid var(--accent);outline-offset:2px;}
+
+  .strand-caption{
+    display:block;
+    margin-top:12px;
+  }
+  .strand-name{display:block;font-size:0.92rem;font-weight:600;color:var(--ink);margin-bottom:3px;}
+  .strand-full{display:block;font-size:0.76rem;color:var(--ink-soft);line-height:1.4;}
+
+  @media(max-width:900px){
+    .strand-gallery{grid-template-columns:repeat(2,1fr);}
+    .strand-gallery > .strand-col,
+    .strand-gallery > .strand-col-heading{margin-top:0 !important;}
+  }
+  @media(max-width:520px){
+    .strand-gallery{grid-template-columns:1fr;}
+  }
+
+  /* ---------- TESTIMONIAL ---------- */
+  .testimonial{background:var(--ink);border-radius:var(--radius-lg);padding:44px clamp(24px,5vw,56px);color:#F5F5F7;display:grid;grid-template-columns:1fr;gap:20px;align-items:center;}
+  @media(min-width:820px){.testimonial{grid-template-columns:auto 1fr;}}
+  .testimonial blockquote{margin:0;font-weight:500;font-size:clamp(1.2rem,2.4vw,1.5rem);line-height:1.45;}
+  .testimonial cite{display:block;margin-top:14px;font-style:normal;font-weight:600;font-size:0.88rem;color:var(--cream);}
+  .quote-mark{font-size:3.6rem;font-weight:700;line-height:1;color:rgba(159,184,184,0.35);}
+
+  /* ---------- ENROLL FORM ---------- */
+  .enroll-shell{background:var(--paper);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:clamp(24px,5vw,48px);display:grid;grid-template-columns:1fr;gap:36px;}
+  @media(min-width:900px){.enroll-shell{grid-template-columns:0.9fr 1.1fr;}}
+  .enroll-copy h2{font-size:clamp(1.6rem,3vw,2rem);margin-top:8px;}
+  .enroll-copy p{margin-top:12px;max-width:40ch;}
+  .enroll-list{list-style:none;padding:0;margin:24px 0 0;display:flex;flex-direction:column;gap:10px;}
+  .enroll-list li{display:flex;gap:10px;align-items:flex-start;font-size:0.9rem;color:var(--ink-soft);}
+  .check{flex-shrink:0;width:18px;height:18px;border-radius:50%;background:var(--accent-bg);display:flex;align-items:center;justify-content:center;margin-top:1px;}
+  form{display:flex;flex-direction:column;gap:14px;}
+  .form-row{display:grid;grid-template-columns:1fr;gap:14px;}
+  @media(min-width:560px){.form-row.two{grid-template-columns:1fr 1fr;}}
+  label{font-size:0.78rem;font-weight:600;color:var(--ink-soft);margin-bottom:6px;display:block;}
+  input,select{width:100%;background:#FAFAFC;border:0.5px solid var(--border);border-radius:9px;padding:11px 13px;font-family:'Inter',sans-serif;font-size:0.92rem;color:var(--ink);}
+  input::placeholder{color:#ADADBD;}
+  input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent);}
+  select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%238A8A9A' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;}
+  .form-submit{margin-top:4px;background:var(--accent);color:#ffffff;border:none;border-radius:9px;font-weight:600;font-size:0.95rem;padding:13px 24px;cursor:pointer;transition:background 0.12s ease;}
+  .form-submit:hover{background:var(--accent-deep);}
+  .form-submit:focus-visible{outline:2px solid var(--ink);outline-offset:2px;}
+  .form-note{font-size:0.76rem;color:#ADADBD;margin-top:2px;}
+  .form-success{display:none;background:var(--accent-bg);border:0.5px solid var(--info);border-radius:9px;padding:14px 16px;font-size:0.9rem;color:var(--accent-deep);}
+  .form-success.show{display:block;}
+
+/* ---------- FOOTER ---------- */
+:root{
+  --footer-bg:var(--dark);
+  --footer-heading:var(--cream);
+  --footer-text:var(--muted);
+  --footer-text-soft:rgba(159,184,184,0.75);
+  --footer-accent:var(--primary);
+  --footer-info:var(--info);
+}
+
+footer{background:var(--footer-bg);padding:0;}
+.footer-main{padding:56px 0 40px;}
+
+.footer-grid{display:grid;grid-template-columns:1fr;gap:32px;}
+@media(min-width:720px){.footer-grid{grid-template-columns:1.3fr 1fr 1fr;gap:56px;}}
+
+.footer-about .brand{color:var(--footer-heading);font-weight:600;font-size:1.05rem;gap:10px;}
+.footer-about p{color:var(--footer-text-soft);font-size:0.88rem;margin-top:14px;max-width:32ch;}
+
+.footer-social{display:flex;gap:10px;margin-top:18px;}
+.footer-social a{
+  width:32px;height:32px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,0.06);
+  color:var(--footer-info);
+  transition:background 0.15s ease,color 0.15s ease;
+}
+.footer-social a:hover{background:var(--footer-accent);color:#fff;}
+
+footer h4{color:var(--footer-heading);font-size:0.82rem;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:16px;font-weight:600;}
+footer ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}
+footer a{text-decoration:none;color:var(--footer-text);font-size:0.88rem;transition:color 0.15s ease;}
+footer a:hover{color:var(--footer-info);}
+
+.footer-contact-item{display:flex;gap:10px;align-items:flex-start;color:var(--footer-text);font-size:0.88rem;}
+.footer-contact-item svg{flex-shrink:0;margin-top:2px;color:var(--footer-accent);}
+.footer-contact-item a{color:var(--footer-text);}
+.footer-contact-item a:hover{color:var(--footer-info);}
+
+.footer-bottom{background:var(--footer-heading);padding:16px 0;}
+.footer-bottom .wrap{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;}
+.footer-bottom span{color:var(--footer-bg);font-size:0.78rem;font-weight:600;}
+
+/* ══════════════════════════════════════════════════════════════════════
+   ADMISSION PAGE (student/admission.php) — glassmorphism shell over the
+   shared brand palette above. Everything below is scoped to body.adm-page
+   so it never leaks into other pages that also load this stylesheet.
+   Moved here from an inline <style> block on admission.php — no page may
+   carry its own internal CSS. Where possible this re-themes existing
+   shared components (--brand-* custom properties consumed by
+   css_staff.css's .card/.check-item/.radio-opt/etc.) instead of
+   duplicating their rules, so this page still gets bugfixes/behavior
+   changes made to those shared classes for free.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Honeypot field — off-screen rather than display:none, since some bots
+   skip hidden fields entirely but still fill visually-offset ones. */
+.hp-field { position: absolute; left: -9999px; top: -9999px; height: 0; width: 0; overflow: hidden; }
+/* Countering this file's own `form{display:flex;...}` rule above, written
+   for the homepage's small enroll-shell form — admission.php's form is a
+   stack of full-width section cards, not a flex column of loose fields. */
+#enrollmentForm { display: block; }
+
+body.adm-page {
+  /* Re-theme css_staff.css's shared brand variables (consumed by
+     .card, .check-item, .radio-opt/.strand-opt/.sex-opt, .btn-secondary,
+     file input button, focus rings, etc.) to this page's green/cream
+     palette instead of css_staff.css's default purple-leaning green. */
+  --brand-primary: var(--color-primary, #386641);
+  --brand-primary-hover: var(--color-primary-hover, #2F5636);
+  --brand-primary-active: var(--color-primary-active, #24422A);
+  --brand-accent: var(--color-primary, #386641);
+  --brand-gradient: #4A8A54;
+  --brand-tint: rgba(56,102,65,0.10);
+
+  --adm-ink: var(--color-dark, #1C2628);
+  --adm-cream: var(--color-accent, #FEFAE0);
+  --adm-teal: var(--color-info, #CADEDE);
+  --adm-muted: var(--color-muted, #9FB8B8);
+
+  /* Plain, flat page background — no gradient/texture. */
+  background: #F5F8F6;
+}
+
+/* ── Nav: plain solid bar ── */
+body.adm-page nav {
+  background: #FFFFFF;
+  border-bottom: 1px solid rgba(28,38,40,0.1);
+  transition: box-shadow 0.25s ease;
+}
+body.adm-page nav.scrolled {
+  box-shadow: 0 6px 24px rgba(28,38,40,0.12);
+}
+body.adm-page nav.scrolled .wrap { padding-top: 6px; padding-bottom: 6px; }
+
+/* "Back to Home" — a plain pill (icon + label) rather than the stock
+   solid-fill nav-cta button. Icon + label kept together (not
+   icon-only) so it stays unambiguous for a first-time applicant. */
+body.adm-page .adm-nav-home {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px 8px 12px;
+  border-radius: 999px;
+  background: #F5F8F6;
+  border: 1px solid rgba(28,38,40,0.12);
+  color: var(--adm-ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+body.adm-page .adm-nav-home svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--brand-primary); }
+body.adm-page .adm-nav-home:hover {
+  background: #EDF2EF;
+  border-color: rgba(56,102,65,0.35);
+  box-shadow: 0 6px 16px rgba(28,38,40,0.12);
+  transform: translateY(-1px);
+}
+body.adm-page .adm-nav-home:active { transform: translateY(0); }
+
+/* ── Page header ── */
+body.adm-page .page-eyebrow,
+body.adm-page .page-title,
+body.adm-page .page-sub {
+  max-width: 900px;
+}
+body.adm-page .page-title {
+  font-family: 'Fraunces', 'Inter', sans-serif;
+  font-weight: 560;
+  font-size: 26px;
+  color: var(--adm-ink);
+}
+
+/* ── Wizard progress (scroll-driven) ── */
+.adm-wizard {
+  position: sticky;
+  top: 64px;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  max-width: 900px;
+  margin: 0.5rem auto 1.5rem;
+  padding: 10px clamp(10px, 3vw, 20px);
+  background: #FFFFFF;
+  border: 1px solid rgba(28,38,40,0.1);
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(28,38,40,0.08);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.adm-wizard::-webkit-scrollbar { display: none; }
+.adm-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1 0 auto;
+  min-width: 66px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 2px 4px;
+  position: relative;
+}
+.adm-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: calc(50% + 20px);
+  right: calc(-50% + 20px);
+  height: 2px;
+  background: rgba(28,38,40,0.12);
+  z-index: -1;
+}
+.adm-step.complete:not(:last-child)::after { background: var(--brand-primary); }
+.adm-step-num {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: rgba(28,38,40,0.08);
+  color: var(--adm-ink);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+.adm-step.active .adm-step-num {
+  background: var(--brand-primary);
+  color: #fff;
+  transform: scale(1.12);
+}
+.adm-step.complete .adm-step-num { background: var(--brand-primary-hover); color: #fff; }
+.adm-step-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #6E8080;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+.adm-step.active .adm-step-label { color: var(--brand-primary); }
+@media (max-width: 700px) { .adm-step-label { display: none; } }
+
+/* ── Two-column shell: form + sticky side review ── */
+.adm-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 1.5rem 4rem;
+  align-items: start;
+}
+@media (min-width: 980px) {
+  .adm-shell { grid-template-columns: minmax(0, 1fr) 320px; }
+}
+.adm-shell > form { max-width: none; margin: 0; padding: 0; }
+
+/* ── Plain cards (overrides css_staff.css's default section.card only
+   where this page needs its own border-radius/scroll-margin tuning) ── */
+body.adm-page section.card {
+  position: relative;
+  background: #FFFFFF;
+  border: 1px solid rgba(28,38,40,0.1);
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(28,38,40,0.08);
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
+  scroll-margin-top: 156px; /* clears the sticky nav + wizard bar on anchor jump */
+}
+body.adm-page section.card h2 {
+  font-family: 'Fraunces', 'Inter', sans-serif;
+  font-weight: 560;
+  font-size: 17px;
+  border-bottom-color: rgba(28,38,40,0.08);
+}
+
+/* ── Card header: topic icon + title + subtitle. Uses an icon rather
+   than a step number since the number is already shown per-section in
+   the wizard progress bar above — repeating it here was redundant. ── */
+body.adm-page section.card .adm-card-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 1.1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid rgba(28,38,40,0.08);
+}
+body.adm-page section.card .adm-card-head h2 {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 2px;
+}
+.adm-card-icon {
+  width: 42px; height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(140deg, var(--brand-primary) 0%, var(--brand-primary-active) 100%);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 8px 18px -6px rgba(28,38,40,0.35);
+}
+.adm-card-icon svg { width: 20px; height: 20px; }
+.adm-card-sub { margin: 2px 0 0; font-size: 12px; color: #6E8080; }
+
+/* ── Sticky side review panel ──
+   top offset is deliberately well clear of the wizard bar's own
+   sticky bottom edge (top:64px + its height/margins lands around
+   ~132px) so there's visible breathing room between the two once
+   both are stuck, instead of them touching. ── */
+.adm-review {
+  position: sticky;
+  top: 176px;
+  background: #FFFFFF;
+  border: 1px solid rgba(28,38,40,0.1);
+  border-radius: 20px;
+  box-shadow: 0 1px 3px rgba(28,38,40,0.08);
+  padding: 1.1rem 1.15rem;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+.adm-review h2 {
+  font-family: 'Fraunces', 'Inter', sans-serif;
+  font-weight: 560;
+  font-size: 15px;
+  margin-bottom: 0.25rem;
+}
+.adm-review-note { font-size: 11px; color: #6E8080; margin-bottom: 0.85rem; }
+.adm-review-group { margin-bottom: 0.9rem; }
+.adm-review-group:last-child { margin-bottom: 0; }
+.adm-review-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--brand-primary);
+  margin-bottom: 0.35rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid rgba(28,38,40,0.08);
+}
+.adm-review-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  padding: 2px 0;
+}
+.adm-review-row dt { color: #6E8080; flex-shrink: 0; }
+.adm-review-row dd { margin: 0; color: var(--adm-ink); font-weight: 500; text-align: right; word-break: break-word; }
+.adm-review-empty { font-size: 12px; color: #8FA3A3; font-style: italic; }
+@media (max-width: 979px) {
+  .adm-review { position: static; max-height: none; }
+}
+
+/* ── Restyled native inputs/selects/textareas: plain chrome ──
+   IMPORTANT: use background-color, never the `background` shorthand,
+   on these rules — a shorthand here resets background-image/-repeat/
+   -position to their initial values on every element that matches,
+   which previously wiped out the select chevron's no-repeat/position
+   and made it tile across the whole control (the "wall of arrows" bug). */
+body.adm-page input[type="text"],
+body.adm-page input[type="email"],
+body.adm-page input[type="tel"],
+body.adm-page input[type="number"],
+body.adm-page input[type="date"],
+body.adm-page select,
+body.adm-page textarea {
+  background-color: #FFFFFF;
+  border: 1px solid rgba(28,38,40,0.14);
+}
+body.adm-page input:focus,
+body.adm-page select:focus,
+body.adm-page textarea:focus {
+  background-color: #FFFFFF;
+  box-shadow: 0 0 0 3px rgba(56,102,65,0.16);
+}
+body.adm-page select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23386641' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+/* Recolor the native date-picker glyph (Chromium/WebKit only — no
+   reliable cross-browser hook exists for the calendar popup itself). */
+body.adm-page input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(28%) sepia(24%) saturate(1200%) hue-rotate(93deg) brightness(90%);
+  cursor: pointer;
+}
+
+/* ── Icon-in-field (address + phone) ── */
+.adm-field-icon { position: relative; }
+.adm-field-icon svg {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  width: 15px; height: 15px;
+  color: var(--brand-primary);
+  opacity: 0.65;
+  pointer-events: none;
+}
+.adm-field-icon textarea,
+.adm-field-icon input { padding-left: 34px; }
+.adm-field-icon.adm-field-icon-inline svg { top: 50%; transform: translateY(-50%); }
+
+/* ── PH phone prefix ── */
+.adm-phone-wrap {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid rgba(28,38,40,0.14);
+  border-radius: 8px;
+  background: #FFFFFF;
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.adm-phone-wrap:focus-within {
+  box-shadow: 0 0 0 3px rgba(56,102,65,0.16);
+  border-color: var(--brand-primary);
+}
+.adm-phone-prefix {
+  display: flex; align-items: center;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand-primary);
+  background: rgba(56,102,65,0.08);
+  border-right: 1px solid rgba(28,38,40,0.1);
+  flex-shrink: 0;
+}
+.adm-phone-wrap input {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding-left: 10px !important;
+}
+.adm-phone-wrap.input-error { border-color: #E74C3C; }
+
+/* ── Grade level / Strand card pickers ── */
+.adm-card-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 0.25rem;
+}
+.adm-card-row.adm-strand-row { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.adm-pick { position: relative; }
+.adm-pick input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
+.adm-pick label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  text-align: center;
+  min-height: 64px;
+  padding: 10px 8px;
+  border: 1px solid rgba(28,38,40,0.14);
+  border-radius: 12px;
+  background: #FFFFFF;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin: 0;
+}
+.adm-pick label:hover { border-color: var(--adm-muted); transform: translateY(-1px); }
+.adm-pick-title { font-size: 13px; font-weight: 700; color: var(--adm-ink); transition: color 0.15s ease; }
+.adm-pick-sub { font-size: 10.5px; color: #6E8080; transition: color 0.15s ease; }
+.adm-card-row.input-error .adm-pick label { border-color: #E74C3C; }
+
+/* Grade Level — the primary either/or choice — gets the boldest
+   "selected" treatment: a solid fill and light text, so it reads as
+   unmistakably chosen rather than just lightly tinted. */
+.adm-card-row:not(.adm-strand-row) .adm-pick input:checked + label {
+  border-color: var(--brand-primary);
+  border-width: 1.5px;
+  background: linear-gradient(165deg, var(--brand-primary), var(--brand-primary-active));
+  box-shadow: 0 0 0 1px var(--brand-primary), 0 6px 18px rgba(20,35,25,0.35);
+}
+.adm-card-row:not(.adm-strand-row) .adm-pick input:checked + label .adm-pick-title { color: #FFFFFF; }
+.adm-card-row:not(.adm-strand-row) .adm-pick input:checked + label .adm-pick-sub { color: rgba(255,255,255,0.82); }
+
+/* Strand (and any other multi-option pick row) — selected state stays
+   light, but becomes clearly "activated" via a thicker green border and
+   a soft shadow all around, rather than a solid fill. */
+.adm-strand-row .adm-pick input:checked + label {
+  border-color: var(--brand-primary);
+  border-width: 2px;
+  background: #FFFFFF;
+  box-shadow: 0 0 0 1px rgba(56,102,65,0.25), 0 6px 16px rgba(56,102,65,0.22);
+}
+
+/* ── Nitpicks: suffix width, no-middle-name toggle, required-marker removal ── */
+.adm-suffix-col { max-width: 130px; }
+.adm-mini-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6E8080;
+  cursor: pointer;
+  user-select: none;
+}
+.adm-mini-check input { accent-color: var(--brand-primary); width: 14px; height: 14px; }
+body.adm-page .req { display: none; }
+
+/* This form only ever shows the one Submit button (no Back button) in
+   .form-actions, so css_staff.css's shared space-between rule — meant for
+   a Back/Submit pair — collapses it to the left edge with nothing to push
+   against. Push it to the right instead. */
+body.adm-page .form-actions { justify-content: flex-end; }
+
+/* css_staff.css's shared .btn-secondary:hover hardcodes a purple accent
+   color (its default brand elsewhere in the app) instead of using the
+   brand-* variables this page already re-themes to green above — fix the
+   text color only, the tinted hover background is already correctly
+   green via --brand-tint. */
+body.adm-page .btn-secondary:hover { color: var(--brand-primary); }
+
+/* ── Closed / post-submit screens ──────────────────────────────────────
+   Both the "admissions closed" and "application submitted" states get a
+   plain white card behind them, matching the rest of this page's cards,
+   so the shared .page-sub gray keeps consistent contrast regardless of
+   scroll/viewport height. */
+body.adm-page .success-screen {
+  min-height: 0; /* the card now sizes to its own content instead of forced full-height centering — css_staff.css's min-height was tuned for bare text, and left a mostly-empty card once given a visible panel background */
+  background: #FFFFFF;
+  border: 1px solid rgba(28,38,40,0.1);
+  border-radius: 24px;
+  box-shadow: 0 1px 3px rgba(28,38,40,0.08);
+  padding: 3rem 2.5rem;
+  margin: 8vh auto;
+}
+body.adm-page .success-screen .page-sub {
+  color: rgba(28,38,40,0.72);
+}
+
+/* ── Post-submit success screen ──────────────────────────────────────── */
+.success-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--brand-primary);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+  box-shadow: 0 10px 24px rgba(56,102,65,0.35);
+}
+.success-icon svg { width: 26px; height: 26px; }
+
+.success-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--adm-ink);
+  margin: 0 0 1.1rem;
+}
+.success-note svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  color: var(--brand-primary);
+}
+.success-note strong { color: var(--adm-ink); }
+
+.success-divider {
+  border: none;
+  border-top: 1px solid rgba(28,38,40,0.1);
+  margin: 0 0 1.1rem;
+}
+
+.success-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* ── Footer contrast, scoped to this page only ──
+   includes/footer.php is deliberately self-contained with hard-coded
+   colors so it renders identically on every page that includes it —
+   left untouched here. But against this page's now much-darker
+   bottom-of-gradient backdrop, its muted teal-gray text (#9FB8B8 and
+   a further-dimmed rgba variant) reads too low-contrast, so this
+   lightens just those tones for admission.php without editing the
+   shared include. */
+body.adm-page footer .footer-about p { color: rgba(216,232,227,0.92); }
+body.adm-page footer a,
+body.adm-page .footer-contact-item,
+body.adm-page .footer-contact-item svg,
+body.adm-page .footer-contact-item a { color: #D8E8E3; }
+body.adm-page footer a:hover,
+body.adm-page .footer-contact-item a:hover { color: #FEFAE0; }
