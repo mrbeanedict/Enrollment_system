@@ -20,7 +20,7 @@ $valid_quarters = ['1', '2', '3', '4'];
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Grade Management — SHS Enrollment</title>
-    <link rel="stylesheet" href="../css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../css/css_teacher.css') ?>">
+    <link rel="stylesheet" href="../assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_teacher.css') ?>">
     <style>
       .gb-picker { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:1.25rem; }
       .gb-picker select {

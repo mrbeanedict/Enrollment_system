@@ -1534,8 +1534,8 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Enrollment — Staff</title>
-<link rel="stylesheet" href="../css/css_staff.css?v=<?= filemtime(__DIR__ . '/../css/css_staff.css') ?>">
-<?php if ($is_admin): ?><link rel="stylesheet" href="../css/css_admin.css?v=<?= filemtime(__DIR__ . '/../css/css_admin.css') ?>"><?php endif; ?>
+<link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
+<?php if ($is_admin): ?><link rel="stylesheet" href="../assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_admin.css') ?>"><?php endif; ?>
 <style>
   .wizard-progress { display: flex; align-items: center; max-width: 820px; margin: 0 auto 1.75rem; padding: 0 1.5rem; }
   .wizard-step { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; position: relative; cursor: default; }

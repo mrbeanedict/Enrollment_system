@@ -398,7 +398,7 @@ $status_labels = ['' => 'All', 'pending' => 'Pending', 'approved' => 'Approved',
   <title>Approvals — Coordinator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/css_staff.css?v=<?= filemtime(__DIR__ . '/../css/css_staff.css') ?>">
+  <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
   <style>
     .filter-row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:.75rem; }
     .filter-tab {

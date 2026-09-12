@@ -100,7 +100,7 @@ header("Pragma: no-cache");
      itself stays visible instead of reading as a dark backdrop. */
   .hero-photo{
     position:absolute;inset:0;
-    background-image:url('/Enrollment_system/images/background/ui_landscape_clear.png');
+    background-image:url('/Enrollment_system/assets/images/background/ui_landscape_clear.png');
     background-size:cover;
     background-position:center 62%;
     filter:contrast(1.02) brightness(.98) saturate(1);
@@ -391,7 +391,7 @@ header("Pragma: no-cache");
         <a href="#strands" class="btn btn-primary">Explore Our Strands →</a>
       </div>
 
-      <img src="/Enrollment_system/images/logo2.png" alt="Greenfield Senior High School" class="about-logo">
+      <img src="/Enrollment_system/assets/images/logo2.png" alt="Greenfield Senior High School" class="about-logo">
     </div>
   </div>
 </section>
@@ -412,7 +412,7 @@ header("Pragma: no-cache");
         <!-- STEM -->
         <a class="strand-col" href="admission?strand=STEM">
           <span class="strand-photo">
-            <img src="/Enrollment_system/images/admission_strand/STEM.png" alt="">
+            <img src="/Enrollment_system/assets/images/admission_strand/STEM.png" alt="">
             <span class="strand-photo-label">STEM</span>
           </span>
           <span class="strand-caption">
@@ -423,7 +423,7 @@ header("Pragma: no-cache");
         <!-- ABM -->
         <a class="strand-col" href="admission?strand=ABM">
           <span class="strand-photo">
-            <img src="/Enrollment_system/images/admission_strand/ABM.jpeg" alt="">
+            <img src="/Enrollment_system/assets/images/admission_strand/ABM.jpeg" alt="">
             <span class="strand-photo-label">ABM</span>
           </span>
           <span class="strand-caption">
@@ -434,7 +434,7 @@ header("Pragma: no-cache");
         <!-- HUMSS -->
         <a class="strand-col" href="admission?strand=HUMSS">
           <span class="strand-photo">
-            <img src="/Enrollment_system/images/admission_strand/HUMSS.jpg" alt="">
+            <img src="/Enrollment_system/assets/images/admission_strand/HUMSS.jpg" alt="">
             <span class="strand-photo-label">HUMSS</span>
           </span>
           <span class="strand-caption">
@@ -445,7 +445,7 @@ header("Pragma: no-cache");
         <!-- GAS -->
         <a class="strand-col" href="admission?strand=GAS">
           <span class="strand-photo">
-            <img src="/Enrollment_system/images/admission_strand/GAS.png" alt="">
+            <img src="/Enrollment_system/assets/images/admission_strand/GAS.png" alt="">
             <span class="strand-photo-label">GAS</span>
           </span>
           <span class="strand-caption">
@@ -456,7 +456,7 @@ header("Pragma: no-cache");
         <!-- TVL-ICT -->
         <a class="strand-col" href="admission?strand=TVL-ICT">
           <span class="strand-photo">
-            <img src="/Enrollment_system/images/admission_strand/ICT.jpg" alt="">
+            <img src="/Enrollment_system/assets/images/admission_strand/ICT.jpg" alt="">
             <span class="strand-photo-label">TVL-ICT</span>
           </span>
           <span class="strand-caption">

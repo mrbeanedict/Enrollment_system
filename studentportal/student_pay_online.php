@@ -79,7 +79,7 @@ if ($logged_in) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pay Online — SHS Enrollment</title>
-    <link rel="stylesheet" href="../css/css_student.css?v=<?= filemtime(__DIR__ . '/../css/css_student.css') ?>">
+    <link rel="stylesheet" href="../assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_student.css') ?>">
     <style>
       .poh-table-wrap { overflow-x:auto; border:1px solid var(--color-info); border-radius:14px; }
       .poh-table { width:100%; min-width:520px; border-collapse:collapse; font-size:13px; }

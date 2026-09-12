@@ -152,8 +152,8 @@ if (in_array($row['status'], ['expired', 'cancelled'], true)) {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Record Payment — SHS Enrollment System</title>
-      <link rel="stylesheet" href="../css/css_staff.css?v=<?= filemtime(__DIR__ . '/../css/css_staff.css') ?>">
-      <?php if ($is_admin): ?><link rel="stylesheet" href="../css/css_admin.css?v=<?= filemtime(__DIR__ . '/../css/css_admin.css') ?>"><?php endif; ?>
+      <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
+      <?php if ($is_admin): ?><link rel="stylesheet" href="../assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_admin.css') ?>"><?php endif; ?>
       <style>
         .pay-wrap { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
         .alert-error { font-size:13px; background:#FDF0EF; border:0.5px solid #F5C6C2; color:#C0392B;
@@ -424,8 +424,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$not_ready) {
   <title>Record Payment — SHS Enrollment System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/css_staff.css?v=<?= filemtime(__DIR__ . '/../css/css_staff.css') ?>">
-  <?php if ($is_admin): ?><link rel="stylesheet" href="../css/css_admin.css?v=<?= filemtime(__DIR__ . '/../css/css_admin.css') ?>"><?php endif; ?>
+  <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
+  <?php if ($is_admin): ?><link rel="stylesheet" href="../assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_admin.css') ?>"><?php endif; ?>
   <style>
     .pay-wrap  { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
     .summary-table { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:0; }

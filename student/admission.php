@@ -729,8 +729,8 @@ function old(string $key, string $default = ''): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Online Admission Application — SHS Enrollment System</title>
-  <link rel="stylesheet" href="../css/css_staff.css?v=<?= filemtime(__DIR__ . '/../css/css_staff.css') ?>">
-  <link rel="stylesheet" href="../css/styles.css?v=<?= filemtime(__DIR__ . '/../css/styles.css') ?>">
+  <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
+  <link rel="stylesheet" href="../assets/css/styles.css?v=<?= filemtime(__DIR__ . '/../assets/css/styles.css') ?>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560&display=swap">
 </head>
@@ -740,12 +740,12 @@ function old(string $key, string $default = ''): string {
   <div class="wrap">
     <a href="index" class="brand">
       <img
-        src="/Enrollment_system/images/log_ui.png"
+        src="/Enrollment_system/assets/images/log_ui.png"
         alt=""
         class="brand-icon"
       >
       <img
-        src="/Enrollment_system/images/logo_mini2.png"
+        src="/Enrollment_system/assets/images/logo_mini2.png"
         alt="Greenfield Senior High School"
       >
     </a>
@@ -1418,8 +1418,8 @@ function old(string $key, string $default = ''): string {
   </aside>
   </div><!-- /.adm-shell -->
 
-<script src="../js/sweetalert2.all.min.js"></script>
-<script src="../js/blur_detect.js"></script>
+<script src="../assets/js/sweetalert2.all.min.js"></script>
+<script src="../assets/js/blur_detect.js"></script>
 <script>
   // ── "I'll submit ALL documents in person" master checkbox ───────────────
   // Declared up front (rather than down by the requirement-uploads code

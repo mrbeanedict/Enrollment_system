@@ -15,7 +15,7 @@ include_once '../config.php';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Grades — SHS Enrollment</title>
-    <link rel="stylesheet" href="../css/css_student.css?v=<?= filemtime(__DIR__ . '/../css/css_student.css') ?>">
+    <link rel="stylesheet" href="../assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_student.css') ?>">
     <style>
       .grd-picker { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:1.1rem; }
       .grd-picker select {

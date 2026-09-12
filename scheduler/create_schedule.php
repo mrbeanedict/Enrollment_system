@@ -600,7 +600,7 @@ $teachers = mysqli_query($conn, "SELECT teacher_id, CONCAT(given_name, ' ', fami
   <title>Create Schedule — Scheduler</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/css_staff.css?v=<?= filemtime(__DIR__ . '/../css/css_staff.css') ?>">
+  <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
   <style>
     .staff-content .panel { max-width:none; margin-left:0; margin-right:0; width:100%; }
     .two-col { display:grid; grid-template-columns:280px 1fr; gap:14px; align-items:start; }

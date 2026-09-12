@@ -457,7 +457,7 @@ $filter_labels = [
   <title>Sections — <?= $is_reviewer ? 'Coordinator' : 'Scheduler' ?></title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/css_staff.css?v=<?= filemtime(__DIR__ . '/../css/css_staff.css') ?>">
+  <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
   <style>
     /* Supplemental styles for the sections table/modal — css_staff.css doesn't
        define a generic data table, so these piggyback on its CSS variables. */

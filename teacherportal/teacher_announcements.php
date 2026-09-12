@@ -15,7 +15,7 @@ guard_password_change('teacher_change_password', 'teacher');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Announcements — SHS Enrollment</title>
-    <link rel="stylesheet" href="../css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../css/css_teacher.css') ?>">
+    <link rel="stylesheet" href="../assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_teacher.css') ?>">
 </head>
 <body class="teacher-layout">
 <?php if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true): ?>

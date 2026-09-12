@@ -191,8 +191,8 @@ $roleLabel = 'Treasury';
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Online Payments — SHS Enrollment System</title>
-  <link rel="stylesheet" href="../css/css_staff.css?v=<?= filemtime(__DIR__ . '/../css/css_staff.css') ?>">
-  <?php if ($is_admin): ?><link rel="stylesheet" href="../css/css_admin.css?v=<?= filemtime(__DIR__ . '/../css/css_admin.css') ?>"><?php endif; ?>
+  <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
+  <?php if ($is_admin): ?><link rel="stylesheet" href="../assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_admin.css') ?>"><?php endif; ?>
   <style>
     .enroll-table { width:100%; border-collapse:collapse; font-size:13px; }
     .enroll-table th { text-align:left; font-size:11px; font-weight:600; text-transform:uppercase;

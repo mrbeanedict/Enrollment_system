@@ -384,7 +384,7 @@ if ($course_line === '') { $course_line = 'Senior High School'; }
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Profile — SHS Enrollment</title>
-    <link rel="stylesheet" href="../css/css_student.css?v=<?= filemtime(__DIR__ . '/../css/css_student.css') ?>">
+    <link rel="stylesheet" href="../assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_student.css') ?>">
 </head>
 <body class="student-layout<?= $is_lms_mode ? ' lms-layout' : '' ?>">
   <?php include_once $is_lms_mode ? '../learningportal/lms_navbar.php' : 'student_sidebar.php'; ?>

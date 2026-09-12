@@ -25,8 +25,8 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
 ?>
 
 <!-- SweetAlert2 -->
-<script src="../js/sweetalert2.all.min.js"></script>
-<script src="../js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="../logout"></script>
+<script src="../assets/js/sweetalert2.all.min.js"></script>
+<script src="../assets/js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="../logout"></script>
 
 <!-- Sidebar overlay -->
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -37,7 +37,7 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
 
   <div class="sidebar-brand">
     <div class="sidebar-logo-crop">
-      <img src="../images/logo.png" alt="Logo">
+      <img src="../assets/images/logo.png" alt="Logo">
     </div>
     <div class="sidebar-brand-text">
       <span class="sidebar-brand-name">Greenfield Senior High School</span>
@@ -86,7 +86,7 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
   </nav>
 
   <div class="sidebar-photo">
-    <img src="../images/background/ui.png" alt="">
+    <img src="../assets/images/background/ui.png" alt="">
   </div>
 
   <div class="sidebar-footer">

@@ -417,7 +417,7 @@ if ($carry_source_year !== '') {
   <title>Curriculum — <?= $is_reviewer ? 'Coordinator' : 'Scheduler' ?></title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/css_staff.css?v=<?= filemtime(__DIR__ . '/../css/css_staff.css') ?>">
+  <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
   <style>
     /* Supplemental styles — same conventions as sections.php, so the two
        pages feel like one dashboard rather than two different apps. */

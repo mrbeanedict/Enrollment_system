@@ -23,7 +23,7 @@ $is_admin = ($_SESSION['role'] ?? '') === 'admin';
 if (!$is_admin && ($_SESSION['department'] ?? '') !== 'records') {
     http_response_code(403);
     echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Access denied</title>
-          <link rel="stylesheet" href="../css/css_staff.css?v=' . filemtime(__DIR__ . '/../css/css_staff.css') . '"></head><body>
+          <link rel="stylesheet" href="../assets/css/css_staff.css?v=' . filemtime(__DIR__ . '/../assets/css/css_staff.css') . '"></head><body>
           <div class="card" style="max-width:480px;margin:4rem auto;">
             <h2>Access denied</h2>
             <p>Only the Records department can view student accountabilities.</p>
@@ -484,7 +484,7 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
   <title>Student Accountabilities — Records</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/css_staff.css?v=<?= filemtime(__DIR__ . '/../css/css_staff.css') ?>">
+  <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
   <style>
     .dr-count-pill {
       background:#1E4D3B; color:#fff; font-size:12px; font-weight:600;
@@ -804,8 +804,8 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
   <div class="pa-modal" id="paModal"></div>
 </div>
 
-<script src="../js/sweetalert2.all.min.js"></script>
-<script src="../js/blur_detect.js"></script>
+<script src="../assets/js/sweetalert2.all.min.js"></script>
+<script src="../assets/js/blur_detect.js"></script>
 <script>
   const studentData = <?= json_encode($modal_data, JSON_HEX_TAG | JSON_HEX_APOS) ?>;
   const returnQs = <?= json_encode($return_qs, JSON_HEX_TAG | JSON_HEX_APOS) ?>;

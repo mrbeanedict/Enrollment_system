@@ -107,7 +107,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
   <title>Students — Admin</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/css_admin.css?v=<?= filemtime(__DIR__ . '/../css/css_admin.css') ?>">
+  <link rel="stylesheet" href="../assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_admin.css') ?>">
   <style>
     .filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:1.25rem; }
     .filter-bar input, .filter-bar select {

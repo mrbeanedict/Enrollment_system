@@ -268,7 +268,7 @@ $conn->close();
 
 </div>
 
-<script src="../js/sweetalert2.all.min.js"></script>
+<script src="../assets/js/sweetalert2.all.min.js"></script>
 <script>
   // Global SweetAlert for data-confirm forms (falls back to native confirm())
   // — same pattern as teacherportal/teacher_sidebar.php's, copied here since

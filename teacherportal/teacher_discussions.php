@@ -227,7 +227,7 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Discussions — SHS Enrollment</title>
-    <link rel="stylesheet" href="../css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../css/css_teacher.css') ?>">
+    <link rel="stylesheet" href="../assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_teacher.css') ?>">
     <style>
       .dc-picker { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
       .dc-picker select {

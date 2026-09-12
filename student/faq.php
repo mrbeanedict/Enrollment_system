@@ -38,7 +38,7 @@ header("Pragma: no-cache");
 <nav>
   <div class="wrap">
     <a href="index.php" class="brand">
-      <img src="/Enrollment_system/images/logo_mini2.png" alt="Greenfield Senior High School">
+      <img src="/Enrollment_system/assets/images/logo_mini2.png" alt="Greenfield Senior High School">
     </a>
 
     <div class="nav-links">

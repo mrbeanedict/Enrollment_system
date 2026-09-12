@@ -140,7 +140,7 @@ unset($_SESSION['tq_flash'], $_SESSION['tq_flash_type']);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Take Quiz — SHS Enrollment</title>
-    <link rel="stylesheet" href="../css/css_student.css?v=<?= filemtime(__DIR__ . '/../css/css_student.css') ?>">
+    <link rel="stylesheet" href="../assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_student.css') ?>">
     <style>
       .tq-back { font-size:12px; color:#5A5A72; text-decoration:none; display:inline-block; margin-bottom:.75rem; }
       .tq-back:hover { color:var(--brand-primary); }

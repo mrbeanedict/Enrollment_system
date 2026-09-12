@@ -48,7 +48,7 @@ $conn->close();
   <title>Dashboard — Admin</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../css/css_admin.css?v=<?= filemtime(__DIR__ . '/../css/css_admin.css') ?>">
+  <link rel="stylesheet" href="../assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_admin.css') ?>">
   <style>
     /* ── Dashboard-only visual polish ──────────────────────────────────────
        Page-local overrides, not touched in css_admin.css itself, since

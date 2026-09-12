@@ -121,7 +121,7 @@ $conn->close();
 <title>Forgot Password — Student Portal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../css/css_student.css?v=<?= filemtime(__DIR__ . '/../css/css_student.css') ?>">
+<link rel="stylesheet" href="../assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_student.css') ?>">
 </head>
 <body class="forgot-page">
 
@@ -195,7 +195,7 @@ $conn->close();
 
 </div>
 
-<script src="../js/sweetalert2.all.min.js"></script>
+<script src="../assets/js/sweetalert2.all.min.js"></script>
 <script>
   // Global SweetAlert for data-confirm forms (falls back to native confirm())
   // — same pattern as studentportal/student_sidebar.php's, copied here since

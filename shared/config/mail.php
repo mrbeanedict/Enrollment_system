@@ -136,7 +136,7 @@ function send_branded_email(PHPMailer $mail, string $to, string $toName, string 
     $mail->Subject = $subject;
 
     $logoCid = 'schoollogo';
-    $mail->addEmbeddedImage(__DIR__ . '/../../images/logo2.png', $logoCid, 'logo.png');
+    $mail->addEmbeddedImage(__DIR__ . '/../../assets/images/logo2.png', $logoCid, 'logo.png');
 
     $mail->Body = render_email_html($subtitle, $bodyHtml, $logoCid);
     $mail->AltBody = $altBody;

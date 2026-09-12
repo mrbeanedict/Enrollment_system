@@ -19,7 +19,7 @@ guard_password_change('staff_change_password');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard — SHS Enrollment</title>
-    <link rel="stylesheet" href="../css/css_staff.css?v=<?= filemtime(__DIR__ . '/../css/css_staff.css') ?>">
+    <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
     <style>
         /* ── Dashboard supplemental styles ────────────────────────────────
            css_staff.css already defines .staff-stat-grid / .staff-stat-card /

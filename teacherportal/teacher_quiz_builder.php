@@ -225,7 +225,7 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quiz Builder — SHS Enrollment</title>
-    <link rel="stylesheet" href="../css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../css/css_teacher.css') ?>">
+    <link rel="stylesheet" href="../assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_teacher.css') ?>">
     <style>
       .qb-back { font-size:12px; color:#5A5A72; text-decoration:none; display:inline-block; margin-bottom:.75rem; }
       .qb-back:hover { color:var(--brand-primary); }

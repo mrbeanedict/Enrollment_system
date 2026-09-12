@@ -70,7 +70,7 @@ $sb_display_name = trim(($sb_given_name ?? '') . ' ' . ($sb_family_name ?? '')) 
 
 <!-- SweetAlert2 -->
 <script src="<?= $base ?>js/sweetalert2.all.min.js"></script>
-<script src="<?= $base ?>js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="<?= $base ?>teacherportal/teacher_logout"></script>
+<script src="<?= $base ?>js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="<?= $base ?>teacherportal/teacher_logout"></script>
 
 <!-- Sidebar overlay -->
 <div class="teacher-sidebar-overlay" id="teacherSidebarOverlay"></div>

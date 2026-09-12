@@ -93,7 +93,7 @@ $conn->close();
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,450;9..144,560;9..144,650&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../css/css_lms.css?v=<?= filemtime(__DIR__ . '/../css/css_lms.css') ?>">
+<link rel="stylesheet" href="../assets/css/css_lms.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_lms.css') ?>">
 </head>
 <body class="auth-page">
 
@@ -120,7 +120,7 @@ $conn->close();
       </div>
 
       <div class="gradient-top">
-        <img src="../images/logo_mini2.png" alt="Greenfield Senior High School" class="brand-logo2" width="505" height="55">
+        <img src="../assets/images/logo_mini2.png" alt="Greenfield Senior High School" class="brand-logo2" width="505" height="55">
       </div>
 
       <div class="gradient-bottom">
@@ -134,7 +134,7 @@ $conn->close();
   <div class="auth-form-side">
     <div class="auth-form-inner">
       <div class="auth-mark">
-        <img src="../images/log_ui.png" alt="Greenfield Senior High School">
+        <img src="../assets/images/log_ui.png" alt="Greenfield Senior High School">
       </div>
       <span class="auth-eyebrow">Greenfield Senior High School</span>
       <h1>Student LMS</h1>
