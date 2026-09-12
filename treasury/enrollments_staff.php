@@ -5,7 +5,7 @@ include_once '../config.php';
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../login"); exit();
 }
-guard_password_change('../staff/staff_change_password');
+guard_password_change(APP_URL . '/roles/staff/change_password');
 
 $is_admin = ($_SESSION['role'] ?? '') === 'admin';
 $status_filter = $_GET['status'] ?? 'pending';
@@ -156,7 +156,7 @@ if ($bal_cnt_res) { $counts['balance'] = (int) mysqli_fetch_assoc($bal_cnt_res)[
     </div>
     <div class="content">
 <?php else: ?>
-  <?php include_once '../staff/staff_sidebar.php'; ?>
+  <?php include_once '../shared/includes/staff_sidebar.php'; ?>
   <div class="staff-main">
     <div class="staff-topbar">
       <div class="staff-topbar-left">

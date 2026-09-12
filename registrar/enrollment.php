@@ -10,7 +10,7 @@ if (!isset($_SESSION['user_id'])) {
     header("Location: ../login");
     exit();
 }
-guard_password_change('../staff/staff_change_password');
+guard_password_change(APP_URL . '/roles/staff/change_password');
 
 $is_admin = isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
 
@@ -1659,7 +1659,7 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
     <h1 class="page-title">Enrollment</h1>
     <p class="page-sub">Step <?= $step ?> of 5 — <?= htmlspecialchars($steps[$step] ?? '') ?></p>
 <?php else: ?>
-  <?php include_once '../staff/staff_sidebar.php'; ?>
+  <?php include_once '../shared/includes/staff_sidebar.php'; ?>
   <div class="staff-main">
     <div class="staff-topbar">
       <div class="staff-topbar-left">

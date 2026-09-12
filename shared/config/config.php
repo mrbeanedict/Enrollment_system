@@ -92,12 +92,13 @@ function strand_name(mysqli $conn, int $id): ?string
 // must change it before touching anything else. Call this right after the
 // existing "not logged in" check, before any HTML output — a header()
 // redirect issued after output has started fails silently instead of
-// actually redirecting (same reasoning as staff_dashboard.php's own early
-// role redirect). $redirectPath is relative to the calling file (e.g.
-// "staff_change_password" from staff/, "../staff/staff_change_password"
-// from a sibling department folder). $role is 'staff' (default) or
-// 'teacher' — the two account types that support a forced first-login
-// password change; admin and student accounts don't use this.
+// actually redirecting (same reasoning as roles/staff/dashboard.php's own
+// early role redirect). $redirectPath is either a same-directory filename
+// (e.g. "change_password" from roles/staff/ itself) or an APP_URL-prefixed
+// absolute path (e.g. APP_URL . '/roles/staff/change_password' from a
+// department page elsewhere under roles/staff/). $role is 'staff'
+// (default) or 'teacher' — the two account types that support a forced
+// first-login password change; admin and student accounts don't use this.
 function guard_password_change(string $redirectPath, string $role = 'staff'): void
 {
     if (($_SESSION['role'] ?? '') === $role && !empty($_SESSION['must_change_password'])) {

@@ -20,7 +20,7 @@ include_once '../notify.php';
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     header("Location: ../login"); exit();
 }
-guard_password_change('../staff/staff_change_password');
+guard_password_change(APP_URL . '/roles/staff/change_password');
 
 $role       = $_SESSION['role']       ?? '';
 $department = $_SESSION['department'] ?? '';
@@ -29,7 +29,7 @@ $user_id    = (int)($_SESSION['user_id'] ?? 0);
 $is_reviewer = ($role === 'admin') || ($role === 'staff' && $department === 'coordinator');
 
 if (!$is_reviewer) {
-    header("Location: ../staff/staff_dashboard"); exit();
+    header("Location: " . APP_URL . "/roles/staff/dashboard"); exit();
 }
 
 header("Cache-Control: no-store, no-cache, must-revalidate");
@@ -491,7 +491,7 @@ $status_labels = ['' => 'All', 'pending' => 'Pending', 'approved' => 'Approved',
 </head>
 <body class="staff-layout">
 
-  <?php include_once '../staff/staff_sidebar.php'; ?>
+  <?php include_once '../shared/includes/staff_sidebar.php'; ?>
 
   <div class="staff-main">
     <div class="staff-topbar">
@@ -505,7 +505,7 @@ $status_labels = ['' => 'All', 'pending' => 'Pending', 'approved' => 'Approved',
         </div>
       </div>
       <div style="display:flex; align-items:center; gap:14px;">
-        <?php include_once '../staff/staff_notifications.php'; ?>
+        <?php include_once '../shared/includes/staff_notifications.php'; ?>
         <span class="staff-topbar-date"><?= date('F j, Y') ?></span>
       </div>
     </div>

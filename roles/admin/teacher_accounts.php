@@ -6,7 +6,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     header("Location: " . APP_URL . "/login"); exit();
 }
 if ($_SESSION['role'] !== 'admin') {
-    header("Location: " . APP_URL . "/staff/staff_dashboard"); exit();
+    header("Location: " . APP_URL . "/roles/staff/dashboard"); exit();
 }
 
 const DEFAULT_TEACHER_PASSWORD = 'Teacher123!';

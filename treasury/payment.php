@@ -56,7 +56,7 @@ function provision_student_portal_account(mysqli $conn, array $row): void {
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../login"); exit();
 }
-guard_password_change('../staff/staff_change_password');
+guard_password_change(APP_URL . '/roles/staff/change_password');
 
 $is_admin = isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
 
@@ -96,7 +96,7 @@ mysqli_query($conn, "
 // ── Get enrollment ─────────────────────────────────────────────────────────
 $enrollment_id = (int)($_GET['enrollment_id'] ?? 0);
 if (!$enrollment_id) {
-    header("Location: ../staff/staff_dashboard"); exit();
+    header("Location: " . APP_URL . "/roles/staff/dashboard"); exit();
 }
 
 $sql = "
@@ -121,7 +121,7 @@ $stmt->execute();
 $row = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 if (!$row) {
-    header("Location: ../staff/staff_dashboard"); exit();
+    header("Location: " . APP_URL . "/roles/staff/dashboard"); exit();
 }
 
 // Treasury can only act once Registrar has actually finished pre-enrollment
@@ -165,7 +165,7 @@ if (in_array($row['status'], ['expired', 'cancelled'], true)) {
       <?php include_once '../shared/includes/admin_sidebar.php'; ?>
       <div class="main"><div class="content">
     <?php else: ?>
-      <?php include_once '../staff/staff_sidebar.php'; ?>
+      <?php include_once '../shared/includes/staff_sidebar.php'; ?>
       <div class="staff-main">
         <div class="staff-topbar"><div class="staff-topbar-left"><span class="staff-topbar-title">Record Payment</span></div></div>
         <div class="staff-content">
@@ -490,7 +490,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$not_ready) {
   <?php include_once '../shared/includes/admin_sidebar.php'; ?>
   <div class="main"><div class="content">
 <?php else: ?>
-  <?php include_once '../staff/staff_sidebar.php'; ?>
+  <?php include_once '../shared/includes/staff_sidebar.php'; ?>
   <div class="staff-main">
     <div class="staff-topbar">
       <div class="staff-topbar-left">

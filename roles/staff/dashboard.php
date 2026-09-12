@@ -1,6 +1,6 @@
 <?php
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 // Redirect non-staff roles (e.g. student) before any HTML output — doing
 // this only inside staff_sidebar.php's own guard is too late here, since
@@ -8,10 +8,10 @@ include_once '../config.php';
 // header() redirect after output has started fails silently (with a
 // "headers already sent" warning) instead of actually redirecting.
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') !== 'staff') {
-    header("Location: ../login");
+    header("Location: " . APP_URL . "/login");
     exit();
 }
-guard_password_change('staff_change_password');
+guard_password_change('change_password');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -19,7 +19,7 @@ guard_password_change('staff_change_password');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard — SHS Enrollment</title>
-    <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_staff.css') ?>">
     <style>
         /* ── Dashboard supplemental styles ────────────────────────────────
            css_staff.css already defines .staff-stat-grid / .staff-stat-card /
@@ -98,7 +98,7 @@ guard_password_change('staff_change_password');
 </head>
 <body class="staff-layout">
 <?php if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true): ?>
-  <p>You are not logged in. Please <a href="../login">log in</a> to access the dashboard.</p>
+  <p>You are not logged in. Please <a href="<?= APP_URL ?>/login">log in</a> to access the dashboard.</p>
 
 <?php else: ?>
   <?php
@@ -107,7 +107,7 @@ guard_password_change('staff_change_password');
     // dashboard's stat cards match the sidebar exactly,
     // with no duplicate queries. It also defines the $ico_* icon variables
     // used both here and in the sidebar nav.
-    include_once 'staff_sidebar.php';
+    include_once BASE_PATH . '/shared/includes/staff_sidebar.php';
 
     $dash_uid = (int) ($_SESSION['user_id'] ?? 0);
 
@@ -359,7 +359,7 @@ guard_password_change('staff_change_password');
         </div>
       </div>
       <div style="display:flex; align-items:center; gap:14px;">
-        <?php if (!in_array($department, ['records', 'registrar', 'treasury'], true)) { include_once 'staff_notifications.php'; } ?>
+        <?php if (!in_array($department, ['records', 'registrar', 'treasury'], true)) { include_once BASE_PATH . '/shared/includes/staff_notifications.php'; } ?>
         <span class="staff-topbar-date"><?= date('F j, Y') ?></span>
       </div>
     </div>

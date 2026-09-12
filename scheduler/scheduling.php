@@ -26,7 +26,7 @@ include_once '../notify.php';
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     header("Location: ../login"); exit();
 }
-guard_password_change('../staff/staff_change_password');
+guard_password_change(APP_URL . '/roles/staff/change_password');
 
 $role    = $_SESSION['role'] ?? '';
 $user_id = (int)($_SESSION['user_id'] ?? 0);
@@ -55,7 +55,7 @@ $is_reviewer  = ($role === 'admin') || ($role === 'staff' && $department === 'co
 $is_scheduler = ($role === 'staff' && $department === 'scheduler');
 
 if (!$is_reviewer && !$is_scheduler) {
-    header("Location: ../staff/staff_dashboard"); exit();
+    header("Location: " . APP_URL . "/roles/staff/dashboard"); exit();
 }
 
 header("Cache-Control: no-store, no-cache, must-revalidate");
@@ -792,7 +792,7 @@ $teachers = mysqli_query($conn, "SELECT teacher_id, CONCAT(given_name, ' ', fami
 </head>
 <body class="staff-layout">
 
-  <?php include_once '../staff/staff_sidebar.php'; ?>
+  <?php include_once '../shared/includes/staff_sidebar.php'; ?>
 
   <div class="staff-main">
     <div class="staff-topbar">
@@ -806,7 +806,7 @@ $teachers = mysqli_query($conn, "SELECT teacher_id, CONCAT(given_name, ' ', fami
         </div>
       </div>
       <div style="display:flex; align-items:center; gap:14px;">
-        <?php include_once '../staff/staff_notifications.php'; ?>
+        <?php include_once '../shared/includes/staff_notifications.php'; ?>
         <span class="staff-topbar-date"><?= date('F j, Y') ?></span>
       </div>
     </div>

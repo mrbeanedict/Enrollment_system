@@ -14,7 +14,7 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
     } elseif (($_SESSION['role'] ?? '') === 'student') {
         header("Location: student_dashboard");
     } else {
-        header("Location: ../staff/staff_dashboard");
+        header("Location: " . APP_URL . "/roles/staff/dashboard");
     }
     exit();
 }

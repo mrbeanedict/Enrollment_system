@@ -7,7 +7,7 @@ include_once '../notify.php';
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../login"); exit();
 }
-guard_password_change('../staff/staff_change_password');
+guard_password_change(APP_URL . '/roles/staff/change_password');
 
 $is_admin = ($_SESSION['role'] ?? '') === 'admin';
 
@@ -233,7 +233,7 @@ $roleLabel = 'Treasury';
     </div>
     <div class="content">
 <?php else: ?>
-  <?php include_once '../staff/staff_sidebar.php'; ?>
+  <?php include_once '../shared/includes/staff_sidebar.php'; ?>
   <div class="staff-main">
     <div class="staff-topbar">
       <div class="staff-topbar-left">

@@ -1,14 +1,14 @@
 <?php
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || ($_SESSION['role'] ?? '') !== 'staff') {
-    header("Location: ../login"); exit();
+    header("Location: " . APP_URL . "/login"); exit();
 }
 
 // Nothing to force — send them on to the normal dashboard.
 if (empty($_SESSION['must_change_password'])) {
-    header("Location: staff_dashboard"); exit();
+    header("Location: dashboard"); exit();
 }
 
 $user_id = (int) $_SESSION['user_id'];
@@ -43,7 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
 
         $_SESSION['must_change_password'] = false;
 
-        header("Location: staff_dashboard"); exit();
+        header("Location: dashboard"); exit();
     }
 }
 
@@ -152,7 +152,7 @@ $conn->close();
   <h1>Set a new password</h1>
   <p class="lead">For security, you must change your temporary password before continuing. It must be at least 8 characters.</p>
 
-  <form method="POST" action="staff_change_password">
+  <form method="POST" action="change_password">
     <?php if ($error): ?>
       <div class="alert"><?= htmlspecialchars($error) ?></div>
     <?php endif; ?>

@@ -13,7 +13,7 @@ $is_admin = isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
 
 $enrollment_id = (int)($_GET['enrollment_id'] ?? 0);
 if (!$enrollment_id) {
-    header("Location: ../staff/staff_dashboard"); exit();
+    header("Location: " . APP_URL . "/roles/staff/dashboard"); exit();
 }
 
 // ── Fetch enrollment + student + section + payment ──────────────────────────
@@ -41,7 +41,7 @@ $stmt->close();
 
 if (!$row) {
     $conn->close();
-    header("Location: ../staff/staff_dashboard"); exit();
+    header("Location: " . APP_URL . "/roles/staff/dashboard"); exit();
 }
 
 $pay_stmt = $conn->prepare("SELECT COALESCE(SUM(amount),0) AS total_paid FROM payments WHERE enrollment_id = ?");

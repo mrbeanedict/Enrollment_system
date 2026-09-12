@@ -3,17 +3,13 @@
 // top of the HTML body, inside .staff-topbar). Self-contained: queries its
 // own data, prints its own markup/style/script.
 //
-// Included from both staff/staff_dashboard.php (same folder as this file)
-// and the one-level-deep department pages (coordinator/, records/,
-// registrar/, scheduler/, treasury/) — same $base convention as
-// staff_sidebar.php. This file lives in staff/, one folder below the
-// project root, so the root anchor is dirname(__DIR__), not __DIR__.
-// All notification `link` values in the DB must be written root-relative
-// (no leading "../") so prepending $base resolves correctly no matter
-// where they're rendered.
-$sn_staffNotifRoot  = realpath(dirname(__DIR__));
-$sn_staffCurrentDir = realpath(dirname($_SERVER['SCRIPT_FILENAME']));
-$base = ($sn_staffCurrentDir !== false && $sn_staffCurrentDir === $sn_staffNotifRoot) ? '' : '../';
+// Included from roles/staff/dashboard.php and from department pages under
+// roles/staff/{coordinator,records,registrar,scheduler,treasury}/ — each at
+// a different folder depth, so every link uses the absolute APP_URL prefix
+// (see staff_sidebar.php) rather than a depth-counted relative path. All
+// notification `link` values in the DB must be written root-relative (no
+// leading "../") so prepending APP_URL resolves correctly no matter where
+// they're rendered.
 
 $sn_user_id = (int)($_SESSION['user_id'] ?? 0);
 
@@ -56,7 +52,7 @@ function sn_time_ago($dt) {
       <div class="staff-notif-empty">No notifications yet.</div>
     <?php else: ?>
       <?php foreach ($sn_notifs as $sn_n): ?>
-        <a href="<?= $base . htmlspecialchars($sn_n['link']) ?>" class="staff-notif-item<?= $sn_n['is_read'] ? '' : ' unread' ?>">
+        <a href="<?= APP_URL . '/' . htmlspecialchars($sn_n['link']) ?>" class="staff-notif-item<?= $sn_n['is_read'] ? '' : ' unread' ?>">
           <div class="staff-notif-msg"><?= htmlspecialchars($sn_n['message']) ?></div>
           <div class="staff-notif-time"><?= sn_time_ago($sn_n['created_at']) ?></div>
         </a>
@@ -111,7 +107,7 @@ function sn_time_ago($dt) {
     dropdown.classList.toggle('open');
     if (dropdown.classList.contains('open') && !marked) {
       marked = true;
-      fetch('<?= $base ?>ajax/mark_notifications_read', { method: 'POST' });
+      fetch('<?= APP_URL ?>/ajax/mark_notifications_read', { method: 'POST' });
       var badge = bell.querySelector('.staff-notif-badge');
       if (badge) badge.remove();
     }

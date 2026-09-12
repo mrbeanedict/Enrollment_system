@@ -1,26 +1,21 @@
 <?php
 // Requires: $conn open, session active
 //
-// This partial lives in staff/ — one folder below the project root — and is
-// included both from staff/staff_dashboard.php (same folder) and from the
-// department folders (coordinator/, records/, registrar/, scheduler/,
-// treasury/, also one folder below root). $rootPrefix is computed first,
-// before anything else, so it can be reused by the early auth-redirects
-// below as well as by every root-relative asset/nav link further down.
-$staffPartialRoot = realpath(dirname(__DIR__));
-$staffCallerDir    = realpath(dirname($_SERVER['SCRIPT_FILENAME']));
-$base = ($staffCallerDir !== false && $staffCallerDir === $staffPartialRoot) ? '' : '../';
-
-// Auth guard — required in case this partial is ever requested directly.
+// Included from roles/staff/dashboard.php and from department pages under
+// roles/staff/{coordinator,records,registrar,scheduler,treasury}/ — each
+// at a different folder depth. Every link below uses the absolute
+// APP_URL prefix (defined in shared/config/config.php) instead of a
+// depth-counted relative path, so it resolves correctly regardless of how
+// deep the including page sits.
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 if (!isset($_SESSION['user_id'])) {
-    header("Location: {$base}login");
+    header("Location: " . APP_URL . "/login");
     exit();
 }
 if (!isset($conn)) {
-    include_once __DIR__ . '/../config.php';
+    require_once __DIR__ . '/../../bootstrap.php';
 }
 
 $current = basename($_SERVER['PHP_SELF']);
@@ -53,7 +48,7 @@ if ($department === null && ($_SESSION['role'] ?? '') === 'staff') {
 // partial — it's the staff-only sidebar. Bail out safely rather than
 // guessing which department nav to render.
 if (($_SESSION['role'] ?? '') !== 'staff' || $department === null) {
-    header("Location: {$base}login");
+    header("Location: " . APP_URL . "/login");
     exit();
 }
 
@@ -98,11 +93,9 @@ $roleLabel = ucfirst($department);
 $navItems  = [];   // ['href (root-relative)','label','icon','match (basename)','badge']
 $statusRows = [];  // ['label','value','warn' => bool]
 
-// $base was already computed at the top of this file (before the auth
-// guards, so it could be reused there too). Every href below is written
-// root-relative (no leading "../") and gets $base prepended at render
-// time, so the exact same nav item works regardless of which directory
-// the including page happens to sit in.
+// Every href below is written root-relative (no leading "../") and gets
+// APP_URL prepended at render time, so the exact same nav item works
+// regardless of which directory the including page happens to sit in.
 
 if ($department === 'registrar') {
 
@@ -130,7 +123,7 @@ if ($department === 'registrar') {
     if ($sb_q) { $sb_r = mysqli_fetch_row($sb_q); $awaitingSemester2 = (int)$sb_r[0]; }
 
     $navItems = [
-        ['staff/staff_dashboard', 'Dashboard',  $ico_dashboard, 'staff_dashboard.php', 0],
+        ['roles/staff/dashboard', 'Dashboard',  $ico_dashboard, 'dashboard.php', 0],
         ['registrar/enrollment', 'Enrollment', $ico_enroll,    'enrollment.php',      $pendingEnrollments],
     ];
 
@@ -190,7 +183,7 @@ if ($department === 'registrar') {
     if ($sb_q) { $sb_r = mysqli_fetch_row($sb_q); $accountabilitiesCount = (int)$sb_r[0]; }
 
     $navItems = [
-        ['staff/staff_dashboard',        'Dashboard',              $ico_dashboard,        'staff_dashboard.php', 0],
+        ['roles/staff/dashboard',        'Dashboard',              $ico_dashboard,        'dashboard.php', 0],
         ['records/document_review',      'Document Review',       $ico_docreview,        'document_review.php', $awaitingReview],
         ['records/accountabilities',     'Accountabilities',      $ico_accountabilities, 'accountabilities.php', $accountabilitiesCount],
     ];
@@ -222,7 +215,7 @@ if ($department === 'registrar') {
     if ($sb_q) { $sb_r = mysqli_fetch_row($sb_q); $onlinePaymentsPendingCount = (int)$sb_r[0]; }
 
     $navItems = [
-        ['staff/staff_dashboard',      'Dashboard',        $ico_dashboard, 'staff_dashboard.php',   0],
+        ['roles/staff/dashboard',      'Dashboard',        $ico_dashboard, 'dashboard.php',   0],
         ['treasury/enrollments_staff', 'All Payments',     $ico_payment,   'enrollments_staff.php', 0],
         ['treasury/online_payments',   'Online Payments',  $ico_payment,   'online_payments.php',   $onlinePaymentsPendingCount],
     ];
@@ -271,7 +264,7 @@ if ($department === 'registrar') {
         $pendingApprovals = $pendingSections + $pendingSubjects + $pendingSchedules;
 
         $navItems = [
-            ['staff/staff_dashboard',     'Dashboard',         $ico_dashboard,  'staff_dashboard.php', 0],
+            ['roles/staff/dashboard',     'Dashboard',         $ico_dashboard,  'dashboard.php', 0],
             ['scheduler/sections',        'Sections',          $ico_sections,   'sections.php',        0],
             ['scheduler/curriculum',      'Curriculum',        $ico_curriculum, 'curriculum.php',      0],
             ['scheduler/scheduling',      'Class Scheduling',  $ico_schedule,   'scheduling.php',      $unscheduledSections],
@@ -286,7 +279,7 @@ if ($department === 'registrar') {
         ];
     } else {
         $navItems = [
-            ['staff/staff_dashboard', 'Dashboard',       $ico_dashboard,  'staff_dashboard.php', 0],
+            ['roles/staff/dashboard', 'Dashboard',       $ico_dashboard,  'dashboard.php', 0],
             ['scheduler/sections',   'Sections',         $ico_sections,   'sections.php',        0],
             ['scheduler/curriculum', 'Curriculum',       $ico_curriculum, 'curriculum.php',      0],
             ['scheduler/scheduling', 'Class Scheduling', $ico_schedule,   'scheduling.php',      $unscheduledSections],
@@ -303,8 +296,8 @@ if ($department === 'registrar') {
 ?>
 
 <!-- SweetAlert2 -->
-<script src="<?= $base ?>js/sweetalert2.all.min.js"></script>
-<script src="<?= $base ?>js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="<?= $base ?>logout"></script>
+<script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
+<script src="<?= APP_URL ?>/assets/js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="<?= APP_URL ?>/logout"></script>
 
 <!-- Sidebar overlay -->
 <div class="staff-sidebar-overlay" id="staffSidebarOverlay"></div>
@@ -315,7 +308,7 @@ if ($department === 'registrar') {
 
   <div class="staff-sidebar-brand">
     <div class="sidebar-logo-crop">
-      <img src="<?= $base ?>images/logo.png" alt="Logo">
+      <img src="<?= APP_URL ?>/assets/images/logo.png" alt="Logo">
     </div>
     <div>
       <div class="staff-sidebar-brand-name">Greenfield Senior High School</div>
@@ -327,7 +320,7 @@ if ($department === 'registrar') {
 
     <span class="staff-nav-label"><?= htmlspecialchars($roleLabel) ?></span>
     <?php foreach ($navItems as $item): ?>
-        <?php staffNavLink($base . $item[0], $item[1], $item[2], $current, $item[3], $item[4]); ?>
+        <?php staffNavLink(APP_URL . '/' . $item[0], $item[1], $item[2], $current, $item[3], $item[4]); ?>
     <?php endforeach; ?>
 
     <?php if (!empty($statusRows)): ?>
@@ -345,7 +338,7 @@ if ($department === 'registrar') {
   </nav>
 
   <div class="staff-sidebar-photo">
-    <img src="<?= $base ?>images/background/ui.png" alt="">
+    <img src="<?= APP_URL ?>/assets/images/background/ui.png" alt="">
   </div>
 
   <div class="staff-sidebar-footer">
@@ -355,7 +348,7 @@ if ($department === 'registrar') {
       </div>
       <span class="staff-sidebar-username"><?= htmlspecialchars($_SESSION['username'] ?? 'Staff') ?></span>
     </div>
-    <a href="<?= $base ?>logout" class="staff-btn-logout" id="staffLogoutBtn">
+    <a href="<?= APP_URL ?>/logout" class="staff-btn-logout" id="staffLogoutBtn">
       <?= $ico_logout ?> Log out
     </a>
   </div>
@@ -401,7 +394,7 @@ if ($department === 'registrar') {
         if (typeof Swal === 'undefined') {
           if (window.confirm('Log out? You will be returned to the login page.')) {
             document.getElementById('pageLoader').classList.add('show');
-            window.location.href = '<?= $base ?>logout';
+            window.location.href = '<?= APP_URL ?>/logout';
           }
           return;
         }
@@ -417,7 +410,7 @@ if ($department === 'registrar') {
         }).then(function (result) {
           if (result.isConfirmed) {
             document.getElementById('pageLoader').classList.add('show');
-            window.location.href = '<?= $base ?>logout';
+            window.location.href = '<?= APP_URL ?>/logout';
           }
         });
       });

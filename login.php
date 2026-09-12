@@ -5,13 +5,13 @@ include('config.php');
 // Already logged in — don't show the login form again, send them onward.
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
     if (($_SESSION['role'] ?? '') === 'admin') {
-        header("Location: admin/dashboard");
+        header("Location: " . APP_URL . "/roles/admin/dashboard");
     } elseif (($_SESSION['role'] ?? '') === 'student') {
         header("Location: studentportal/student_dashboard");
     } elseif (!empty($_SESSION['must_change_password'])) {
-        header("Location: staff/staff_change_password");
+        header("Location: " . APP_URL . "/roles/staff/change_password");
     } else {
-        header("Location: staff/staff_dashboard");
+        header("Location: " . APP_URL . "/roles/staff/dashboard");
     }
     exit();
 }
@@ -91,9 +91,9 @@ if (isset($_POST['login_btn'])) {
 
 
       if ($row['role'] === 'admin') {
-          header("Location: admin/dashboard");
+          header("Location: " . APP_URL . "/roles/admin/dashboard");
       } elseif ($row['role'] === 'staff') {
-          header("Location: " . ($_SESSION['must_change_password'] ? "staff/staff_change_password" : "staff/staff_dashboard"));
+          header("Location: " . APP_URL . ($_SESSION['must_change_password'] ? "/roles/staff/change_password" : "/roles/staff/dashboard"));
       } else {
           session_destroy();
           die("Invalid user role.");
