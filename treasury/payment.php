@@ -144,7 +144,7 @@ header("Pragma: no-cache");
 // Block payment on an enrollment that's no longer active — its seat has
 // already been freed back up (expired) or the enrollment was cancelled.
 if (in_array($row['status'], ['expired', 'cancelled'], true)) {
-    $back_url = $is_admin ? '../admin/enrollments' : 'enrollments_staff';
+    $back_url = $is_admin ? APP_URL . '/roles/admin/enrollments' : 'enrollments_staff';
     ?>
     <!DOCTYPE html>
     <html lang="en">
@@ -162,7 +162,7 @@ if (in_array($row['status'], ['expired', 'cancelled'], true)) {
     </head>
     <body<?php if (!$is_admin): ?> class="staff-layout"<?php endif; ?>>
     <?php if ($is_admin): ?>
-      <?php include_once '../admin/sidebar.php'; ?>
+      <?php include_once '../shared/includes/admin_sidebar.php'; ?>
       <div class="main"><div class="content">
     <?php else: ?>
       <?php include_once '../staff/staff_sidebar.php'; ?>
@@ -487,7 +487,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$not_ready) {
 <body<?php if (!$is_admin): ?> class="staff-layout"<?php endif; ?>>
 
 <?php if ($is_admin): ?>
-  <?php include_once '../admin/sidebar.php'; ?>
+  <?php include_once '../shared/includes/admin_sidebar.php'; ?>
   <div class="main"><div class="content">
 <?php else: ?>
   <?php include_once '../staff/staff_sidebar.php'; ?>

@@ -148,7 +148,7 @@ if ($bal_cnt_res) { $counts['balance'] = (int) mysqli_fetch_assoc($bal_cnt_res)[
 <body class="<?= $is_admin ? '' : 'staff-layout' ?>">
 
 <?php if ($is_admin): ?>
-  <?php include_once '../admin/sidebar.php'; ?>
+  <?php include_once '../shared/includes/admin_sidebar.php'; ?>
   <div class="main">
     <div class="topbar">
       <span class="topbar-title">Enrollments</span>

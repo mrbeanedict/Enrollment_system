@@ -1,12 +1,12 @@
 <?php
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header("Location: ../login"); exit();
+    header("Location: " . APP_URL . "/login"); exit();
 }
 if ($_SESSION['role'] !== 'admin') {
-    header("Location: ../staff/staff_dashboard"); exit();
+    header("Location: " . APP_URL . "/staff/staff_dashboard"); exit();
 }
 
 const DEFAULT_TEACHER_PASSWORD = 'Teacher123!';
@@ -148,7 +148,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
   <title>Teacher Accounts — Admin</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_admin.css') ?>">
+  <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_admin.css') ?>">
   <style>
     .alert { font-size:13px; border-radius:8px; padding:9px 13px; margin-bottom:1rem; }
     .alert-success { background:#EBF7F2; border:0.5px solid #A8D9C5; color:#1A6B4A; }
@@ -170,7 +170,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 </head>
 <body>
 
-  <?php include_once 'sidebar.php'; ?>
+  <?php include_once BASE_PATH . '/shared/includes/admin_sidebar.php'; ?>
 
   <div class="main">
     <div class="topbar">

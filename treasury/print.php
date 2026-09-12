@@ -134,7 +134,7 @@ $student_name = trim($row['family_name'] . ', ' . $row['given_name'] .
     ($row['suffix']      ? ' ' . $row['suffix']      : ''));
 $printed_by   = $_SESSION['username'] ?? 'Staff';
 
-$back_link = $is_admin ? '../admin/enrollments' : 'enrollments_staff';
+$back_link = $is_admin ? APP_URL . '/roles/admin/enrollments' : 'enrollments_staff';
 $print_date   = date('F j, Y g:i A');
 ?>
 <!DOCTYPE html>

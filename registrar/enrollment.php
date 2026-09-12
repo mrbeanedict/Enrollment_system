@@ -1653,7 +1653,7 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
 <body<?php if (!$is_admin): ?> class="staff-layout"<?php endif; ?>>
 
 <?php if ($is_admin): ?>
-  <?php include_once '../admin/sidebar.php'; ?>
+  <?php include_once '../shared/includes/admin_sidebar.php'; ?>
   <div class="main"><div class="content">
     <p class="page-eyebrow">Admin Portal</p>
     <h1 class="page-title">Enrollment</h1>

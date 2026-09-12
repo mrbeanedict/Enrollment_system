@@ -10,7 +10,7 @@ include('../config.php');
 // Already logged in — don't show the login form again, send them onward.
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
     if (($_SESSION['role'] ?? '') === 'admin') {
-        header("Location: ../admin/dashboard");
+        header("Location: " . APP_URL . "/roles/admin/dashboard");
     } elseif (($_SESSION['role'] ?? '') === 'student') {
         header("Location: student_dashboard");
     } else {

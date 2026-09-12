@@ -4,7 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || ($_SESSION['role'] ?? '') !== 'admin') {
-    header("Location: ../login");
+    header("Location: " . APP_URL . "/login");
     exit();
 }
 
@@ -12,9 +12,10 @@ $current = basename($_SERVER['PHP_SELF']);
 
 // Real (date-computed) current school year + term, for the topbar badge —
 // current_real_school_year()/semester_for_date() already exist in
-// ../config.php (every admin page includes it before this partial), so this
-// reuses the same authoritative source registrar/scheduler pages rely on
-// instead of hand-rolling a second notion of "the current year".
+// shared/config/config.php (every admin page requires bootstrap.php before
+// this partial), so this reuses the same authoritative source
+// registrar/scheduler pages rely on instead of hand-rolling a second
+// notion of "the current year".
 $topbar_school_year = current_real_school_year();
 $topbar_term         = semester_for_date($topbar_school_year, date('Y-m-d'));
 
@@ -25,8 +26,8 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
 ?>
 
 <!-- SweetAlert2 -->
-<script src="../assets/js/sweetalert2.all.min.js"></script>
-<script src="../assets/js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="../logout"></script>
+<script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
+<script src="<?= APP_URL ?>/assets/js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="<?= APP_URL ?>/logout"></script>
 
 <!-- Sidebar overlay -->
 <div class="sidebar-overlay" id="sidebarOverlay"></div>
@@ -37,7 +38,7 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
 
   <div class="sidebar-brand">
     <div class="sidebar-logo-crop">
-      <img src="../assets/images/logo.png" alt="Logo">
+      <img src="<?= APP_URL ?>/assets/images/logo.png" alt="Logo">
     </div>
     <div class="sidebar-brand-text">
       <span class="sidebar-brand-name">Greenfield Senior High School</span>
@@ -86,7 +87,7 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
   </nav>
 
   <div class="sidebar-photo">
-    <img src="../assets/images/background/ui.png" alt="">
+    <img src="<?= APP_URL ?>/assets/images/background/ui.png" alt="">
   </div>
 
   <div class="sidebar-footer">
@@ -98,7 +99,7 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
         <span class="sidebar-username"><?= htmlspecialchars($_SESSION['username'] ?? 'Admin') ?></span>
         <span class="sidebar-role">System Administrator</span>
       </div>
-      <a href="../logout" class="btn-logout" id="logoutBtn" aria-label="Log out" title="Log out">
+      <a href="<?= APP_URL ?>/logout" class="btn-logout" id="logoutBtn" aria-label="Log out" title="Log out">
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
       </a>
     </div>
@@ -211,7 +212,7 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
       if (typeof Swal === 'undefined') {
         if (window.confirm('Log out? You will be returned to the login page.')) {
           document.getElementById('pageLoader').classList.add('show');
-          window.location.href = '../logout';
+          window.location.href = '<?= APP_URL ?>/logout';
         }
         return;
       }
@@ -227,7 +228,7 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
       }).then(function (result) {
         if (result.isConfirmed) {
           document.getElementById('pageLoader').classList.add('show');
-          window.location.href = '../logout';
+          window.location.href = '<?= APP_URL ?>/logout';
         }
       });
     });

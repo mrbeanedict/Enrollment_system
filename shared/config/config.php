@@ -1,4 +1,13 @@
 <?php
+// Site-root URL prefix — lets shared includes and cross-folder redirects
+// (e.g. shared/includes/*_sidebar.php, login/logout links) use an
+// absolute path that works regardless of how deep the requesting page
+// sits under roles/, instead of a relative '../../' chain that breaks
+// every time a page moves during the directory reorganization.
+if (!defined('APP_URL')) {
+    define('APP_URL', '/Enrollment_system');
+}
+
 $servername = "localhost";
 $username   = "root";
 $password   = "";
