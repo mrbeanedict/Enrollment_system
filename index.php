@@ -4,6 +4,6 @@
 // (typed directly, bookmarked, or reached via a relative "index.php" link
 // from a page outside that folder) doesn't 404. Hardcoded rather than
 // pulling in bootstrap.php (DB connection and all) just for a redirect —
-// same site-root prefix as APP_URL in shared/config/config.php.
+// same site-root prefix as APP_URL in shared/config/database.php.
 header('Location: /Enrollment_system/roles/student/public/index');
 exit;

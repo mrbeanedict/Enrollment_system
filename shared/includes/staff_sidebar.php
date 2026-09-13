@@ -4,7 +4,7 @@
 // Included from roles/staff/dashboard.php and from department pages under
 // roles/staff/{coordinator,records,registrar,scheduler,treasury}/ — each
 // at a different folder depth. Every link below uses the absolute
-// APP_URL prefix (defined in shared/config/config.php) instead of a
+// APP_URL prefix (defined in shared/config/database.php) instead of a
 // depth-counted relative path, so it resolves correctly regardless of how
 // deep the including page sits.
 if (session_status() === PHP_SESSION_NONE) {

@@ -12,7 +12,7 @@ $current = basename($_SERVER['PHP_SELF']);
 
 // Real (date-computed) current school year + term, for the topbar badge —
 // current_real_school_year()/semester_for_date() already exist in
-// shared/config/config.php (every admin page requires bootstrap.php before
+// shared/config/database.php (every admin page requires bootstrap.php before
 // this partial), so this reuses the same authoritative source
 // registrar/scheduler pages rely on instead of hand-rolling a second
 // notion of "the current year".

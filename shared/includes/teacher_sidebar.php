@@ -3,7 +3,7 @@
 //
 // Included from the other roles/teacher/teacher_*.php pages (same
 // folder). Every link below uses the absolute APP_URL prefix (defined in
-// shared/config/config.php) instead of a depth-counted relative path —
+// shared/config/database.php) instead of a depth-counted relative path —
 // same reasoning as shared/includes/staff_sidebar.php.
 
 // Auth guard — required in case this partial is ever requested directly.
