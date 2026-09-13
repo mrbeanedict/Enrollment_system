@@ -8,7 +8,7 @@ declare(strict_types=1);
 // hygiene without a second factor, a not-found match and a found-but-
 // not-yet-searchable match return the same generic shape/response time,
 // and only a minimal, non-identifying subset of fields is ever returned.
-include('../config.php');
+require_once __DIR__ . '/../bootstrap.php';
 
 header('Content-Type: application/json');
 

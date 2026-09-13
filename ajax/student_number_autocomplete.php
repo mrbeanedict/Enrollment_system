@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 session_start();
-include('../config.php');
+require_once __DIR__ . '/../bootstrap.php';
 
 header('Content-Type: application/json');
 

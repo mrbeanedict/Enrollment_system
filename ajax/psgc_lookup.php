@@ -9,7 +9,7 @@ declare(strict_types=1);
 // not part of the request-time code path).
 //
 // GET params: type=provinces | type=cities&province_code=X | type=barangays&city_code=Y
-include('../config.php');
+require_once __DIR__ . '/../bootstrap.php';
 
 header('Content-Type: application/json');
 

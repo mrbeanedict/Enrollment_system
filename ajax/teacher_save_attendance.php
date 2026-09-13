@@ -8,7 +8,7 @@ declare(strict_types=1);
 // as config.php's current_real_school_year()).
 session_name('TEACHER_SESSID');
 session_start();
-include('../config.php');
+require_once __DIR__ . '/../bootstrap.php';
 
 header('Content-Type: application/json');
 

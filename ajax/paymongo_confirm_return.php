@@ -16,7 +16,7 @@ declare(strict_types=1);
 // simulated one.
 session_name('STUDENT_SESSID');
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../bootstrap.php';
 include_once '../config/paymongo.php';
 include_once '../notify.php';
 require_once '../config/mail.php';

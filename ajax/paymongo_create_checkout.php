@@ -9,7 +9,7 @@ declare(strict_types=1);
 // here — see paymongo_confirm_return.php for why.
 session_name('STUDENT_SESSID');
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../bootstrap.php';
 include_once '../config/paymongo.php';
 
 header('Content-Type: application/json');

@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 // Staff/admin counterpart to ajax/paymongo_confirm_return.php. Called
-// automatically when staff land back on treasury/payment.php after a
+// automatically when staff land back on roles/staff/treasury/payment.php after a
 // PayMongo Checkout Session. Unlike the student version, this endpoint
 // does NOT write to the database — it only verifies the payment with
 // PayMongo and hands the confirmed amount/channel/reference back to the
@@ -12,7 +12,7 @@ declare(strict_types=1);
 // — reusing it here means none of that gets duplicated or drifts out of
 // sync with the Cash path.
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../bootstrap.php';
 include_once '../config/paymongo.php';
 
 header('Content-Type: application/json');

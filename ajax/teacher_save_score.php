@@ -7,7 +7,7 @@ declare(strict_types=1);
 // score grid used to write to.
 session_name('TEACHER_SESSID');
 session_start();
-include('../config.php');
+require_once __DIR__ . '/../bootstrap.php';
 include('../notify.php');
 
 header('Content-Type: application/json');

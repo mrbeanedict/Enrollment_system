@@ -5,7 +5,7 @@ declare(strict_types=1);
 // (students aren't in the shared `users` table at all).
 session_name('STUDENT_SESSID');
 session_start();
-include('../config.php');
+require_once __DIR__ . '/../bootstrap.php';
 
 header('Content-Type: application/json');
 

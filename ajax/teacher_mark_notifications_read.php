@@ -5,7 +5,7 @@ declare(strict_types=1);
 // portal's default/unnamed session isn't active here.
 session_name('TEACHER_SESSID');
 session_start();
-include('../config.php');
+require_once __DIR__ . '/../bootstrap.php';
 
 header('Content-Type: application/json');
 

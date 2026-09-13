@@ -8,7 +8,7 @@ declare(strict_types=1);
 // user_id = users_student.user_student_id).
 session_name('STUDENT_LMS_SESSID');
 session_start();
-include('../config.php');
+require_once __DIR__ . '/../bootstrap.php';
 
 header('Content-Type: application/json');
 

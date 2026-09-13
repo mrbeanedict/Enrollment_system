@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 session_start();
-include('../config.php');
+require_once __DIR__ . '/../bootstrap.php';
 // Sits in ajax/, sibling to enrollment.php — config.php is one level up,
-// same relationship as enrollment.php's own include('../config.php') would
+// same relationship as enrollment.php's own require_once bootstrap.php would
 // need if enrollment.php were in a subfolder. It isn't (see enrollment.php's
 // header comment), but ajax/ genuinely is a subfolder of that directory.
 
@@ -29,7 +29,7 @@ if ($q === '') {
 
 /* ── Resolve the query to a student row ───────────────────────────────
    Student Number: returning students search by this (numeric, up to 12
-   digits, system-generated — see registrar/enrollment.php's minting logic).
+   digits, system-generated — see roles/staff/registrar/enrollment.php's minting logic).
    Control Number: new students & transferees search by this — it lives
    on `enrollments`, not `students`, so it needs a join. We try Student
    Number first when the input looks numeric, otherwise control number

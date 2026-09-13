@@ -1,14 +1,14 @@
 <?php
 declare(strict_types=1);
-// Backs the "Proceed to PayMongo" button on treasury/payment.php — the
+// Backs the "Proceed to PayMongo" button on roles/staff/treasury/payment.php — the
 // staff/admin counterpart to ajax/paymongo_create_checkout.php. Creates a
 // PayMongo-hosted Checkout Session (GCash/Card/Maya/GrabPay) so staff can
 // complete or relay a payment through PayMongo (e.g. a phone-in payment),
 // then hands the checkout_url back for a real redirect. Same auth guard
-// treasury/payment.php itself uses — default/unnamed session, no
+// roles/staff/treasury/payment.php itself uses — default/unnamed session, no
 // session_name() call.
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../bootstrap.php';
 include_once '../config/paymongo.php';
 
 header('Content-Type: application/json');
