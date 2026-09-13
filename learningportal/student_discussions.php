@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_thread']) && $is_
                 $conn,
                 disc_teacher_targets($conn, $subject_id, $section_id, $sy),
                 "New discussion thread: \"$title\".",
-                'teacherportal/teacher_discussions'
+                'roles/teacher/teacher_discussions'
             );
         } catch (Exception $e) {
             $conn->rollback();
@@ -132,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply']) && $is_stude
             $conn,
             disc_teacher_targets($conn, $subject_id, $section_id, $sy),
             'New reply in a discussion thread.',
-            'teacherportal/teacher_discussions'
+            'roles/teacher/teacher_discussions'
         );
     }
     header("Location: student_discussions?" . $return_qs);

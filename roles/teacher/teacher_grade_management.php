@@ -3,10 +3,10 @@
 // this uses the default session — see teacher_sidebar.php for the auth guard.
 session_name('TEACHER_SESSID');
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') !== 'teacher') {
-    header("Location: ../teacherportal/teacher_login");
+    header("Location: teacher_login");
     exit();
 }
 guard_password_change('teacher_change_password', 'teacher');
@@ -20,7 +20,7 @@ $valid_quarters = ['1', '2', '3', '4'];
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Grade Management — SHS Enrollment</title>
-    <link rel="stylesheet" href="../assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_teacher.css') ?>">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_teacher.css') ?>">
     <style>
       .gb-picker { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:1.25rem; }
       .gb-picker select {
@@ -83,7 +83,7 @@ $valid_quarters = ['1', '2', '3', '4'];
 
 <?php else: ?>
   <?php
-    include_once 'teacher_sidebar.php';
+    include_once BASE_PATH . '/shared/includes/teacher_sidebar.php';
 
     // Every distinct class (subject+section+school_year) this teacher is
     // assigned to — same source as Assessment/My Schedule.
@@ -220,7 +220,7 @@ $valid_quarters = ['1', '2', '3', '4'];
           <span class="teacher-topbar-subtitle">Press Enter in a score field to save it</span>
         </div>
       </div>
-      <?php include 'teacher_topbar_right.php'; ?>
+      <?php include BASE_PATH . '/shared/includes/teacher_topbar_right.php'; ?>
     </div>
 
     <div class="teacher-content">

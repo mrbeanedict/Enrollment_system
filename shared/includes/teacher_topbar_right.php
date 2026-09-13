@@ -1,11 +1,11 @@
 <?php
 // Requires: $conn open, session active, teacher_sidebar.php already included
-// (for $sb_display_name / $sb_photo_path / $base). Self-contained like
+// (for $sb_display_name / $sb_photo_path). Self-contained like
 // teacher_sidebar.php — queries its own department name so any page can
 // drop this in without first loading that data itself.
 //
 // Output: the topbar-right notification bell + profile chip/dropdown used on
-// every teacherportal/*.php page, so the topbar look stays identical
+// every roles/teacher/*.php page, so the topbar look stays identical
 // everywhere instead of drifting page to page — same pattern as
 // studentportal/student_topbar_right.php. All locals are tbr_-prefixed (or
 // scoped to this file) so including this never overwrites a variable the
@@ -30,9 +30,9 @@ mysqli_stmt_close($tbr_dept_stmt);
 $tbr_profile_name = $sb_display_name ?? ($_SESSION['username'] ?? 'Teacher');
 $tbr_profile_role = $tbr_department_name ? ucfirst($tbr_department_name) : 'Teacher';
 
-$tbr_profile_href = $base . 'teacherportal/teacher_profile';
-$tbr_logout_href  = $base . 'teacherportal/teacher_logout';
-$tbr_photo_href   = $base . 'teacherportal/teacher_photo';
+$tbr_profile_href = APP_URL . '/roles/teacher/teacher_profile';
+$tbr_logout_href  = APP_URL . '/roles/teacher/teacher_logout';
+$tbr_photo_href   = APP_URL . '/roles/teacher/teacher_photo';
 
 $tbr_ico_bell     = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>';
 $tbr_ico_chevdown = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>';
@@ -80,7 +80,7 @@ function tbr_time_ago($dt) {
         <div class="teacher-notif-empty">No notifications yet.</div>
       <?php else: ?>
         <?php foreach ($tbr_notifs as $tbr_n): ?>
-          <a href="<?= $base . htmlspecialchars($tbr_n['link']) ?>" class="teacher-notif-item<?= $tbr_n['is_read'] ? '' : ' unread' ?>">
+          <a href="<?= APP_URL . "/" . htmlspecialchars($tbr_n["link"]) ?>" class="teacher-notif-item<?= $tbr_n['is_read'] ? '' : ' unread' ?>">
             <div class="teacher-notif-msg"><?= htmlspecialchars($tbr_n['message']) ?></div>
             <div class="teacher-notif-time"><?= tbr_time_ago($tbr_n['created_at']) ?></div>
           </a>
@@ -121,7 +121,7 @@ function tbr_time_ago($dt) {
         notifDropdown.classList.toggle('open');
         if (notifDropdown.classList.contains('open') && !notifMarked) {
           notifMarked = true;
-          fetch('<?= $base ?>ajax/teacher_mark_notifications_read', { method: 'POST' });
+          fetch('<?= APP_URL ?>/ajax/teacher_mark_notifications_read', { method: 'POST' });
           var badge = notifBell.querySelector('.teacher-notif-badge');
           if (badge) badge.remove();
         }

@@ -3,8 +3,8 @@
 // teacher session namespace so it doesn't collide with an admin/staff tab.
 session_name('TEACHER_SESSID');
 session_start();
-include('../config.php');
-require_once('../config/mail.php');
+require_once __DIR__ . '/../../bootstrap.php';
+require_once __DIR__ . '/../../config/mail.php';
 
 // Already logged in — nothing to reset, send them onward.
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
@@ -268,10 +268,10 @@ $conn->close();
 
 </div>
 
-<script src="../assets/js/sweetalert2.all.min.js"></script>
+<script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
 <script>
   // Global SweetAlert for data-confirm forms (falls back to native confirm())
-  // — same pattern as teacherportal/teacher_sidebar.php's, copied here since
+  // — same pattern as shared/includes/teacher_sidebar.php's, copied here since
   // this pre-login page doesn't include that sidebar.
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('form[data-confirm]').forEach(function (form) {

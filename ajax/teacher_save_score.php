@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-// Per-cell autosave for teacherportal/teacher_grade_management.php's
+// Per-cell autosave for roles/teacher/teacher_grade_management.php's
 // Quiz/Seatwork columns — each column is a real gradebook_items row
 // (the same items Assessment creates/manages), so this saves into
 // gradebook_scores, the exact same table Assessment's now-removed

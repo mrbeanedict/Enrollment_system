@@ -3,7 +3,7 @@
 // this uses the default session — see teacher_sidebar.php for the auth guard.
 session_name('TEACHER_SESSID');
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 // Redirect non-teacher roles (e.g. staff/admin) before any HTML output —
 // doing this only inside teacher_sidebar.php's own guard is too late here,
@@ -11,7 +11,7 @@ include_once '../config.php';
 // header() redirect after output has started fails silently (with a
 // "headers already sent" warning) instead of actually redirecting.
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') !== 'teacher') {
-    header("Location: ../teacherportal/teacher_login");
+    header("Location: teacher_login");
     exit();
 }
 guard_password_change('teacher_change_password', 'teacher');
@@ -22,7 +22,7 @@ guard_password_change('teacher_change_password', 'teacher');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard — SHS Enrollment</title>
-    <link rel="stylesheet" href="../assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_teacher.css') ?>">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_teacher.css') ?>">
 </head>
 <body class="teacher-layout">
 <?php if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true): ?>
@@ -30,7 +30,7 @@ guard_password_change('teacher_change_password', 'teacher');
 
 <?php else: ?>
   <?php
-    include_once 'teacher_sidebar.php';
+    include_once BASE_PATH . '/shared/includes/teacher_sidebar.php';
 
     $teacher_id = (int) $_SESSION['teacher_id'];
 
@@ -142,7 +142,7 @@ guard_password_change('teacher_change_password', 'teacher');
           <span class="teacher-topbar-subtitle">Your teaching overview</span>
         </div>
       </div>
-      <?php include 'teacher_topbar_right.php'; ?>
+      <?php include BASE_PATH . '/shared/includes/teacher_topbar_right.php'; ?>
     </div>
 
     <div class="teacher-content">

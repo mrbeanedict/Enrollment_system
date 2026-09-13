@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-// Per-cell autosave for teacherportal/teacher_attendance.php — one
+// Per-cell autosave for roles/teacher/teacher_attendance.php — one
 // P/L/A value per student per actual scheduled class date (session_date).
 // No admin-configured date range: a date is valid as long as it falls
 // within the selected class's school year span (PH SHS convention —

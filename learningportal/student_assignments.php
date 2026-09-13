@@ -100,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_work']) && $is
                             $conn,
                             [(int) ($sa_tu_row['user_id'] ?? 0)],
                             'A student submitted work for "' . $item['title'] . '".',
-                            'teacherportal/teacher_grade_management'
+                            'roles/teacher/teacher_grade_management'
                         );
                     } else {
                         $_SESSION['as_flash'] = 'Could not save the submission. Please try again.';

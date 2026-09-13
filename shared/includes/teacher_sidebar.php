@@ -1,14 +1,10 @@
 <?php
 // Requires: $conn open, session active
 //
-// This partial lives in teacherportal/ — one folder below the project
-// root — and is included from the other teacherportal/*.php pages (same
-// folder). $base is computed first, before anything else, so it can be
-// reused by the early auth-redirect below as well as by every
-// root-relative asset link further down.
-$teacherPartialRoot = realpath(dirname(__DIR__));
-$teacherCallerDir    = realpath(dirname($_SERVER['SCRIPT_FILENAME']));
-$base = ($teacherCallerDir !== false && $teacherCallerDir === $teacherPartialRoot) ? '' : '../';
+// Included from the other roles/teacher/teacher_*.php pages (same
+// folder). Every link below uses the absolute APP_URL prefix (defined in
+// shared/config/config.php) instead of a depth-counted relative path —
+// same reasoning as shared/includes/staff_sidebar.php.
 
 // Auth guard — required in case this partial is ever requested directly.
 // Teachers now sign in through their own teacher_login.php, with a
@@ -24,7 +20,7 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || ($_SESS
     exit();
 }
 if (!isset($conn)) {
-    include_once __DIR__ . '/../config.php';
+    require_once __DIR__ . '/../../bootstrap.php';
 }
 
 $current = basename($_SERVER['PHP_SELF']);
@@ -64,13 +60,11 @@ mysqli_stmt_close($sb_stmt);
 
 $sb_display_name = trim(($sb_given_name ?? '') . ' ' . ($sb_family_name ?? '')) ?: ($_SESSION['username'] ?? 'Teacher');
 
-// $base was already computed at the top of this file (before the auth
-// guard, so it could be reused there too).
 ?>
 
 <!-- SweetAlert2 -->
-<script src="<?= $base ?>js/sweetalert2.all.min.js"></script>
-<script src="<?= $base ?>js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="<?= $base ?>teacherportal/teacher_logout"></script>
+<script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
+<script src="<?= APP_URL ?>/assets/js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="<?= APP_URL ?>/roles/teacher/teacher_logout"></script>
 
 <!-- Sidebar overlay -->
 <div class="teacher-sidebar-overlay" id="teacherSidebarOverlay"></div>
@@ -81,7 +75,7 @@ $sb_display_name = trim(($sb_given_name ?? '') . ' ' . ($sb_family_name ?? '')) 
 
   <div class="teacher-sidebar-brand">
     <div class="sidebar-logo-crop">
-      <img src="<?= $base ?>images/logo.png" alt="Logo">
+      <img src="<?= APP_URL ?>/assets/images/logo.png" alt="Logo">
     </div>
     <div class="teacher-sidebar-brand-text">
       <div class="teacher-sidebar-brand-name">Greenfield Senior High School</div>
@@ -91,33 +85,33 @@ $sb_display_name = trim(($sb_given_name ?? '') . ' ' . ($sb_family_name ?? '')) 
 
   <nav class="teacher-sidebar-nav">
     <span class="teacher-nav-label">Overview</span>
-    <?php teacherNavLink($base . 'teacherportal/teacher_dashboard', 'Dashboard', $ico_dashboard, $current, 'teacher_dashboard.php'); ?>
+    <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_dashboard', 'Dashboard', $ico_dashboard, $current, 'teacher_dashboard.php'); ?>
 
     <span class="teacher-nav-label">Teaching</span>
-    <?php teacherNavLink($base . 'teacherportal/teacher_classes', 'My Classes', $ico_cap, $current, 'teacher_classes.php'); ?>
-    <?php teacherNavLink($base . 'teacherportal/teacher_schedule', 'My Schedule', $ico_schedule, $current, 'teacher_schedule.php'); ?>
-    <?php teacherNavLink($base . 'teacherportal/teacher_gradebook', 'Assessment', $ico_book, $current, 'teacher_gradebook.php'); ?>
-    <?php teacherNavLink($base . 'teacherportal/teacher_grade_management', 'Grade Management', $ico_dashboard, $current, 'teacher_grade_management.php'); ?>
-    <?php teacherNavLink($base . 'teacherportal/teacher_attendance', 'Attendance', $ico_calendar, $current, 'teacher_attendance.php'); ?>
-    <?php teacherNavLink($base . 'teacherportal/teacher_lessons', 'Lessons', $ico_class, $current, 'teacher_lessons.php'); ?>
-    <?php teacherNavLink($base . 'teacherportal/teacher_discussions', 'Discussions', $ico_users, $current, 'teacher_discussions.php'); ?>
+    <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_classes', 'My Classes', $ico_cap, $current, 'teacher_classes.php'); ?>
+    <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_schedule', 'My Schedule', $ico_schedule, $current, 'teacher_schedule.php'); ?>
+    <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_gradebook', 'Assessment', $ico_book, $current, 'teacher_gradebook.php'); ?>
+    <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_grade_management', 'Grade Management', $ico_dashboard, $current, 'teacher_grade_management.php'); ?>
+    <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_attendance', 'Attendance', $ico_calendar, $current, 'teacher_attendance.php'); ?>
+    <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_lessons', 'Lessons', $ico_class, $current, 'teacher_lessons.php'); ?>
+    <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_discussions', 'Discussions', $ico_users, $current, 'teacher_discussions.php'); ?>
 
     <span class="teacher-nav-label">Updates</span>
-    <?php teacherNavLink($base . 'teacherportal/teacher_profile', 'My Profile', $ico_profile, $current, 'teacher_profile.php'); ?>
+    <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_profile', 'My Profile', $ico_profile, $current, 'teacher_profile.php'); ?>
   </nav>
 
   <div class="teacher-sidebar-footer">
     <div class="teacher-sidebar-user">
       <div class="teacher-sidebar-avatar">
         <?php if (!empty($sb_photo_path)): ?>
-          <img src="<?= $base ?>teacherportal/teacher_photo" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">
+          <img src="<?= APP_URL ?>/roles/teacher/teacher_photo" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">
         <?php else: ?>
           <?= strtoupper(substr($sb_given_name ?? $sb_display_name, 0, 1)) ?>
         <?php endif; ?>
       </div>
       <span class="teacher-sidebar-username"><?= htmlspecialchars($sb_display_name) ?></span>
     </div>
-    <a href="<?= $base ?>teacherportal/teacher_logout" class="teacher-btn-logout" id="teacherLogoutBtn" title="Log out">
+    <a href="<?= APP_URL ?>/roles/teacher/teacher_logout" class="teacher-btn-logout" id="teacherLogoutBtn" title="Log out">
       <?= $ico_logout ?> <span class="teacher-btn-logout-text">Log out</span>
     </a>
   </div>
@@ -178,7 +172,7 @@ $sb_display_name = trim(($sb_given_name ?? '') . ' ' . ($sb_family_name ?? '')) 
         if (typeof Swal === 'undefined') {
           if (window.confirm('Log out? You will be returned to the login page.')) {
             document.getElementById('pageLoader').classList.add('show');
-            window.location.href = '<?= $base ?>teacherportal/teacher_logout';
+            window.location.href = '<?= APP_URL ?>/roles/teacher/teacher_logout';
           }
           return;
         }
@@ -194,7 +188,7 @@ $sb_display_name = trim(($sb_given_name ?? '') . ' ' . ($sb_family_name ?? '')) 
         }).then(function (result) {
           if (result.isConfirmed) {
             document.getElementById('pageLoader').classList.add('show');
-            window.location.href = '<?= $base ?>teacherportal/teacher_logout';
+            window.location.href = '<?= APP_URL ?>/roles/teacher/teacher_logout';
           }
         });
       });

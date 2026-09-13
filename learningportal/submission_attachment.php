@@ -1,7 +1,7 @@
 <?php
 // Serves a student's own submitted file back to them. Files under
 // uploads/gradebook_submissions/ are never served directly (see the
-// .htaccess there) — see teacherportal/submission_attachment.php for the
+// .htaccess there) — see roles/teacher/submission_attachment.php for the
 // teacher-side equivalent. Reads the on-disk path from the DB row rather
 // than trusting anything in the query string, so there's no
 // path-traversal surface.

@@ -352,7 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_schedule'])) {
                             $conn,
                             [(int) ($tu_row['user_id'] ?? 0)],
                             "You've been assigned to teach \"$subject_name\" — {$sec_row['section_name']}.",
-                            'teacherportal/teacher_schedule'
+                            'roles/teacher/teacher_schedule'
                         );
                     }
                 }

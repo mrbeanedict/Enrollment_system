@@ -3,10 +3,10 @@
 // this uses the default session — see teacher_sidebar.php for the auth guard.
 session_name('TEACHER_SESSID');
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') !== 'teacher') {
-    header("Location: ../teacherportal/teacher_login");
+    header("Location: teacher_login");
     exit();
 }
 guard_password_change('teacher_change_password', 'teacher');
@@ -225,7 +225,7 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quiz Builder — SHS Enrollment</title>
-    <link rel="stylesheet" href="../assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_teacher.css') ?>">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_teacher.css') ?>">
     <style>
       .qb-back { font-size:12px; color:#5A5A72; text-decoration:none; display:inline-block; margin-bottom:.75rem; }
       .qb-back:hover { color:var(--brand-primary); }
@@ -261,7 +261,7 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
 
 <?php else: ?>
   <?php
-    include_once 'teacher_sidebar.php';
+    include_once BASE_PATH . '/shared/includes/teacher_sidebar.php';
     $item = quiz_item_owned($conn, $item_id, $teacher_id);
 
     $questions = [];
@@ -296,7 +296,7 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
           <span class="teacher-topbar-subtitle"><?= $item ? htmlspecialchars($item['title']) . ' — ' . htmlspecialchars($item['subject_name']) . ' (' . htmlspecialchars($item['section_name']) . ')' : '' ?></span>
         </div>
       </div>
-      <?php include 'teacher_topbar_right.php'; ?>
+      <?php include BASE_PATH . '/shared/includes/teacher_topbar_right.php'; ?>
     </div>
 
     <div class="teacher-content">

@@ -1,7 +1,7 @@
 <?php
 session_name('TEACHER_SESSID');
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || ($_SESSION['role'] ?? '') !== 'teacher') {
     header("Location: teacher_login"); exit();

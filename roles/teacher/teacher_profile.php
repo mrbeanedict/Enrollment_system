@@ -1,10 +1,10 @@
 <?php
 session_name('TEACHER_SESSID');
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../bootstrap.php';
 
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') !== 'teacher') {
-    header("Location: ../teacherportal/teacher_login");
+    header("Location: teacher_login");
     exit();
 }
 guard_password_change('teacher_change_password', 'teacher');
@@ -46,7 +46,7 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
                 $error_message = 'Photo must be a JPG or PNG file.';
             } else {
                 $stored_name = uniqid('teacher_', true) . '.' . $ext;
-                $dest_dir    = __DIR__ . '/../uploads/profile_photos/';
+                $dest_dir    = __DIR__ . '/../../uploads/profile_photos/';
                 $dest        = $dest_dir . $stored_name;
 
                 if (move_uploaded_file($file['tmp_name'], $dest)) {
@@ -94,7 +94,7 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
         mysqli_stmt_close($upd_stmt);
 
         if ($old_photo) {
-            $dest_dir = __DIR__ . '/../uploads/profile_photos/';
+            $dest_dir = __DIR__ . '/../../uploads/profile_photos/';
             if (is_file($dest_dir . $old_photo)) {
                 @unlink($dest_dir . $old_photo);
             }
@@ -197,14 +197,14 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Profile — SHS Enrollment</title>
-    <link rel="stylesheet" href="../assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_teacher.css') ?>">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_teacher.css') ?>">
 </head>
 <body class="teacher-layout">
 <?php if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true): ?>
   <p>You are not logged in. Please <a href="teacher_login">log in</a> to access this page.</p>
 
 <?php else: ?>
-  <?php include_once 'teacher_sidebar.php'; ?>
+  <?php include_once BASE_PATH . '/shared/includes/teacher_sidebar.php'; ?>
   <div class="teacher-main">
     <div class="teacher-topbar">
       <div class="teacher-topbar-left">
@@ -213,7 +213,7 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
           <span class="teacher-topbar-subtitle">Your contact info and account security</span>
         </div>
       </div>
-      <?php include 'teacher_topbar_right.php'; ?>
+      <?php include BASE_PATH . '/shared/includes/teacher_topbar_right.php'; ?>
     </div>
 
     <div class="teacher-content">

@@ -55,7 +55,7 @@ if (isset($_POST['login_btn'])) {
       if ($row['role'] === 'student') {
           $error_message = 'Student accounts sign in through the <a href="studentportal/student_login">Student Portal</a>.';
       } elseif ($row['role'] === 'teacher') {
-          $error_message = 'Teacher accounts sign in through the <a href="teacherportal/teacher_login">Teacher Portal</a>.';
+          $error_message = 'Teacher accounts sign in through the <a href="' . APP_URL . '/roles/teacher/teacher_login">Teacher Portal</a>.';
       } else {
 
       session_regenerate_id(true);
@@ -222,7 +222,7 @@ $conn->close();
     <button type="submit" name="login_btn" class="login-btn">Log In</button>
   </form>
 
-  <p class="forgot">Teacher? <a href="teacherportal/teacher_login">Log in here</a></p>
+  <p class="forgot">Teacher? <a href="<?= APP_URL ?>/roles/teacher/teacher_login">Log in here</a></p>
 </div>
 </div>
 

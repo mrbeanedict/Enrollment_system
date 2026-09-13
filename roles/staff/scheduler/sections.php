@@ -189,7 +189,7 @@ function populate_section_subjects($conn, $section_id, $grade_level, $strandId, 
                 $conn,
                 [(int) ($psst_tu_row['user_id'] ?? 0)],
                 "You've been assigned to teach \"$psst_subject_name\" — $psst_section_name.",
-                'teacherportal/teacher_schedule'
+                'roles/teacher/teacher_schedule'
             );
         }
     }

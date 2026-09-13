@@ -1,7 +1,7 @@
 <?php
 session_name('TEACHER_SESSID');
 session_start();
-include('../config.php');
+require_once __DIR__ . '/../../bootstrap.php';
 
 $raw_token = trim($_GET['token'] ?? $_POST['token'] ?? '');
 
@@ -255,10 +255,10 @@ $conn->close();
   });
 </script>
 
-<script src="../assets/js/sweetalert2.all.min.js"></script>
+<script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
 <script>
   // Global SweetAlert for data-confirm forms (falls back to native confirm())
-  // — same pattern as teacherportal/teacher_sidebar.php's, copied here since
+  // — same pattern as shared/includes/teacher_sidebar.php's, copied here since
   // this pre-login page doesn't include that sidebar.
   document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('form[data-confirm]').forEach(function (form) {

@@ -3,7 +3,7 @@
 // this uses the default session — see teacher_sidebar.php for the auth guard.
 session_name('TEACHER_SESSID');
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../bootstrap.php';
 include_once '../notify.php';
 
 // Shared by every "new content posted" handler in this file — resolves
@@ -25,7 +25,7 @@ function lesson_notify_targets(mysqli $conn, int $subject_id, int $section_id, s
 }
 
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') !== 'teacher') {
-    header("Location: ../teacherportal/teacher_login");
+    header("Location: teacher_login");
     exit();
 }
 guard_password_change('teacher_change_password', 'teacher');
@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['post_lesson'])) {
                     $_SESSION['ls_flash_type'] = 'error';
                 } else {
                     $stored_name = uniqid('lesson_', true) . '.' . $ext;
-                    $dest = __DIR__ . '/../uploads/lesson_attachments/' . $stored_name;
+                    $dest = __DIR__ . '/../../uploads/lesson_attachments/' . $stored_name;
                     if (!move_uploaded_file($_FILES['attachment']['tmp_name'], $dest)) {
                         $_SESSION['ls_flash'] = 'Could not save the attachment. Please try again.';
                         $_SESSION['ls_flash_type'] = 'error';
@@ -170,7 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_lesson'])) {
         $del->execute();
         $del->close();
         if ($row['attachment_path']) {
-            $full_path = __DIR__ . '/../uploads/lesson_attachments/' . $row['attachment_path'];
+            $full_path = __DIR__ . '/../../uploads/lesson_attachments/' . $row['attachment_path'];
             if (is_file($full_path)) @unlink($full_path);
         }
         $_SESSION['ls_flash'] = 'Lesson deleted.';
@@ -190,7 +190,7 @@ unset($_SESSION['ls_flash'], $_SESSION['ls_flash_type']);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lessons — SHS Enrollment</title>
-    <link rel="stylesheet" href="../assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_teacher.css') ?>">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_teacher.css') ?>">
     <style>
       .ls-picker { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
       .ls-picker select {
@@ -222,7 +222,7 @@ unset($_SESSION['ls_flash'], $_SESSION['ls_flash_type']);
 
 <?php else: ?>
   <?php
-    include_once 'teacher_sidebar.php';
+    include_once BASE_PATH . '/shared/includes/teacher_sidebar.php';
 
     $cls_stmt = $conn->prepare("
         SELECT ta.subject_id, ta.section_id, ta.school_year, ta.semester, sub.subject_name,
@@ -279,7 +279,7 @@ unset($_SESSION['ls_flash'], $_SESSION['ls_flash_type']);
           <span class="teacher-topbar-subtitle">Post lesson content for each class</span>
         </div>
       </div>
-      <?php include 'teacher_topbar_right.php'; ?>
+      <?php include BASE_PATH . '/shared/includes/teacher_topbar_right.php'; ?>
     </div>
 
     <div class="teacher-content">

@@ -3,11 +3,11 @@
 // this uses the default session — see teacher_sidebar.php for the auth guard.
 session_name('TEACHER_SESSID');
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../bootstrap.php';
 include_once '../notify.php';
 
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') !== 'teacher') {
-    header("Location: ../teacherportal/teacher_login");
+    header("Location: teacher_login");
     exit();
 }
 guard_password_change('teacher_change_password', 'teacher');
@@ -166,7 +166,7 @@ unset($_SESSION['gb_flash'], $_SESSION['gb_flash_type']);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Assessment — SHS Enrollment</title>
-    <link rel="stylesheet" href="../assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_teacher.css') ?>">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_teacher.css') ?>">
     <style>
       .gb-picker { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
       .gb-picker select {
@@ -230,7 +230,7 @@ unset($_SESSION['gb_flash'], $_SESSION['gb_flash_type']);
 
 <?php else: ?>
   <?php
-    include_once 'teacher_sidebar.php';
+    include_once BASE_PATH . '/shared/includes/teacher_sidebar.php';
 
     // Every distinct class (subject+section+school_year) this teacher is
     // assigned to — same source as My Classes/My Schedule.
@@ -342,7 +342,7 @@ unset($_SESSION['gb_flash'], $_SESSION['gb_flash_type']);
           <span class="teacher-topbar-subtitle">Manage quizzes, seatwork, and exams for your classes</span>
         </div>
       </div>
-      <?php include 'teacher_topbar_right.php'; ?>
+      <?php include BASE_PATH . '/shared/includes/teacher_topbar_right.php'; ?>
     </div>
 
     <div class="teacher-content">

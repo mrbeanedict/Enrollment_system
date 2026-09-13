@@ -120,9 +120,9 @@ function current_real_school_year(): string
 }
 
 // Requirement document uploads — shared by every place a requirement file
-// gets uploaded (student/admission.php, records/document_review.php), so
+// gets uploaded (student/admission.php, roles/staff/records/document_review.php), so
 // files created by any of them are indistinguishable to every downstream
-// consumer (records/view_document.php). Default constraints; a couple of
+// consumer (roles/staff/records/view_document.php). Default constraints; a couple of
 // requirement types need something tighter (see req_doc_constraints()
 // below), e.g. the 2x2 Picture, which is a photo, not a scanned document —
 // no PDFs, and a smaller cap.
@@ -152,7 +152,7 @@ function req_doc_constraints(string $requirement_name): array {
 
 
 // Semester 1 = Quarters 1+2. Subjects are whole-year in this system
-// (not semester-split — see registrar/enrollment.php), so this checks
+// (not semester-split — see roles/staff/registrar/enrollment.php), so this checks
 // every subject the section offers. Only subjects where BOTH quarters
 // already have a real Grade Management total are evaluated — a subject
 // with no grades yet has nothing to average, so it's silently skipped
@@ -241,7 +241,7 @@ function semester_for_date(string $schoolYear, string $date): int
 // True if any applicable requirement row for this enrollment isn't
 // 'submitted' yet — required or optional. Semester 2 continuation blocks
 // on any outstanding item, a stricter standard than admission completion
-// (records/document_review.php's dr_finalize_admission(), which only
+// (roles/staff/records/document_review.php's dr_finalize_admission(), which only
 // requires is_required=1 rows) since by Semester 2 a student has had a
 // full term to clear even optional accountabilities.
 function has_outstanding_accountabilities(mysqli $conn, int $enrollment_id, int $jhsIsPublic): bool
@@ -491,7 +491,7 @@ function grade_management_grade(mysqli $conn, int $studentId, int $subjectId, in
 }
 
 // ── Login brute-force throttling ─────────────────────────────────────────
-// Shared by every login entry point (login.php, teacherportal/teacher_login.php,
+// Shared by every login entry point (login.php, roles/teacher/teacher_login.php,
 // studentportal/student_login.php, learningportal/lms_login.php) — tracks
 // failed attempts per username+IP so repeated wrong-password guesses get
 // locked out instead of being retryable instantly forever.
