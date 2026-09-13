@@ -8,7 +8,6 @@ declare(strict_types=1);
 session_name('TEACHER_SESSID');
 session_start();
 require_once __DIR__ . '/../bootstrap.php';
-include('../notify.php');
 
 header('Content-Type: application/json');
 

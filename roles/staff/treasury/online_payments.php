@@ -2,7 +2,6 @@
 session_start();
 require_once __DIR__ . '/../../../bootstrap.php';
 require_once __DIR__ . '/../../../config/mail.php';
-include_once '../notify.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: " . APP_URL . "/login"); exit();

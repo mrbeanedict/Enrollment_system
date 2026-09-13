@@ -4,7 +4,6 @@
 session_name('TEACHER_SESSID');
 session_start();
 require_once __DIR__ . '/../../bootstrap.php';
-include_once '../notify.php';
 
 if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') !== 'teacher') {
     header("Location: teacher_login");

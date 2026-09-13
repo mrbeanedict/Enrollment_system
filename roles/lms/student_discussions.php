@@ -8,7 +8,6 @@
 session_name('STUDENT_LMS_SESSID');
 session_start();
 require_once __DIR__ . '/../../bootstrap.php';
-include_once '../notify.php';
 
 $is_student = isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') === 'student';
 $student_id = $is_student ? (int) ($_SESSION['student_id'] ?? 0) : 0;

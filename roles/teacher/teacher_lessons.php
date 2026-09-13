@@ -4,7 +4,6 @@
 session_name('TEACHER_SESSID');
 session_start();
 require_once __DIR__ . '/../../bootstrap.php';
-include_once '../notify.php';
 
 // Shared by every "new content posted" handler in this file — resolves
 // the user_student_id of every actively-enrolled student taking this
