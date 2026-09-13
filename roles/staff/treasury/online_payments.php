@@ -89,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $conn,
                     [(int) ($sub['user_student_id'] ?? 0)],
                     'Your payment of ₱' . number_format($amount, 2) . ' has been confirmed.',
-                    'studentportal/student_payments'
+                    'roles/student/portal/student_payments'
                 );
 
                 if (!empty($sub['email'])) {
@@ -129,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $conn,
                     [(int) ($sub['user_student_id'] ?? 0)],
                     'Your payment submission was declined: ' . $reason,
-                    'studentportal/student_pay_online'
+                    'roles/student/portal/student_pay_online'
                 );
 
                 if (!empty($sub['email'])) {

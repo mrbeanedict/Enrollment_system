@@ -96,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_requirements']))
         } else {
             // LEFT JOIN — a student can be missing an enrollment_requirements
             // row entirely for a requirement_type added after they applied
-            // (student/admission.php only seeds rows for types that existed
+            // (roles/student/public/admission.php only seeds rows for types that existed
             // at application time). Those rows must be treated as 'pending'
             // and INSERTed on save, not silently skipped like an INNER JOIN
             // would do — that was the original bug: checking the manual
@@ -1034,7 +1034,7 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
   // Checks already-uploaded images (not PDFs, which can't be meaningfully
   // blur-checked without rendering them) using the same offline
   // Laplacian-variance heuristic as the upload-time check in
-  // student/admission.php (see js/blur_detect.js). A flagged row also has
+  // roles/student/public/admission.php (see js/blur_detect.js). A flagged row also has
   // its Approve radio disabled — the radios are named by
   // requirement_type_id (a small fixed catalog id), NOT
   // enrollment_requirement_id (the per-student row the badge/file link

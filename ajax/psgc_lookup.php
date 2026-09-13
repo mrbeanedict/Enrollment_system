@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 // Public, unauthenticated PSGC (province/city/barangay) cascading lookup —
-// backs the address dropdowns on student/admission.php (public, no login)
+// backs the address dropdowns on roles/student/public/admission.php (public, no login)
 // and, going forward, any other address form that adopts the same
 // province -> city/municipality -> barangay cascade. Reference data lives
 // in psgc_provinces / psgc_cities / psgc_barangays, seeded once from the

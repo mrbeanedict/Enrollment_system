@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_item'])) {
                     $conn,
                     $gb_ids,
                     "New $gb_kind posted: \"$title\".",
-                    $is_quiz ? 'learningportal/student_quizzes' : 'learningportal/student_assignments'
+                    $is_quiz ? 'roles/lms/student_quizzes' : 'roles/lms/student_assignments'
                 );
             }
         } else {

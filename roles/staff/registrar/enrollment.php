@@ -1185,7 +1185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $conn,
                             [(int) ($usidRow['user_student_id'] ?? 0)],
                             'Your Semester 2 request has been approved.',
-                            'studentportal/student_enrollment'
+                            'roles/student/portal/student_enrollment'
                         );
                     }
 

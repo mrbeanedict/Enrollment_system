@@ -267,7 +267,7 @@ $assessment_total = max(0.0, $tuition_amount - $shs_voucher + $misc_fee);
 
 // Semester 2 is only ever ADDED on top of Semester 1's assessment (never
 // replaces it), so the combined total_due can be split back apart the
-// same way studentportal/student_payments.php already does: Semester 2's
+// same way roles/student/portal/student_payments.php already does: Semester 2's
 // own assessment is a fresh tuition_fees lookup (the figure it was billed
 // at), Semester 1's is whatever's left of the combined total after
 // subtracting that back out, and payments are split by whether they

@@ -1,6 +1,6 @@
 <?php
 // Staff-only ("Print Proof") — students now have their own copy of this
-// page at studentportal/student_cor.php, kept in their own portal/session
+// page at roles/student/portal/student_cor.php, kept in their own portal/session
 // (STUDENT_SESSID) instead of sharing this file across two audiences.
 session_start();
 require_once __DIR__ . '/../../../bootstrap.php';

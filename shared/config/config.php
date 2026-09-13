@@ -120,7 +120,7 @@ function current_real_school_year(): string
 }
 
 // Requirement document uploads — shared by every place a requirement file
-// gets uploaded (student/admission.php, roles/staff/records/document_review.php), so
+// gets uploaded (roles/student/public/admission.php, roles/staff/records/document_review.php), so
 // files created by any of them are indistinguishable to every downstream
 // consumer (roles/staff/records/view_document.php). Default constraints; a couple of
 // requirement types need something tighter (see req_doc_constraints()
@@ -492,7 +492,7 @@ function grade_management_grade(mysqli $conn, int $studentId, int $subjectId, in
 
 // ── Login brute-force throttling ─────────────────────────────────────────
 // Shared by every login entry point (login.php, roles/teacher/teacher_login.php,
-// studentportal/student_login.php, learningportal/lms_login.php) — tracks
+// roles/student/portal/student_login.php, roles/lms/lms_login.php) — tracks
 // failed attempts per username+IP so repeated wrong-password guesses get
 // locked out instead of being retryable instantly forever.
 mysqli_query($conn, "

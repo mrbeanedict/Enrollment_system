@@ -15,7 +15,7 @@ $profile         = null;
 
 // Which nav section is active. Falls back to 'contact' so a bad/missing
 // ?tab= value never renders an empty panel — same pattern as
-// studentportal/student_profile.php.
+// roles/student/portal/student_profile.php.
 $valid_tabs = ['contact', 'login'];
 $active_tab = in_array($_GET['tab'] ?? '', $valid_tabs, true) ? $_GET['tab'] : 'contact';
 
@@ -186,7 +186,7 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
     $initials = strtoupper(substr($profile['given_name'] ?? 'T', 0, 1) . substr($profile['family_name'] ?? '', 0, 1));
     $full_name = trim($profile['given_name'] . ' ' . $profile['family_name']);
 
-    // Mirrors studentportal/student_profile.php's course_line: read-only
+    // Mirrors roles/student/portal/student_profile.php's course_line: read-only
     // summary shown under the name in the left nav card.
     $course_line = $profile['department_name'] ? ucfirst($profile['department_name']) : 'Teacher';
 }

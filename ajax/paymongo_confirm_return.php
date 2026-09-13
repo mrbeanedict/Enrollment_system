@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 // Called automatically (via fetch, on page load) when the student lands
-// back on studentportal/student_pay_online.php after a PayMongo Checkout
+// back on roles/student/portal/student_pay_online.php after a PayMongo Checkout
 // Session — either from the success_url or after refreshing that URL.
 //
 // This app has no public URL for PayMongo to send a webhook to (local
@@ -132,7 +132,7 @@ notify_student_users(
     $conn,
     [(int) ($_SESSION['user_student_id'] ?? 0)],
     'Your online payment of ₱' . number_format($amount, 2) . ' is pending Treasury verification.',
-    'studentportal/student_pay_online'
+    'roles/student/portal/student_pay_online'
 );
 
 // Best-effort — same pattern as submit_online_payment in

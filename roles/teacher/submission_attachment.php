@@ -2,7 +2,7 @@
 // Serves a student's submitted file to the teacher who owns that item's
 // class. Files under uploads/gradebook_submissions/ are never served
 // directly (see the .htaccess there) — see
-// learningportal/submission_attachment.php for the student-side
+// roles/lms/submission_attachment.php for the student-side
 // equivalent. Reads the on-disk path from the DB row rather than
 // trusting anything in the query string, so there's no path-traversal
 // surface.

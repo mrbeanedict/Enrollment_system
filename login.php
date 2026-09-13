@@ -7,7 +7,7 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
     if (($_SESSION['role'] ?? '') === 'admin') {
         header("Location: " . APP_URL . "/roles/admin/dashboard");
     } elseif (($_SESSION['role'] ?? '') === 'student') {
-        header("Location: studentportal/student_dashboard");
+        header("Location: " . APP_URL . "/roles/student/portal/student_dashboard");
     } elseif (!empty($_SESSION['must_change_password'])) {
         header("Location: " . APP_URL . "/roles/staff/change_password");
     } else {
@@ -53,7 +53,7 @@ if (isset($_POST['login_btn'])) {
       login_throttle_record($conn, $username, $login_ip, true);
 
       if ($row['role'] === 'student') {
-          $error_message = 'Student accounts sign in through the <a href="studentportal/student_login">Student Portal</a>.';
+          $error_message = 'Student accounts sign in through the <a href="' . APP_URL . '/roles/student/portal/student_login">Student Portal</a>.';
       } elseif ($row['role'] === 'teacher') {
           $error_message = 'Teacher accounts sign in through the <a href="' . APP_URL . '/roles/teacher/teacher_login">Teacher Portal</a>.';
       } else {

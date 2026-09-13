@@ -2,7 +2,7 @@
 // Serves a lesson attachment to the teacher who posted it. Files under
 // uploads/lesson_attachments/ are never served directly (see the
 // .htaccess there), so this is the only way to view one from this portal
-// — see learningportal/lesson_attachment.php for the student-side
+// — see roles/lms/lesson_attachment.php for the student-side
 // equivalent. Reads the on-disk path from the DB row rather than
 // trusting anything in the query string, so there's no path-traversal
 // surface.

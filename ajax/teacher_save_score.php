@@ -106,7 +106,7 @@ if ($val === '') {
             $conn,
             [(int) ($usid_row['user_student_id'] ?? 0)],
             'Your quiz "' . $item['title'] . '" has been graded.',
-            'learningportal/student_quizzes'
+            'roles/lms/student_quizzes'
         );
     }
 }

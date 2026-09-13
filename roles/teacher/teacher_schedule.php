@@ -100,7 +100,7 @@ guard_password_change('teacher_change_password', 'teacher');
     // bucketed into one of the three display categories deterministically
     // (by name) purely for consistent, repeatable colour-coding of the
     // grid — carries no curricular meaning. Same approach as
-    // studentportal/student_schedule.php.
+    // roles/student/portal/student_schedule.php.
     $sch_types = ['lecture', 'discussion', 'practice'];
     foreach ($scheduled as &$sr) {
         $sr['type'] = $sch_types[crc32($sr['subject_name']) % 3];

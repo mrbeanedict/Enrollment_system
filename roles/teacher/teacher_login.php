@@ -2,7 +2,7 @@
 // A distinct cookie name keeps the teacher portal's session independent
 // from the admin/staff one — otherwise logging into one role in a
 // second browser tab would silently overwrite the other tab's session
-// (same reasoning as studentportal/student_login.php's STUDENT_SESSID).
+// (same reasoning as roles/student/portal/student_login.php's STUDENT_SESSID).
 session_name('TEACHER_SESSID');
 session_start();
 require_once __DIR__ . '/../../bootstrap.php';

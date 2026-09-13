@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['post_lesson'])) {
                     $conn,
                     lesson_notify_targets($conn, $subject_id, $section_id, $sy),
                     "New lesson posted: \"$title\".",
-                    'learningportal/student_lessons'
+                    'roles/lms/student_lessons'
                 );
             } else {
                 $_SESSION['ls_flash'] = 'Could not post the lesson. Please try again.';

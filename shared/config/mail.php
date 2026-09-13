@@ -79,7 +79,7 @@ HTML;
 // email_highlight_box()/email_detail_rows() pieces) in the school's
 // branded email shell: a wordmark + subtitle header sitting directly on a
 // soft cream page background, then a white card body, then the same
-// contact footer used site-wide (see student/admission.php's footer).
+// contact footer used site-wide (see roles/student/public/admission.php's footer).
 // Table-based layout with inline styles throughout, since HTML email
 // clients don't reliably support flexbox/grid or external/<style> CSS.
 // $subtitle is a short uppercase label under the logo describing what

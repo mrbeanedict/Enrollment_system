@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 // Public, unauthenticated status-lookup endpoint for the "Check Status"
-// box on student/index.php. Deliberately single-factor (Student Number or
+// box on roles/student/public/index.php. Deliberately single-factor (Student Number or
 // control number only) per explicit product decision — accepting that a
 // still-pending application (before either value is assigned by staff)
 // simply won't be findable yet. To keep at least some anti-enumeration
@@ -19,7 +19,7 @@ if (!isset($conn) || !($conn instanceof mysqli)) {
 }
 
 // Honeypot — real visitors never see or fill this (same convention as
-// student/admission.php's "website" field). Bots get the same generic
+// roles/student/public/admission.php's "website" field). Bots get the same generic
 // not-found response as any other non-match, never a distinct signal.
 if (trim($_POST['website'] ?? '') !== '') {
     echo json_encode(['found' => false]);

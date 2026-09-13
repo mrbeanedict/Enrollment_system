@@ -7,7 +7,7 @@
 // Output: the topbar-right notification bell + profile chip/dropdown used on
 // every roles/teacher/*.php page, so the topbar look stays identical
 // everywhere instead of drifting page to page — same pattern as
-// studentportal/student_topbar_right.php. All locals are tbr_-prefixed (or
+// shared/includes/student_topbar_right.php. All locals are tbr_-prefixed (or
 // scoped to this file) so including this never overwrites a variable the
 // calling page already set (e.g. $ico_* icons defined by teacher_sidebar.php
 // or by the page itself).

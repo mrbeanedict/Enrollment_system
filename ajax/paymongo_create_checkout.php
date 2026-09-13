@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 // Backs the "Pay with PayMongo (GCash / Card)" tab on
-// studentportal/student_pay_online.php. Creates a PayMongo-hosted
+// roles/student/portal/student_pay_online.php. Creates a PayMongo-hosted
 // Checkout Session (supports both GCash and Card in one flow — PayMongo
 // handles card data directly, so this app never touches raw card
 // numbers) and hands the student-facing checkout_url back to the page,
@@ -82,7 +82,7 @@ $amount = round((float) $amount_given, 2);
 $amount_centavos = (int) round($amount * 100);
 
 $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
-$return_base = $proto . $_SERVER['HTTP_HOST'] . dirname(dirname($_SERVER['SCRIPT_NAME'])) . '/studentportal/student_pay_online';
+$return_base = $proto . $_SERVER['HTTP_HOST'] . APP_URL . '/roles/student/portal/student_pay_online';
 
 $result = paymongo_request('POST', '/checkout_sessions', [
     'line_items' => [[
