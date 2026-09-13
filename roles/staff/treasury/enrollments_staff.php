@@ -1,9 +1,9 @@
 <?php
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../../bootstrap.php';
 
 if (!isset($_SESSION['user_id'])) {
-    header("Location: ../login"); exit();
+    header("Location: " . APP_URL . "/login"); exit();
 }
 guard_password_change(APP_URL . '/roles/staff/change_password');
 
@@ -95,8 +95,8 @@ if ($bal_cnt_res) { $counts['balance'] = (int) mysqli_fetch_assoc($bal_cnt_res)[
   <title>Enrollments — SHS Enrollment System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
-  <?php if ($is_admin): ?><link rel="stylesheet" href="../assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_admin.css') ?>"><?php endif; ?>
+  <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_staff.css') ?>">
+  <?php if ($is_admin): ?><link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_admin.css') ?>"><?php endif; ?>
   <style>
     .tab-bar { display:flex; gap:0; border-bottom:1px solid #EBEBF0; margin-bottom:1.25rem; }
     .tab-link { display:inline-flex; align-items:center; gap:6px; padding:9px 16px;
@@ -148,7 +148,7 @@ if ($bal_cnt_res) { $counts['balance'] = (int) mysqli_fetch_assoc($bal_cnt_res)[
 <body class="<?= $is_admin ? '' : 'staff-layout' ?>">
 
 <?php if ($is_admin): ?>
-  <?php include_once '../shared/includes/admin_sidebar.php'; ?>
+  <?php include_once BASE_PATH . '/shared/includes/admin_sidebar.php'; ?>
   <div class="main">
     <div class="topbar">
       <span class="topbar-title">Enrollments</span>
@@ -156,7 +156,7 @@ if ($bal_cnt_res) { $counts['balance'] = (int) mysqli_fetch_assoc($bal_cnt_res)[
     </div>
     <div class="content">
 <?php else: ?>
-  <?php include_once '../shared/includes/staff_sidebar.php'; ?>
+  <?php include_once BASE_PATH . '/shared/includes/staff_sidebar.php'; ?>
   <div class="staff-main">
     <div class="staff-topbar">
       <div class="staff-topbar-left">

@@ -5,7 +5,7 @@
 // the on-disk path from the DB row rather than trusting anything in the
 // query string, so there's no path-traversal surface.
 session_start();
-include('../config.php');
+require_once __DIR__ . '/../../../bootstrap.php';
 
 if (!isset($_SESSION['user_id'])) {
     http_response_code(403);
@@ -39,7 +39,7 @@ if (!$row || !$row['file_path']) {
 // (see student_accountabilities.php's upload handler) — never
 // user-supplied, so no realpath/traversal check is needed beyond
 // confirming the file still exists on disk.
-$full_path = __DIR__ . '/../uploads/requirement_documents/' . $row['file_path'];
+$full_path = __DIR__ . '/../../../uploads/requirement_documents/' . $row['file_path'];
 if (!is_file($full_path)) {
     http_response_code(404);
     exit('File no longer available.');

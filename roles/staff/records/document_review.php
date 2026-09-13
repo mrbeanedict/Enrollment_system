@@ -12,11 +12,11 @@
 // and its call sites below. The standalone approve_admit handler stays as a
 // manual fallback/re-trigger, not the primary path.
 session_start();
-include('../config.php');
-require_once '../config/mail.php';
+require_once __DIR__ . '/../../../bootstrap.php';
+require_once __DIR__ . '/../../../config/mail.php';
 
 if (!isset($_SESSION['user_id'])) {
-    header("Location: ../login");
+    header("Location: " . APP_URL . "/login");
     exit();
 }
 guard_password_change(APP_URL . '/roles/staff/change_password');
@@ -25,7 +25,7 @@ $is_admin = ($_SESSION['role'] ?? '') === 'admin';
 if (!$is_admin && ($_SESSION['department'] ?? '') !== 'records') {
     http_response_code(403);
     echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Access denied</title>
-          <link rel="stylesheet" href="../assets/css/css_staff.css?v=' . filemtime(__DIR__ . '/../assets/css/css_staff.css') . '"></head><body>
+          <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_staff.css?v=' . filemtime(__DIR__ . '/../../../assets/css/css_staff.css') . '"></head><body>
           <div class="card" style="max-width:480px;margin:4rem auto;">
             <h2>Access denied</h2>
             <p>Only the Records department can review admissions.</p>
@@ -314,14 +314,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_requirements']))
                     foreach ($updates as $erid => $u) {
                         $submitted_at = $u['status'] === 'submitted' ? date('Y-m-d') : null;
                         if ($u['delete_file']) {
-                            $full_path = __DIR__ . '/../uploads/requirement_documents/' . $u['delete_file'];
+                            $full_path = __DIR__ . '/../../../uploads/requirement_documents/' . $u['delete_file'];
                             if (is_file($full_path)) @unlink($full_path);
                             $upd_del_stmt->bind_param('sssii', $u['status'], $submitted_at, $u['reason'], $uid, $erid);
                             if (!$upd_del_stmt->execute())
                                 throw new Exception('UPDATE_REQUIREMENT_FAILED: ' . $upd_del_stmt->error);
                         } elseif ($u['upload']) {
                             $stored_name = uniqid('reqdoc_', true) . '.' . $u['upload']['ext'];
-                            $dest = __DIR__ . '/../uploads/requirement_documents/' . $stored_name;
+                            $dest = __DIR__ . '/../../../uploads/requirement_documents/' . $stored_name;
                             if (!move_uploaded_file($u['upload']['tmp_name'], $dest))
                                 throw new Exception('UPLOAD_MOVE_FAILED');
                             $orig_name = $u['upload']['original_name'];
@@ -687,7 +687,7 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
   <title>Document Review — Records</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
+  <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_staff.css') ?>">
   <style>
     .dr-count-pill {
       background:#1E4D3B; color:#fff; font-size:12px; font-weight:600;
@@ -884,7 +884,7 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
 </head>
 <body class="staff-layout">
 
-<?php include_once '../shared/includes/staff_sidebar.php'; ?>
+<?php include_once BASE_PATH . '/shared/includes/staff_sidebar.php'; ?>
 <div class="staff-main">
   <div class="staff-topbar">
     <div class="staff-topbar-left">
@@ -1033,8 +1033,8 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
   <div class="pa-modal" id="paModal"></div>
 </div>
 
-<script src="../assets/js/sweetalert2.all.min.js"></script>
-<script src="../assets/js/blur_detect.js"></script>
+<script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
+<script src="<?= APP_URL ?>/assets/js/blur_detect.js"></script>
 <script>
   const applicantData = <?= json_encode($modal_data, JSON_HEX_TAG | JSON_HEX_APOS) ?>;
   const returnQs = <?= json_encode($return_qs, JSON_HEX_TAG | JSON_HEX_APOS) ?>;

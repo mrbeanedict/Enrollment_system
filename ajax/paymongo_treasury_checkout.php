@@ -53,7 +53,7 @@ $amount = round((float) $amount_given, 2);
 $amount_centavos = (int) round($amount * 100);
 
 $proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
-$return_base = $proto . $_SERVER['HTTP_HOST'] . dirname(dirname($_SERVER['SCRIPT_NAME'])) . '/treasury/payment';
+$return_base = $proto . $_SERVER['HTTP_HOST'] . APP_URL . '/roles/staff/treasury/payment';
 
 $result = paymongo_request('POST', '/checkout_sessions', [
     'line_items' => [[

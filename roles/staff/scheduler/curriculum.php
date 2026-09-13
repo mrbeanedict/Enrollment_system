@@ -18,11 +18,11 @@
    ============================================================ */
 
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../../bootstrap.php';
 include_once '../notify.php';
 
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header("Location: ../login"); exit();
+    header("Location: " . APP_URL . "/login"); exit();
 }
 guard_password_change(APP_URL . '/roles/staff/change_password');
 
@@ -417,7 +417,7 @@ if ($carry_source_year !== '') {
   <title>Curriculum — <?= $is_reviewer ? 'Coordinator' : 'Scheduler' ?></title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
+  <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_staff.css') ?>">
   <style>
     /* Supplemental styles — same conventions as sections.php, so the two
        pages feel like one dashboard rather than two different apps. */
@@ -534,7 +534,7 @@ if ($carry_source_year !== '') {
 </head>
 <body class="staff-layout">
 
-  <?php include_once '../shared/includes/staff_sidebar.php'; ?>
+  <?php include_once BASE_PATH . '/shared/includes/staff_sidebar.php'; ?>
 
   <div class="staff-main">
     <div class="staff-topbar">
@@ -548,7 +548,7 @@ if ($carry_source_year !== '') {
         </div>
       </div>
       <div style="display:flex; align-items:center; gap:14px;">
-        <?php include_once '../shared/includes/staff_notifications.php'; ?>
+        <?php include_once BASE_PATH . '/shared/includes/staff_notifications.php'; ?>
         <span class="staff-topbar-date"><?= date('F j, Y') ?></span>
       </div>
     </div>

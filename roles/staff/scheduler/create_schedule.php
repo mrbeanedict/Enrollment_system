@@ -18,11 +18,11 @@
    ============================================================ */
 
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../../bootstrap.php';
 include_once '../notify.php';
 
 if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header("Location: ../login"); exit();
+    header("Location: " . APP_URL . "/login"); exit();
 }
 guard_password_change(APP_URL . '/roles/staff/change_password');
 
@@ -600,7 +600,7 @@ $teachers = mysqli_query($conn, "SELECT teacher_id, CONCAT(given_name, ' ', fami
   <title>Create Schedule — Scheduler</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
+  <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_staff.css') ?>">
   <style>
     .staff-content .panel { max-width:none; margin-left:0; margin-right:0; width:100%; }
     .two-col { display:grid; grid-template-columns:280px 1fr; gap:14px; align-items:start; }
@@ -678,7 +678,7 @@ $teachers = mysqli_query($conn, "SELECT teacher_id, CONCAT(given_name, ' ', fami
 </head>
 <body class="staff-layout">
 
-  <?php include_once '../shared/includes/staff_sidebar.php'; ?>
+  <?php include_once BASE_PATH . '/shared/includes/staff_sidebar.php'; ?>
 
   <div class="staff-main">
     <div class="staff-topbar">
@@ -692,7 +692,7 @@ $teachers = mysqli_query($conn, "SELECT teacher_id, CONCAT(given_name, ' ', fami
         </div>
       </div>
       <div style="display:flex; align-items:center; gap:14px;">
-        <?php include_once '../shared/includes/staff_notifications.php'; ?>
+        <?php include_once BASE_PATH . '/shared/includes/staff_notifications.php'; ?>
         <span class="staff-topbar-date"><?= date('F j, Y') ?></span>
       </div>
     </div>

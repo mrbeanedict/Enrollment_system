@@ -1,11 +1,11 @@
 <?php
 session_start();
-include_once '../config.php';
-require_once '../config/mail.php';
+require_once __DIR__ . '/../../../bootstrap.php';
+require_once __DIR__ . '/../../../config/mail.php';
 include_once '../notify.php';
 
 if (!isset($_SESSION['user_id'])) {
-    header("Location: ../login"); exit();
+    header("Location: " . APP_URL . "/login"); exit();
 }
 guard_password_change(APP_URL . '/roles/staff/change_password');
 
@@ -191,8 +191,8 @@ $roleLabel = 'Treasury';
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Online Payments — SHS Enrollment System</title>
-  <link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
-  <?php if ($is_admin): ?><link rel="stylesheet" href="../assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_admin.css') ?>"><?php endif; ?>
+  <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_staff.css') ?>">
+  <?php if ($is_admin): ?><link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_admin.css') ?>"><?php endif; ?>
   <style>
     .enroll-table { width:100%; border-collapse:collapse; font-size:13px; }
     .enroll-table th { text-align:left; font-size:11px; font-weight:600; text-transform:uppercase;
@@ -225,7 +225,7 @@ $roleLabel = 'Treasury';
 <body class="<?= $is_admin ? '' : 'staff-layout' ?>">
 
 <?php if ($is_admin): ?>
-  <?php include_once '../shared/includes/admin_sidebar.php'; ?>
+  <?php include_once BASE_PATH . '/shared/includes/admin_sidebar.php'; ?>
   <div class="main">
     <div class="topbar">
       <span class="topbar-title">Online Payments</span>
@@ -233,7 +233,7 @@ $roleLabel = 'Treasury';
     </div>
     <div class="content">
 <?php else: ?>
-  <?php include_once '../shared/includes/staff_sidebar.php'; ?>
+  <?php include_once BASE_PATH . '/shared/includes/staff_sidebar.php'; ?>
   <div class="staff-main">
     <div class="staff-topbar">
       <div class="staff-topbar-left">

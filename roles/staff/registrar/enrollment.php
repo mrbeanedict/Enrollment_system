@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 session_start();
-include('../config.php');
+require_once __DIR__ . '/../../../bootstrap.php';
 include('../notify.php');
 
 // ── Auth guard ─────────────────────────────────────────────────────────────
 if (!isset($_SESSION['user_id'])) {
-    header("Location: ../login");
+    header("Location: " . APP_URL . "/login");
     exit();
 }
 guard_password_change(APP_URL . '/roles/staff/change_password');
@@ -1534,8 +1534,8 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Enrollment — Staff</title>
-<link rel="stylesheet" href="../assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_staff.css') ?>">
-<?php if ($is_admin): ?><link rel="stylesheet" href="../assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../assets/css/css_admin.css') ?>"><?php endif; ?>
+<link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_staff.css') ?>">
+<?php if ($is_admin): ?><link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_admin.css') ?>"><?php endif; ?>
 <style>
   .wizard-progress { display: flex; align-items: center; max-width: 820px; margin: 0 auto 1.75rem; padding: 0 1.5rem; }
   .wizard-step { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; position: relative; cursor: default; }
@@ -1653,13 +1653,13 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
 <body<?php if (!$is_admin): ?> class="staff-layout"<?php endif; ?>>
 
 <?php if ($is_admin): ?>
-  <?php include_once '../shared/includes/admin_sidebar.php'; ?>
+  <?php include_once BASE_PATH . '/shared/includes/admin_sidebar.php'; ?>
   <div class="main"><div class="content">
     <p class="page-eyebrow">Admin Portal</p>
     <h1 class="page-title">Enrollment</h1>
     <p class="page-sub">Step <?= $step ?> of 5 — <?= htmlspecialchars($steps[$step] ?? '') ?></p>
 <?php else: ?>
-  <?php include_once '../shared/includes/staff_sidebar.php'; ?>
+  <?php include_once BASE_PATH . '/shared/includes/staff_sidebar.php'; ?>
   <div class="staff-main">
     <div class="staff-topbar">
       <div class="staff-topbar-left">

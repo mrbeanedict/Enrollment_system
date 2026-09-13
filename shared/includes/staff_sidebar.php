@@ -124,7 +124,7 @@ if ($department === 'registrar') {
 
     $navItems = [
         ['roles/staff/dashboard', 'Dashboard',  $ico_dashboard, 'dashboard.php', 0],
-        ['registrar/enrollment', 'Enrollment', $ico_enroll,    'enrollment.php',      $pendingEnrollments],
+        ['roles/staff/registrar/enrollment', 'Enrollment', $ico_enroll,    'enrollment.php',      $pendingEnrollments],
     ];
 
     $statusRows = [
@@ -184,8 +184,8 @@ if ($department === 'registrar') {
 
     $navItems = [
         ['roles/staff/dashboard',        'Dashboard',              $ico_dashboard,        'dashboard.php', 0],
-        ['records/document_review',      'Document Review',       $ico_docreview,        'document_review.php', $awaitingReview],
-        ['records/accountabilities',     'Accountabilities',      $ico_accountabilities, 'accountabilities.php', $accountabilitiesCount],
+        ['roles/staff/records/document_review',      'Document Review',       $ico_docreview,        'document_review.php', $awaitingReview],
+        ['roles/staff/records/accountabilities',     'Accountabilities',      $ico_accountabilities, 'accountabilities.php', $accountabilitiesCount],
     ];
 
     $statusRows = [
@@ -216,8 +216,8 @@ if ($department === 'registrar') {
 
     $navItems = [
         ['roles/staff/dashboard',      'Dashboard',        $ico_dashboard, 'dashboard.php',   0],
-        ['treasury/enrollments_staff', 'All Payments',     $ico_payment,   'enrollments_staff.php', 0],
-        ['treasury/online_payments',   'Online Payments',  $ico_payment,   'online_payments.php',   $onlinePaymentsPendingCount],
+        ['roles/staff/treasury/enrollments_staff', 'All Payments',     $ico_payment,   'enrollments_staff.php', 0],
+        ['roles/staff/treasury/online_payments',   'Online Payments',  $ico_payment,   'online_payments.php',   $onlinePaymentsPendingCount],
     ];
 
     $statusRows = [
@@ -265,11 +265,11 @@ if ($department === 'registrar') {
 
         $navItems = [
             ['roles/staff/dashboard',     'Dashboard',         $ico_dashboard,  'dashboard.php', 0],
-            ['scheduler/sections',        'Sections',          $ico_sections,   'sections.php',        0],
-            ['scheduler/curriculum',      'Curriculum',        $ico_curriculum, 'curriculum.php',      0],
-            ['scheduler/scheduling',      'Class Scheduling',  $ico_schedule,   'scheduling.php',      $unscheduledSections],
-            ['coordinator/approvals',     'Approvals',         $ico_approvals,  'approvals.php',       $pendingApprovals],
-            ['coordinator/teacher_manage', 'Teachers',         $ico_teachers,   'teacher_manage.php',  0],
+            ['roles/staff/scheduler/sections',        'Sections',          $ico_sections,   'sections.php',        0],
+            ['roles/staff/scheduler/curriculum',      'Curriculum',        $ico_curriculum, 'curriculum.php',      0],
+            ['roles/staff/scheduler/scheduling',      'Class Scheduling',  $ico_schedule,   'scheduling.php',      $unscheduledSections],
+            ['roles/staff/coordinator/approvals',     'Approvals',         $ico_approvals,  'approvals.php',       $pendingApprovals],
+            ['roles/staff/coordinator/teacher_manage', 'Teachers',         $ico_teachers,   'teacher_manage.php',  0],
         ];
 
         $statusRows = [
@@ -280,10 +280,10 @@ if ($department === 'registrar') {
     } else {
         $navItems = [
             ['roles/staff/dashboard', 'Dashboard',       $ico_dashboard,  'dashboard.php', 0],
-            ['scheduler/sections',   'Sections',         $ico_sections,   'sections.php',        0],
-            ['scheduler/curriculum', 'Curriculum',       $ico_curriculum, 'curriculum.php',      0],
-            ['scheduler/scheduling', 'Class Scheduling', $ico_schedule,   'scheduling.php',      $unscheduledSections],
-            ['scheduler/create_schedule', 'Create Schedule', $ico_schedule, 'create_schedule.php', 0],
+            ['roles/staff/scheduler/sections',   'Sections',         $ico_sections,   'sections.php',        0],
+            ['roles/staff/scheduler/curriculum', 'Curriculum',       $ico_curriculum, 'curriculum.php',      0],
+            ['roles/staff/scheduler/scheduling', 'Class Scheduling', $ico_schedule,   'scheduling.php',      $unscheduledSections],
+            ['roles/staff/scheduler/create_schedule', 'Create Schedule', $ico_schedule, 'create_schedule.php', 0],
         ];
 
         $statusRows = [

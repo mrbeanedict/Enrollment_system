@@ -3,10 +3,10 @@
 // page at studentportal/student_cor.php, kept in their own portal/session
 // (STUDENT_SESSID) instead of sharing this file across two audiences.
 session_start();
-include_once '../config.php';
+require_once __DIR__ . '/../../../bootstrap.php';
 
 if (!isset($_SESSION['user_id'])) {
-    header("Location: ../login"); exit();
+    header("Location: " . APP_URL . "/login"); exit();
 }
 
 $is_admin = isset($_SESSION['role']) && $_SESSION['role'] === 'admin';
