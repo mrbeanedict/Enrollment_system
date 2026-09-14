@@ -50,6 +50,15 @@
         ],
         "createdAt": "2026-09-11T15:57:21.490Z",
         "reason": "pre-existing collapsible-sidebar width/padding transitions (.teacher-sidebar and related elements), deliberate design predating this session's notification-bell work; unrelated code, re-flags on unrelated edits to this file"
+      },
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "assets/css/css_staff.css"
+        ],
+        "createdAt": "2026-09-14T09:45:58.008Z",
+        "reason": "pre-existing width transitions (off-canvas sidebar drawer, upload progress bar) unrelated to this session's sidebar reskin work"
       }
     ]
   }

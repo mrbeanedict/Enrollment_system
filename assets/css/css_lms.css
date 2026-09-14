@@ -8,13 +8,15 @@
    the gradient side instead of a flat edge-to-edge fill. */
 
 :root {
+  /* Back to the app's original brand green — same as the LMS dashboard/
+     navbar (css_student.css's --lms-* vars). */
   --color-primary: #386641;
   --color-primary-hover: #2F5636;
   --color-primary-active: #24422A;
-  --color-dark: #1C2628;
+  --color-dark: #386641;
   --color-muted: #9FB8B8;
-  --color-info: #CADEDE;
-  --color-accent: #FEFAE0;
+  --color-info: #CFE9D4;
+  --color-accent: #F0FFF0;
 }
 
 *, *::before, *::after {
@@ -43,109 +45,16 @@ body.auth-page {
   padding: 24px 24px 72px;
   font-family: 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
-  background-image:
-    repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 4px),
-    linear-gradient(160deg, #FBFDF9 0%, #EDF5EE 32%, #D9E8DE 66%, #C3DACB 100%);
-  background-attachment: fixed;
-  overflow: hidden;
+  background: var(--color-accent);
 }
 
-/* ─── Animated backdrop — liquid color fields ─────────────────────────────
-   Real DOM elements (not animated background-position) so the motion is
-   GPU-composited via transform, not repainted gradients. Each field runs
-   two independent animations at once: one drifting its position/scale,
-   one continuously reshaping its border-radius through lopsided values —
-   that second one is what turns a moving circle into something that
-   reads as fluid/liquid instead of a ball bouncing around. Different
-   durations per field (and per animation) keep them out of sync, since
-   real liquid never pulses in unison. */
-.auth-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-.auth-backdrop .backdrop-blob {
-  position: absolute;
-  filter: blur(85px);
-  will-change: transform, border-radius;
-}
-.backdrop-blob-cream {
-  width: 50vw; aspect-ratio: 1; top: -16%; left: -12%;
-  background: var(--color-accent); opacity: 0.9;
-  animation: backdrop-drift-a 18s ease-in-out infinite, backdrop-morph-1 13s ease-in-out infinite;
-}
-.backdrop-blob-info {
-  width: 42vw; aspect-ratio: 1; top: -2%; right: -14%;
-  background: var(--color-info); opacity: 0.85;
-  animation: backdrop-drift-b 22s ease-in-out infinite, backdrop-morph-2 17s ease-in-out infinite;
-}
-.backdrop-blob-primary {
-  width: 52vw; aspect-ratio: 1; bottom: -20%; left: 4%;
-  background: var(--color-primary); opacity: 0.7;
-  animation: backdrop-drift-c 20s ease-in-out infinite, backdrop-morph-3 15s ease-in-out infinite;
-}
-.backdrop-blob-dark {
-  width: 40vw; aspect-ratio: 1; bottom: -18%; right: -10%;
-  background: var(--color-dark); opacity: 0.55;
-  animation: backdrop-drift-a 16s ease-in-out infinite reverse, backdrop-morph-2 19s ease-in-out infinite reverse;
-}
-/* A fifth, smaller warm accent drifting through the middle distance —
-   the four corner fields alone leave the center comparatively static;
-   this is what keeps motion visible even directly behind the card. */
-.backdrop-blob-glow {
-  width: 30vw; aspect-ratio: 1; top: 32%; left: 38%;
-  background: var(--color-primary-hover); opacity: 0.45;
-  animation: backdrop-drift-b 14s ease-in-out infinite reverse, backdrop-morph-1 11s ease-in-out infinite reverse;
-}
+/* Backdrop markup (lms_login.php's .auth-backdrop / .backdrop-blob-*) is
+   still in the page but no longer rendered — quieted from an animated
+   liquid-blob field down to the plain background color above instead of
+   ripping the DOM nodes out. */
+.auth-backdrop { display: none; }
 
-@keyframes backdrop-drift-a {
-  0%   { transform: translate(0, 0) scale(1) rotate(0deg); }
-  33%  { transform: translate(8%, 10%) scale(1.22) rotate(8deg); }
-  66%  { transform: translate(-6%, 4%) scale(0.88) rotate(-6deg); }
-  100% { transform: translate(0, 0) scale(1) rotate(0deg); }
-}
-@keyframes backdrop-drift-b {
-  0%   { transform: translate(0, 0) scale(1) rotate(0deg); }
-  33%  { transform: translate(-10%, 8%) scale(0.82) rotate(-10deg); }
-  66%  { transform: translate(6%, -6%) scale(1.2) rotate(7deg); }
-  100% { transform: translate(0, 0) scale(1) rotate(0deg); }
-}
-@keyframes backdrop-drift-c {
-  0%   { transform: translate(0, 0) scale(1) rotate(0deg); }
-  33%  { transform: translate(6%, -10%) scale(1.16) rotate(9deg); }
-  66%  { transform: translate(-8%, -3%) scale(0.9) rotate(-8deg); }
-  100% { transform: translate(0, 0) scale(1) rotate(0deg); }
-}
-
-/* Lopsided, ever-shifting corner radii — each keyframe leaves every corner
-   a different value so the shape never settles into a circle or a
-   symmetric blob, the way a real drop of liquid keeps folding. */
-@keyframes backdrop-morph-1 {
-  0%, 100% { border-radius: 42% 58% 65% 35% / 45% 40% 60% 55%; }
-  25%      { border-radius: 58% 42% 38% 62% / 55% 65% 35% 45%; }
-  50%      { border-radius: 65% 35% 55% 45% / 40% 60% 40% 60%; }
-  75%      { border-radius: 35% 65% 45% 55% / 60% 45% 55% 40%; }
-}
-@keyframes backdrop-morph-2 {
-  0%, 100% { border-radius: 60% 40% 30% 70% / 55% 35% 65% 45%; }
-  25%      { border-radius: 35% 65% 60% 40% / 40% 55% 45% 60%; }
-  50%      { border-radius: 48% 52% 68% 32% / 62% 48% 52% 38%; }
-  75%      { border-radius: 55% 45% 40% 60% / 45% 60% 40% 55%; }
-}
-@keyframes backdrop-morph-3 {
-  0%, 100% { border-radius: 50% 50% 45% 55% / 60% 40% 60% 40%; }
-  25%      { border-radius: 65% 35% 60% 40% / 45% 55% 45% 55%; }
-  50%      { border-radius: 40% 60% 35% 65% / 55% 65% 35% 45%; }
-  75%      { border-radius: 58% 42% 55% 45% / 38% 48% 52% 62%; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .auth-backdrop .backdrop-blob { animation: none; border-radius: 50%; }
-}
-
-/* ─── Glass shell — split panel ───────────────────────────────────────────── */
+/* ─── Shell — split panel ─────────────────────────────────────────────────── */
 
 .auth-shell {
   position: relative;
@@ -156,43 +65,11 @@ body.auth-page {
   max-width: 1080px;
   min-height: 620px;
   max-height: 92vh;
-  /* Lower fill opacity than a typical "milky" glass panel — this lets the
-     backdrop blobs' actual color tint the card instead of just haze, which
-     is what sells "frosted" over "translucent white plastic". */
-  background: rgba(255,255,255,0.32);
-  backdrop-filter: blur(46px) saturate(220%);
-  -webkit-backdrop-filter: blur(46px) saturate(220%);
-  border: 1px solid rgba(255,255,255,0.7);
-  border-radius: 32px;
-  box-shadow:
-    0 40px 100px -24px rgba(28,38,40,0.45),
-    0 8px 24px -8px rgba(28,38,40,0.2),
-    inset 0 1px 0 rgba(255,255,255,0.85),
-    inset 0 -1px 0 rgba(28,38,40,0.06);
+  background: #ffffff;
+  border: 1px solid #CFE9D4;
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(20,30,25,0.10);
   overflow: hidden;
-}
-/* Thin top sheen — the one classic glass cue that sells the effect. */
-.auth-shell::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.95), transparent);
-  z-index: 3;
-}
-/* Fogged-glass grain — a faint fractal-noise texture blended over the
-   panel so it reads as actual etched/frosted glass rather than a clean
-   blurred photo. Kept extremely low-opacity so it never competes with
-   the form content sitting on top of it. */
-.auth-shell::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  opacity: 0.05;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 @media (max-width: 860px) {
   .auth-shell { grid-template-columns: 1fr; max-height: none; min-height: 0; }
@@ -221,13 +98,12 @@ body.auth-page {
 
 .gradient-bg {
   position: absolute; inset: 0; z-index: 0; overflow: hidden;
-  background: linear-gradient(165deg, var(--color-accent) 0%, #E4EFC9 14%, var(--color-info) 34%, #6FA48F 58%, var(--color-primary) 78%, var(--color-dark) 100%);
+  background: linear-gradient(165deg, var(--color-primary) 0%, var(--color-dark) 100%);
 }
-.gradient-bg .blob { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.75; }
-.gradient-bg .blob-cream { width: 60%; aspect-ratio: 1; top: -14%; left: -12%; background: var(--color-accent); }
-.gradient-bg .blob-info { width: 55%; aspect-ratio: 1; top: 8%; right: -14%; background: var(--color-info); }
-.gradient-bg .blob-primary { width: 65%; aspect-ratio: 1; bottom: -18%; left: 8%; background: var(--color-primary); }
-.gradient-bg .blob-dark { width: 55%; aspect-ratio: 1; bottom: -20%; right: -10%; background: var(--color-dark); opacity: 0.85; }
+/* Blob shapes (lms_login.php still has the .blob-* markup) are no longer
+   rendered — quieted from a blurred, layered gradient down to the plain
+   two-tone fill above. */
+.gradient-bg .blob { display: none; }
 
 .gradient-top { position: relative; z-index: 2; }
 .brand-logo2 { display: block; width: 100%; height: auto; }
@@ -293,21 +169,19 @@ body.auth-page {
 .field-input { position: relative; }
 .field-input input {
   width: 100%;
-  background: rgba(255,255,255,0.65);
-  border: 1px solid rgba(28,38,40,0.14);
+  background: #ffffff;
+  border: 1.5px solid #CFE9D4;
   border-radius: 10px;
   padding: 13px 14px;
   font-family: 'Inter', sans-serif;
   font-size: 0.92rem;
   color: var(--color-dark);
-  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease;
 }
 .field-input input::placeholder { color: #6B8080; }
 .field-input input:focus {
   outline: none;
-  background: #ffffff;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(56,102,65,0.16);
 }
 .toggle-eye {
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
@@ -402,3 +276,531 @@ body.auth-page {
   animation: page-loader-spin 0.7s linear infinite;
 }
 @keyframes page-loader-spin { to { transform: rotate(360deg); } }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LMS Top Nav + dashboard + course cards (lms_navbar.php, lms_home.php,
+   my_courses.php) — moved here from css_student.css so the LMS's own
+   trial palette lives in its own stylesheet instead of mixed into the
+   general student-portal sheet. Every page that renders the LMS navbar
+   (including the academics pages: student_lessons.php, etc.) now loads
+   this file alongside css_student.css.
+   --lms-ink is Deep Green (#0A3925): the nav bar is a solid dark-green
+   surface with plain white text/icons, finished with a brighter green
+   accent stripe along its bottom edge. Soft surfaces (dashboard canvas,
+   card banners, chip fills) use a light neutral/green tint. Flyout panels
+   (dropdowns) stay light/white so dense list content underneath keeps
+   reading clearly.
+   Scoped to these LMS-only classes so it doesn't touch the site-wide
+   --color-* variables above (used by the login page on this same sheet).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --lms-ink: #00311E;
+  --lms-ink-hover: #0F4E32;
+  --lms-ink-accent: #1B6B45;
+  /* Light neutral/green-tinted surface family — borders/muted text/chip
+     highlights. */
+  --lms-cream: #DFF2E2;
+  --lms-surface-soft: #FDFBEF;
+  --lms-border: #CFE9D4;
+  --lms-border-2: #E3F5E6;
+  --lms-muted: #4B6157;
+  --lms-muted-2: #7C9689;
+  /* Text/borders sitting directly on the dark-green nav surface — plain
+     white/neutral, not tinted. */
+  --lms-on-ink: #ffffff;
+  --lms-on-ink-muted: rgba(255, 255, 255, 0.68);
+  --lms-on-ink-border: rgba(255, 255, 255, 0.20);
+  --lms-on-ink-hover-bg: rgba(255, 255, 255, 0.12);
+}
+
+/* Light neutral/green page canvas on the two revamped LMS pages (Home,
+   My Courses) — scoped to body.lms-warm-bg only, so the academics pages
+   that still share .student-layout/.lms-layout keep their current
+   background untouched. */
+body.lms-warm-bg .student-content { background: var(--lms-surface-soft); }
+
+/* The "Good morning/afternoon/evening" topbar becomes a solid dark-green
+   bar too, with white/light text for contrast, and a brighter green
+   hairline separates it from the content below — scoped to these two
+   pages only. */
+body.lms-warm-bg .student-topbar {
+  background: var(--lms-ink);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+body.lms-warm-bg .student-topbar-title,
+body.lms-warm-bg .student-topbar-date {
+  color: var(--lms-on-ink);
+}
+body.lms-warm-bg .student-topbar-subtitle {
+  color: var(--lms-on-ink-muted);
+}
+
+.lms-foldernav {
+  position: sticky;
+  top: 0;
+  z-index: 500;
+  padding: 0 20px;
+  background: var(--lms-ink);
+  border-bottom: 1px solid var(--lms-ink-accent);
+}
+
+/* Edge-to-edge — no max-width/auto-margin column, so the bar's content
+   fills the full viewport width instead of sitting in a centered gutter
+   on wide screens. */
+.lms-foldernav-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 60px;
+}
+
+.lms-foldernav-logo { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-right: 12px; text-decoration: none; }
+.lms-foldernav-logo img { height: 36px; width: 36px; object-fit: contain; display: block; flex-shrink: 0; }
+.lms-foldernav-logo-text {
+  font-family: 'Fraunces', serif;
+  font-weight: 560;
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--lms-on-ink);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .lms-foldernav-logo-text { display: none; }
+}
+
+.lms-foldernav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 34px;
+  height: 34px;
+  background: transparent;
+  border: 1px solid var(--lms-on-ink-border);
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.lms-foldernav-toggle span { display: block; width: 16px; height: 2px; margin: 0 auto; background: var(--lms-on-ink); border-radius: 1px; }
+
+.lms-foldernav-tabs { display: flex; align-items: stretch; gap: 2px; flex: 1; min-width: 0; height: 100%; }
+
+/* Flat text tab with a bottom-border indicator for the current page —
+   no pill fill, no rounded chrome; reads like a plain, functional tab bar. */
+.lms-navtab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  padding: 0 14px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--lms-on-ink-muted);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-family: inherit;
+  transition: color 0.12s, border-color 0.12s;
+}
+.lms-navtab:hover { color: var(--lms-on-ink); }
+.lms-navtab.active { color: var(--lms-on-ink); border-bottom-color: var(--lms-on-ink); }
+
+.lms-navtab-dropdown { position: relative; height: 100%; }
+.lms-navtab-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 1px);
+  left: 0;
+  min-width: 190px;
+  background: #ffffff;
+  border: 1px solid var(--lms-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(20, 40, 29, 0.08);
+  padding: 6px;
+  flex-direction: column;
+  gap: 1px;
+  z-index: 20;
+}
+.lms-navtab-dropdown.open .lms-navtab-panel { display: flex; }
+.lms-navtab-panel-link {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--lms-ink);
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+}
+.lms-navtab-panel-link:hover { background: var(--lms-surface-soft); }
+.lms-navtab-panel-link.active { background: var(--lms-ink); color: #fff; }
+
+.lms-foldernav-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+
+/* Flat, borderless icon buttons — no pill/glass chrome, just the icon
+   sitting directly on the bar. The divider is the only separator. */
+.lms-foldernav-notif {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--lms-on-ink-muted);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.lms-foldernav-notif:hover { background: var(--lms-on-ink-hover-bg); color: var(--lms-on-ink); }
+.lms-foldernav-notif-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #B3261E;
+  border: 1.5px solid #fff;
+}
+
+.lms-notif-wrap { position: relative; }
+.lms-notif-dropdown {
+  display: none; position: absolute; right: 0; top: calc(100% + 8px); width: 320px; max-height: 380px;
+  overflow-y: auto; background: #fff; border: 1px solid var(--lms-border); border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(20, 40, 29, 0.08); z-index: 50;
+}
+.lms-notif-dropdown.open { display: block; }
+.lms-notif-header {
+  font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--lms-muted-2); padding: 12px 14px; border-bottom: 1px solid var(--lms-border-2);
+}
+.lms-notif-empty { padding: 24px 14px; text-align: center; font-size: 12px; color: var(--lms-muted-2); }
+.lms-notif-item { display: block; padding: 10px 14px; text-decoration: none; border-bottom: 1px solid var(--lms-border-2); }
+.lms-notif-item:last-child { border-bottom: none; }
+.lms-notif-item:hover { background: var(--lms-surface-soft); }
+.lms-notif-item.unread { border-left: 2px solid var(--lms-ink); background: var(--lms-cream); }
+.lms-notif-msg { font-size: 12.5px; color: #1A1A2E; line-height: 1.4; }
+.lms-notif-time { font-size: 11px; color: var(--lms-muted-2); margin-top: 2px; }
+
+.lms-foldernav-divider { width: 1px; height: 24px; background: var(--lms-on-ink-border); flex-shrink: 0; }
+
+.lms-foldernav-profile-wrapper { position: relative; }
+.lms-foldernav-profile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+.lms-foldernav-profile:hover { background: var(--lms-on-ink-hover-bg); }
+.lms-foldernav-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lms-cream);
+  color: var(--lms-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.lms-foldernav-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.lms-foldernav-profile-text { display: flex; flex-direction: column; line-height: 1.3; text-align: left; }
+.lms-foldernav-profile-name { font-size: 13px; font-weight: 600; color: var(--lms-on-ink); white-space: nowrap; }
+.lms-foldernav-profile-role { font-size: 11px; color: var(--lms-on-ink-muted); white-space: nowrap; }
+.lms-foldernav-profile-chevron { display: flex; color: var(--lms-on-ink-muted); }
+.lms-foldernav-profile-chevron svg { width: 12px; height: 12px; transition: transform 0.15s; }
+.lms-foldernav-profile-wrapper.open .lms-foldernav-profile-chevron svg { transform: rotate(180deg); }
+
+.lms-foldernav-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 180px;
+  background: #ffffff;
+  border: 1px solid var(--lms-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(20, 40, 29, 0.08);
+  padding: 6px;
+  flex-direction: column;
+  gap: 1px;
+  z-index: 20;
+}
+.lms-foldernav-profile-wrapper.open .lms-foldernav-dropdown { display: flex; }
+.lms-foldernav-dropdown-item {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--lms-ink);
+  text-decoration: none;
+  transition: background 0.12s;
+}
+.lms-foldernav-dropdown-item:hover { background: var(--lms-surface-soft); }
+.lms-foldernav-dropdown-logout:hover { background: #FCEEED; color: #B3261E; }
+
+@media (max-width: 860px) {
+  .lms-foldernav-toggle { display: flex; }
+  .lms-foldernav-tabs {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    background: var(--lms-ink);
+    padding: 10px;
+    border-top: 1px solid var(--lms-on-ink-border);
+    border-bottom: 1px solid var(--lms-on-ink-border);
+  }
+  .lms-foldernav-tabs.open { display: flex; }
+  .lms-navtab { height: 42px; border-bottom: none; border-left: 2px solid transparent; padding-left: 12px; }
+  .lms-navtab.active { border-left-color: var(--lms-on-ink); background: var(--lms-on-ink-hover-bg); }
+  .lms-navtab-panel { position: static; box-shadow: none; border: none; background: var(--lms-ink-hover); margin-top: 2px; }
+  .lms-navtab-panel-link { color: var(--lms-on-ink); }
+  .lms-navtab-panel-link:hover { background: var(--lms-on-ink-hover-bg); }
+}
+
+@media (max-width: 560px) {
+  .lms-foldernav-profile-text { display: none; }
+}
+
+/* ─── My Courses cards ────────────────────────────────────────────────── */
+
+.course-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 0.5rem;
+}
+
+.course-card {
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--lms-border);
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.course-card:hover { border-color: var(--lms-ink); }
+.course-card:focus-visible { outline: 2px solid var(--lms-ink); outline-offset: 2px; }
+
+.course-card-banner {
+  height: 76px;
+  position: relative;
+  background: var(--lms-surface-soft);
+  border-bottom: 1px solid var(--lms-border);
+}
+
+/* Six tonal gradients from the LMS's own green family (same steps as the
+   dashboard's --lms-swatch-* ramp) instead of a flat neutral tint, so each
+   course reads distinctly without introducing outside hues. Keyed by
+   subject index % 6, same convention as .lms-swatch-N. */
+.course-card-banner.palette-0 { background: linear-gradient(135deg, #0F4E32 0%, #0A3925 100%); border-bottom: none; }
+.course-card-banner.palette-1 { background: linear-gradient(135deg, #1B6B45 0%, #0A3925 100%); border-bottom: none; }
+.course-card-banner.palette-2 { background: linear-gradient(135deg, #3E8259 0%, #1B6B45 100%); border-bottom: none; }
+.course-card-banner.palette-3 { background: linear-gradient(135deg, #062B1A 0%, #0A3925 100%); border-bottom: none; }
+.course-card-banner.palette-4 { background: linear-gradient(135deg, #6E8579 0%, #4B6157 100%); border-bottom: none; }
+.course-card-banner.palette-5 { background: linear-gradient(135deg, #9AB2A3 0%, #6E8579 100%); border-bottom: none; }
+
+.course-card-banner-icon {
+  position: absolute;
+  right: 12px; top: 12px;
+  width: 40px; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid var(--lms-border);
+  color: var(--lms-ink);
+  z-index: 1;
+  pointer-events: none;
+}
+.course-card-banner-icon svg { width: 20px; height: 20px; }
+
+/* 3-dot options menu — top-left of the banner. */
+.course-card-menu { position: absolute; top: 10px; left: 10px; z-index: 2; }
+.course-card-menu-btn {
+  width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--lms-border); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: #ffffff; color: var(--lms-muted);
+  transition: background 0.12s, color 0.12s;
+}
+.course-card-menu-btn:hover { background: var(--lms-surface-soft); color: var(--lms-ink); }
+.course-card-menu-panel {
+  display: none;
+  position: absolute; top: calc(100% + 4px); left: 0;
+  min-width: 140px; background: #fff; border-radius: 8px;
+  border: 1px solid var(--lms-border); box-shadow: 0 4px 14px rgba(20, 40, 29, 0.08);
+  padding: 6px; z-index: 3;
+}
+.course-card-menu.open .course-card-menu-panel { display: block; }
+.course-card-menu-panel a {
+  display: block; padding: 7px 9px; border-radius: 6px;
+  font-size: 12.5px; font-weight: 600; color: #1A1A2E; text-decoration: none;
+}
+.course-card-menu-panel a:hover { background: var(--lms-surface-soft); }
+
+.course-card-body { padding: 12px 14px 14px; }
+.course-card-title { font-size: 13.5px; font-weight: 700; color: #1A1A2E; line-height: 1.3; margin-bottom: 4px; }
+.course-card-teacher { font-size: 11.5px; color: var(--lms-muted); margin-bottom: 10px; }
+
+.course-card-thread-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 600; color: var(--lms-ink);
+  text-decoration: none; margin-bottom: 10px;
+}
+.course-card-thread-link:hover { text-decoration: underline; }
+
+.course-card-due { border-top: 1px solid var(--lms-border-2); padding-top: 8px; }
+.course-card-due-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--lms-muted-2); margin-bottom: 6px;
+}
+.course-card-due-empty { font-size: 11.5px; color: var(--lms-muted-2); }
+.course-card-due-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: #1A1A2E; padding: 3px 0;
+}
+.due-kind-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.due-kind-dot.kind-assignment { background: var(--lms-ink); }
+.due-kind-dot.kind-quiz { background: var(--lms-muted); }
+.due-item-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.due-item-date { flex-shrink: 0; color: var(--lms-muted); font-size: 10.5px; font-weight: 600; }
+.course-card-due-more { font-size: 10.5px; color: var(--lms-muted); margin-top: 2px; }
+
+/* ─── LMS Home dashboard ──────────────────────────────────────────────── */
+
+/* Tonal steps from --lms-ink down to the soft neutral grays — kept within
+   the trial's two-color palette instead of an arbitrary rainbow, so a
+   subject reads consistently without breaking the one-accent rule.
+   Keyed by subject_id % 6, computed once in PHP. */
+.lms-swatch-0 { --lms-accent: #0A3925; }
+.lms-swatch-1 { --lms-accent: #1B6B45; }
+.lms-swatch-2 { --lms-accent: #062B1A; }
+.lms-swatch-3 { --lms-accent: #3E8259; }
+.lms-swatch-4 { --lms-accent: #6E8579; }
+.lms-swatch-5 { --lms-accent: #9AB2A3; }
+
+/* One bordered strip with hairline dividers between figures, instead of
+   three separate floating/shadowed cards — the data breathes without
+   being boxed in three times over. */
+.lms-dash-stats {
+  display: flex; flex-wrap: wrap;
+  background: #fff; border: 1px solid var(--lms-border); border-radius: 10px;
+  margin-bottom: 1rem; overflow: hidden;
+}
+.lms-dash-stat {
+  flex: 1 1 160px;
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 18px;
+  border-right: 1px solid var(--lms-border-2);
+}
+.lms-dash-stat:last-child { border-right: none; }
+.lms-dash-stat-icon {
+  width: 32px; height: 32px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--lms-muted);
+}
+.lms-dash-stat-icon.warn { color: #B3261E; }
+.lms-dash-stat-number { font-size: 21px; font-weight: 700; color: #1A1A2E; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.lms-dash-stat-label { font-size: 11.5px; color: var(--lms-muted); }
+
+.lms-dash-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: start; }
+
+.lms-todo-item, .lms-lesson-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 4px; border-bottom: 1px solid var(--lms-border-2);
+  border-left: 2px solid var(--lms-accent, var(--lms-border));
+  padding-left: 10px;
+}
+.lms-todo-item:last-child, .lms-lesson-item:last-child { border-bottom: none; }
+.lms-todo-item-body, .lms-lesson-item-body { flex: 1; min-width: 0; }
+.lms-todo-item-title, .lms-lesson-item-title { font-size: 13.5px; font-weight: 600; color: #1A1A2E; }
+.lms-todo-item-meta, .lms-lesson-item-meta { font-size: 11.5px; color: var(--lms-muted); margin-top: 2px; }
+.lms-todo-item-meta .subject, .lms-lesson-item-meta .subject { color: #1A1A2E; font-weight: 600; }
+.lms-todo-overdue { color: #B3261E; font-weight: 700; }
+.lms-todo-kind {
+  flex-shrink: 0; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  padding: 3px 7px; border-radius: 4px; background: var(--lms-cream); color: var(--lms-ink);
+}
+
+.lms-course-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 4px; border-bottom: 1px solid var(--lms-border-2);
+}
+.lms-course-row:last-child { border-bottom: none; }
+.lms-course-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--lms-accent, var(--lms-border)); flex-shrink: 0; }
+.lms-course-row-name { font-size: 13px; font-weight: 600; color: #1A1A2E; }
+.lms-course-row-teacher { font-size: 11px; color: var(--lms-muted); }
+
+.lms-empty-mini { font-size: 12.5px; color: var(--lms-muted); padding: 10px 4px; }
+
+@media (max-width: 900px) {
+  .lms-dash-grid { grid-template-columns: 1fr; }
+  .lms-dash-stat { border-right: none; border-bottom: 1px solid var(--lms-border-2); }
+  .lms-dash-stat:last-child { border-bottom: none; }
+}
+
+/* ─── Subject tab strip (lms_subject_tabs.php) ─────────────────────────────
+   A second bar under the main topbar, shown only when a page is reached
+   with a subject_id (i.e. from a My Courses card) — lets a student switch
+   between Lessons/Discussions/Assignments/Quizzes for that one subject
+   without losing the subject context. */
+.subj-tabstrip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 44px;
+  padding: 0 2rem;
+  background: #ffffff;
+  border-bottom: 1px solid var(--lms-border);
+  overflow-x: auto;
+}
+.subj-tabstrip-name {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--lms-muted);
+  margin-right: 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.subj-tabstrip a {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lms-muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color 0.12s, border-color 0.12s;
+}
+.subj-tabstrip a:hover { color: var(--lms-ink); }
+.subj-tabstrip a.active { color: var(--lms-ink); border-bottom-color: var(--lms-ink); }
+

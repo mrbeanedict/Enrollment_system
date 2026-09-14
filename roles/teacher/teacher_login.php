@@ -88,6 +88,92 @@ $conn->close();
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,450;9..144,560;9..144,650&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_teacher.css') ?>">
+<style>
+  /* ─── Login card: flat revised look (see login_revised.php / login.php) ──
+     Scoped to this page only — the shared .modal in css_teacher.css keeps
+     its glassmorphism elsewhere if anything else there relies on it.
+     Popup open/close JS, the landing screen, and the PHP logic above are
+     all unchanged; only the card's visuals are swapped out. */
+  :root {
+    --login-ink: #1B1F1D;
+    --login-muted: #6B7570;
+    --login-border: #DCE1DD;
+  }
+
+  .login-modal .modal {
+    background: #fff;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid var(--login-border);
+    box-shadow: 0 24px 60px rgba(20,30,25,0.10);
+  }
+
+  .login-modal .close-btn {
+    background: none;
+    border: 1px solid var(--login-border);
+  }
+  .login-modal .close-btn:hover { background: #F4F6F4; }
+  .login-modal .close-btn svg { stroke: var(--login-muted); }
+
+  .login-modal .school-name { color: var(--login-muted); }
+  .login-modal .modal h1 { color: var(--login-ink); }
+  .login-modal .lede { color: var(--login-muted); }
+
+  .login-modal .field-label { color: var(--login-muted); }
+  .login-modal .capslock-note { color: #B5651D; }
+
+  .login-modal .modal input {
+    background: #fff;
+    border: 1.5px solid var(--login-border);
+    color: var(--login-ink);
+    box-shadow: none;
+  }
+  .login-modal .modal input::placeholder { color: #A3A9A4; }
+  .login-modal .modal input:focus {
+    border-color: var(--brand-primary);
+    background: #fff;
+    box-shadow: none;
+  }
+
+  .login-modal .eye-btn svg { stroke: var(--login-muted); }
+  .login-modal .remember-me { color: var(--login-muted); }
+  .login-modal .remember-me input { accent-color: var(--brand-accent); }
+  .login-modal .forgot-link { color: var(--brand-primary); }
+
+  .login-modal .modal .auth-error {
+    color: #9B3A3A;
+    background: #FBEAEA;
+    border: 1px solid #EFC9C9;
+  }
+  .login-modal .modal .auth-error a { color: #9B3A3A; }
+
+  .login-modal .modal .login-btn {
+    background: var(--brand-primary);
+    box-shadow: none;
+  }
+  .login-modal .modal .login-btn:hover {
+    background: var(--brand-primary-hover);
+    box-shadow: none;
+    transform: none;
+  }
+  .login-modal .modal .login-btn:active { background: var(--brand-primary-active); }
+
+  .login-modal .forgot { color: var(--login-muted); }
+  .login-modal .forgot a { color: var(--brand-primary); }
+
+  /* Landing screen's "Log In" button (shown before the card pops up) —
+     flat, matching the revised card instead of the gradient/glow look. */
+  #openLoginBtn {
+    background: var(--brand-primary);
+    box-shadow: none;
+    transition: background .15s ease;
+  }
+  #openLoginBtn:hover {
+    background: var(--brand-primary-hover);
+    transform: none;
+  }
+  #openLoginBtn:active { background: var(--brand-primary-active); }
+</style>
 </head>
 <body class="auth-page auth-landing-page">
 

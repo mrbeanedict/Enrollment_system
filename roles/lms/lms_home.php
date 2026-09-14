@@ -13,8 +13,9 @@ require_once __DIR__ . '/../../bootstrap.php';
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student LMS — SHS Enrollment</title>
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_student.css') ?>">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_lms.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_lms.css') ?>">
 </head>
-<body class="student-layout lms-layout">
+<body class="student-layout lms-layout lms-warm-bg">
 <?php if (!require_login('student', null, 'ignore', 'bool')): ?>
   <p>You are not logged in. Please <a href="lms_login">log in</a> to access the Student LMS.</p>
 

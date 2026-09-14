@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,650&display=swap');
 
 :root {
   --brand-primary: #1E4D3B;
@@ -12,7 +12,11 @@
      blends into this exact value (see .staff-sidebar-photo below) so if
      the sidebar background ever changes, the photo blend follows it
      automatically instead of drifting out of sync. */
-  --staff-sidebar-bg: #FAFAF8;
+  --staff-sidebar-bg: #FFFFFF;
+
+  /* Page/topbar background — kept identical on both so the topbar reads as
+     part of the content instead of a separate white bar (see .staff-topbar). */
+  --staff-content-bg: #EFF5F3;
 }
 
 *, *::before, *::after {
@@ -23,7 +27,7 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background: #F5F5F7;
+  background: var(--staff-content-bg);
   min-height: 100vh;
   color: #1A1A2E;
 }
@@ -33,13 +37,17 @@ body {
 body.staff-layout {
   display: flex;
   min-height: 100vh;
-  background: #F5F5F7;
+  background: var(--staff-content-bg);
 }
 
+/* Always visible now (no off-canvas/overlay state) — the hamburger inside
+   the brand row toggles between this full width and .collapsed's icon-only
+   rail (see the collapsed-state block further down), it no longer shows or
+   hides the sidebar outright. */
 .staff-sidebar {
-  width: 0;
+  width: 232px;
   background: var(--staff-sidebar-bg);
-  border-right: 0 solid #E8E8E2;
+  border-right: 0.5px solid #E8E8E2;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -47,51 +55,66 @@ body.staff-layout {
   left: 0;
   top: 0;
   height: 100vh;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   z-index: 300;
   transition: width 0.2s ease;
-}
-
-.staff-sidebar.open {
-  width: 232px;
-  border-right-width: 0.5px;
-  overflow-y: auto;
 }
 
 .staff-sidebar-overlay {
   display: none;
 }
 
+/* Quiet icon button, matching staff_sidebar2.php's .mock2-burger exactly
+   (30px, 1px light border, muted icon) instead of the louder 3-bar look
+   this used to be. */
 .btn-staff-sidebar-toggle {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 4px;
-  width: 32px;
-  height: 32px;
-  background: none;
-  border: 0.5px solid #E0E0EC;
+  width: 30px;
+  height: 30px;
+  background: #fff;
+  border: 1px solid #E3ECE8;
   border-radius: 7px;
+  color: #8A9992;
   cursor: pointer;
   flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.btn-staff-sidebar-toggle span {
-  display: block;
+.btn-staff-sidebar-toggle svg {
   width: 16px;
-  height: 1.5px;
-  margin: 0 auto;
-  background: #5A5A72;
-  border-radius: 1px;
+  height: 16px;
+}
+
+.btn-staff-sidebar-toggle:hover {
+  background: var(--brand-tint);
+  color: var(--brand-primary);
+  border-color: var(--brand-accent);
+}
+
+/* Wraps .staff-sidebar-brand + the toggle button as two siblings (not the
+   button nested inside the brand row) — matches staff_sidebar2.php's
+   .mock2-sidebar-top / .mock2-brand split. Nesting them in one row instead
+   was squeezing the two-line school name for width, which is what made it
+   wrap oddly. */
+.staff-sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.4rem 1.1rem 1.2rem 1.3rem;
+  border-bottom: 0.5px solid #EBEBE4;
 }
 
 .staff-sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 1.4rem 1.25rem 1rem;
-  border-bottom: 0.5px solid #EBEBE4;
+  gap: 9px;
+  min-width: 0;
 }
+
+.staff-sidebar-brand-text { min-width: 0; }
 
 /* logo.png is a full brand lockup (crest + school name) on a large mostly-
    blank canvas, not a standalone icon — crop just the crest region into this
@@ -116,17 +139,17 @@ body.staff-layout {
 }
 
 .staff-sidebar-brand-name {
+  font-family: 'Georgia', 'Times New Roman', serif;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--brand-primary);
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .staff-sidebar-brand-role {
-  font-size: 10px;
-  color: #8A8A7E;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  color: #8A9992;
+  font-weight: 500;
 }
 
 .staff-sidebar-nav {
@@ -218,72 +241,53 @@ body.staff-layout {
 
 /* ─── Sidebar building photo ─────────────────────────────────────────────── */
 
-/* ui.png is a screenshot on a plain white canvas, not a transparent PNG —
-   left as-is it sits inside the sidebar as a visible white rectangle. Two
-   things fix that together:
-     1. mix-blend-mode: multiply on the <img>, over a backdrop painted the
-        exact sidebar color (--staff-sidebar-bg). White pixels (255,255,255)
-        are the identity value for multiply, so they disappear into the
-        backdrop and only the non-white content of the image stays visible —
-        the same trick used to drop a white background out of a logo.
-     2. A soft mask-image fade on all four edges so even where the photo's
-        real (non-white) content reaches the edge, it tapers into the
-        sidebar color instead of ending on a hard rectangle line.
-   If --staff-sidebar-bg is ever changed, this blend follows it automatically. */
+/* sidebar.png is a portrait shot (tall blank sky, building/trees packed
+   into the bottom ~45%) — object-position:bottom crops into that populated
+   band instead of the empty sky. A single ::after gradient (transparent
+   over the bottom ~60%, fading to --staff-sidebar-bg over the top ~40%)
+   blends the crop's top edge into the sidebar instead of ending on a hard
+   line; a light brand-green wash keeps the photo from reading as an
+   unrelated stock image. If --staff-sidebar-bg ever changes, the fade
+   follows it automatically. */
 
 .staff-sidebar-photo {
-  height: 150px;
+  height: 140px;
   flex-shrink: 0;
   position: relative;
   overflow: hidden;
-  background: var(--staff-sidebar-bg);
 }
 
 .staff-sidebar-photo img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: bottom;
+  object-position: center bottom;
   display: block;
-  mix-blend-mode: multiply;
-  -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 22%, black 80%, transparent 100%),
-                       linear-gradient(90deg, transparent 0%, black 10%, black 90%, transparent 100%);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(180deg, transparent 0%, black 22%, black 80%, transparent 100%),
-              linear-gradient(90deg, transparent 0%, black 10%, black 90%, transparent 100%);
-  mask-composite: intersect;
 }
 
-.staff-sidebar-photo::before,
 .staff-sidebar-photo::after {
   content: '';
   position: absolute;
-  left: 0;
-  right: 0;
-  height: 40px;
+  inset: 0;
+  background: linear-gradient(0deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 58%, var(--staff-sidebar-bg) 100%),
+              linear-gradient(0deg, rgba(30,77,59,0.05), rgba(30,77,59,0.05));
   pointer-events: none;
-}
-
-.staff-sidebar-photo::before {
-  top: 0;
-  background: linear-gradient(180deg, var(--staff-sidebar-bg) 0%, transparent 100%);
-}
-
-.staff-sidebar-photo::after {
-  bottom: 0;
-  background: linear-gradient(0deg, var(--staff-sidebar-bg) 0%, transparent 100%);
 }
 
 .staff-sidebar-footer {
   padding: 0.75rem 1rem;
   border-top: 0.5px solid #EBEBE4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .staff-sidebar-user {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 0.6rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .staff-sidebar-avatar {
@@ -310,11 +314,12 @@ body.staff-layout {
 }
 
 .staff-btn-logout {
-  width: 100%;
+  width: 34px;
   height: 34px;
-  background: #F0F0EA;
+  flex-shrink: 0;
+  background: #ffffff;
   border: 0.5px solid #E0E0D8;
-  border-radius: 7px;
+  border-radius: 8px;
   color: #55554B;
   font-size: 12px;
   font-weight: 500;
@@ -324,14 +329,66 @@ body.staff-layout {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
   text-decoration: none;
 }
+
+/* Icon-only, like the sidebar mockup — the title="Log out" attribute
+   covers accessibility in place of the visible label. */
+.staff-btn-logout-text { display: none; }
 
 .staff-btn-logout:hover {
   background: rgba(192,57,43,0.12);
   border-color: rgba(192,57,43,0.3);
   color: #C0392B;
+}
+
+/* ─── Collapsed sidebar (icon-only rail) ─────────────────────────────────
+   Desktop-only: the mobile media query below already forces the sidebar to
+   a full-width static stack with no toggle, so all of this is scoped to
+   min-width:901px to avoid fighting that. */
+@media (min-width: 901px) {
+  .staff-sidebar.collapsed { width: 76px; }
+
+  .staff-sidebar.collapsed .staff-sidebar-top {
+    flex-direction: column-reverse;
+    gap: 10px;
+    padding: 1.1rem 0 0.7rem;
+  }
+  .staff-sidebar.collapsed .staff-sidebar-brand { justify-content: center; width: 100%; }
+  .staff-sidebar.collapsed .staff-sidebar-brand-text { display: none; }
+
+  .staff-sidebar.collapsed .staff-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.5rem 0;
+  }
+  .staff-sidebar.collapsed .staff-nav-label { display: none; }
+
+  .staff-sidebar.collapsed .staff-nav-link {
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    margin-bottom: 4px;
+    border-radius: 50%;
+  }
+  .staff-sidebar.collapsed .staff-nav-link svg { width: 17px; height: 17px; }
+  .staff-sidebar.collapsed .staff-nav-link-text,
+  .staff-sidebar.collapsed .staff-nav-badge { display: none; }
+  .staff-sidebar.collapsed .staff-nav-link.active::before { display: none; }
+
+  .staff-sidebar.collapsed .staff-sidebar-status,
+  .staff-sidebar.collapsed .staff-sidebar-photo { display: none; }
+
+  .staff-sidebar.collapsed .staff-sidebar-footer {
+    flex-direction: column;
+    gap: 10px;
+    padding: 0.9rem 0;
+  }
+  .staff-sidebar.collapsed .staff-sidebar-user { justify-content: center; }
+  .staff-sidebar.collapsed .staff-sidebar-username { display: none; }
+  .staff-sidebar.collapsed .staff-btn-logout { border-radius: 50%; }
 }
 
 .staff-main {
@@ -343,8 +400,8 @@ body.staff-layout {
 }
 
 .staff-topbar {
-  background: #ffffff;
-  border-bottom: 0.5px solid #E8E8F0;
+  background: var(--staff-content-bg);
+  border-bottom: 1.5px solid #CFE0D7;
   padding: 0 1.25rem 0 1rem;
   height: 52px;
   display: flex;
@@ -376,9 +433,66 @@ body.staff-layout {
 }
 
 .staff-topbar-date {
-  font-size: 12px;
-  color: #8A8A9A;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid #D6E4DD;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(20, 40, 30, 0.06);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1A1A2E;
+  white-space: nowrap;
 }
+
+.staff-topbar-date::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  background-color: var(--brand-accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath stroke-linecap='round' d='M8 3v4M16 3v4M3 10h18'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath stroke-linecap='round' d='M8 3v4M16 3v4M3 10h18'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* Wraps the date chip + search/notifications buttons that
+   staff_sidebar.php's script injects, so they cluster as one flex item on
+   the right instead of getting spread out by .staff-topbar's
+   justify-content:space-between. */
+.staff-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Search + notifications buttons injected next to the date chip by
+   staff_sidebar.php's script — same shape/shadow language as the chip. */
+.staff-topbar-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid #D6E4DD;
+  background: #fff;
+  color: #3F5850;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(20, 40, 30, 0.06);
+  transition: border-color 0.15s, color 0.15s, box-shadow 0.15s;
+  padding: 0;
+}
+
+.staff-topbar-icon-btn:hover {
+  border-color: var(--brand-accent);
+  color: var(--brand-primary);
+  box-shadow: 0 2px 6px rgba(30, 77, 59, 0.14);
+}
+
+.staff-topbar-icon-btn svg { width: 16px; height: 16px; stroke-width: 2; }
 
 .staff-content {
   padding: 1.75rem 2rem 3rem;
@@ -486,6 +600,34 @@ body > form {
   font-size: 13px;
   color: #8A8A9A;
   margin-bottom: 1.75rem;
+}
+
+/* Staff department pages (sections.php, enrollment.php, etc.) reuse these
+   same .page-eyebrow/.page-title/.page-sub classes as the public admission
+   page above, but scoped inside .staff-content — matches css_admin.css's
+   header typography exactly (Fraunces title, bolder eyebrow) instead of the
+   public page's plainer sizing. No hero/card background added, just type. */
+.staff-content .page-eyebrow {
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  margin-bottom: 0.4rem;
+  padding-top: 0;
+}
+
+.staff-content .page-title {
+  font-family: 'Fraunces', serif;
+  font-size: 1.65rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin-bottom: 1.5rem;
+}
+.staff-content .page-title:has(+ .page-sub) { margin-bottom: 0.3rem; }
+
+.staff-content .page-sub {
+  font-weight: 400;
+  line-height: 1.5;
+  max-width: 62ch;
+  margin-bottom: 1.5rem;
 }
 
 /* ─── Notice banners ──────────────────────────────────────────────────────── */
@@ -1866,6 +2008,10 @@ p.field-hint.adm-hint-card {
     border-bottom: 0.5px solid #E8E8E2;
   }
   .staff-sidebar-photo { display: none; }
+  /* Collapsing is a desktop-only affordance (see the min-width:901px
+     block above) — on mobile the sidebar is already a static full-width
+     stack, so the toggle would be a button that visibly does nothing. */
+  .btn-staff-sidebar-toggle { display: none; }
 }
 
 /* ─── Login page (admin/staff/teacher) — mirror of the student portal's

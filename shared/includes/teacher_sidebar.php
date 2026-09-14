@@ -45,6 +45,7 @@ $ico_profile   = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" str
 $ico_class     = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/></svg>';
 $ico_announce  = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13.5c1.5 0 3-1.5 3-3.5s-1.5-3.5-3-3.5M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>';
 $ico_logout    = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>';
+$ico_burger    = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16"/></svg>';
 
 $sb_stmt = mysqli_prepare($conn, "
     SELECT t.given_name, t.family_name, u.photo_path
@@ -66,39 +67,46 @@ $sb_display_name = trim(($sb_given_name ?? '') . ' ' . ($sb_family_name ?? '')) 
 <script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
 <script src="<?= APP_URL ?>/assets/js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="<?= APP_URL ?>/roles/teacher/teacher_logout"></script>
 
-<!-- Sidebar overlay -->
-<div class="teacher-sidebar-overlay" id="teacherSidebarOverlay"></div>
-
 <div class="page-loader" id="pageLoader"><div class="page-loader-spinner"></div></div>
 
 <aside class="teacher-sidebar" id="teacherSidebar">
 
-  <div class="teacher-sidebar-brand">
-    <div class="sidebar-logo-crop">
-      <img src="<?= APP_URL ?>/assets/images/logo.png" alt="Logo">
+  <div class="teacher-sidebar-top">
+    <div class="teacher-sidebar-brand">
+      <div class="sidebar-logo-crop">
+        <img src="<?= APP_URL ?>/assets/images/logo.png" alt="Logo">
+      </div>
+      <div class="teacher-sidebar-brand-text">
+        <div class="teacher-sidebar-brand-name">Greenfield Senior<br>High School</div>
+        <div class="teacher-sidebar-brand-role">Teacher Portal</div>
+      </div>
     </div>
-    <div class="teacher-sidebar-brand-text">
-      <div class="teacher-sidebar-brand-name">Greenfield Senior High School</div>
-      <div class="teacher-sidebar-brand-role">Teacher Portal</div>
-    </div>
+    <button type="button" class="btn-teacher-sidebar-toggle" id="teacherSidebarToggle" aria-label="Collapse menu">
+      <?= $ico_burger ?>
+    </button>
   </div>
 
   <nav class="teacher-sidebar-nav">
     <span class="teacher-nav-label">Overview</span>
     <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_dashboard', 'Dashboard', $ico_dashboard, $current, 'teacher_dashboard.php'); ?>
 
-    <span class="teacher-nav-label">Teaching</span>
+    <span class="teacher-nav-label">Classes</span>
     <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_classes', 'My Classes', $ico_cap, $current, 'teacher_classes.php'); ?>
     <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_schedule', 'My Schedule', $ico_schedule, $current, 'teacher_schedule.php'); ?>
+
+    <span class="teacher-nav-label">Assessment</span>
     <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_gradebook', 'Assessment', $ico_book, $current, 'teacher_gradebook.php'); ?>
     <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_grade_management', 'Grade Management', $ico_dashboard, $current, 'teacher_grade_management.php'); ?>
     <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_attendance', 'Attendance', $ico_calendar, $current, 'teacher_attendance.php'); ?>
+
+    <span class="teacher-nav-label">Content</span>
     <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_lessons', 'Lessons', $ico_class, $current, 'teacher_lessons.php'); ?>
     <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_discussions', 'Discussions', $ico_users, $current, 'teacher_discussions.php'); ?>
-
-    <span class="teacher-nav-label">Updates</span>
-    <?php teacherNavLink(APP_URL . '/roles/teacher/teacher_profile', 'My Profile', $ico_profile, $current, 'teacher_profile.php'); ?>
   </nav>
+
+  <div class="teacher-sidebar-photo">
+    <img src="<?= APP_URL ?>/assets/images/background/sidebar.png" alt="">
+  </div>
 
   <div class="teacher-sidebar-footer">
     <div class="teacher-sidebar-user">
@@ -112,7 +120,7 @@ $sb_display_name = trim(($sb_given_name ?? '') . ' ' . ($sb_family_name ?? '')) 
       <span class="teacher-sidebar-username"><?= htmlspecialchars($sb_display_name) ?></span>
     </div>
     <a href="<?= APP_URL ?>/roles/teacher/teacher_logout" class="teacher-btn-logout" id="teacherLogoutBtn" title="Log out">
-      <?= $ico_logout ?> <span class="teacher-btn-logout-text">Log out</span>
+      <?= $ico_logout ?><span class="teacher-btn-logout-text">Log out</span>
     </a>
   </div>
 
@@ -121,50 +129,35 @@ $sb_display_name = trim(($sb_given_name ?? '') . ' ' . ($sb_family_name ?? '')) 
 <script>
 (function () {
 
-  const teacherSidebar  = document.getElementById('teacherSidebar');
-  const teacherOverlay  = document.getElementById('teacherSidebarOverlay');
-  const TEACHER_SIDEBAR_KEY = 'sidebarOpen';
-  const TEACHER_COLLAPSE_KEY = 'teacherSidebarCollapsed';
+  const teacherSidebar = document.getElementById('teacherSidebar');
+  const TEACHER_SIDEBAR_KEY = 'teacherSidebarCollapsed';
 
-  function openTeacherSidebar()  { teacherSidebar.classList.add('open');  teacherOverlay.classList.add('open');  localStorage.setItem(TEACHER_SIDEBAR_KEY, '1'); }
-  function closeTeacherSidebar() { teacherSidebar.classList.remove('open'); teacherOverlay.classList.remove('open'); localStorage.setItem(TEACHER_SIDEBAR_KEY, '0'); }
-  function toggleTeacherSidebar() { teacherSidebar.classList.contains('open') ? closeTeacherSidebar() : openTeacherSidebar(); }
+  // The sidebar is always visible now — collapsing narrows it to an
+  // icon-only rail instead of hiding it entirely, matching
+  // shared/includes/staff_sidebar.php's redesign. Profile + logout live in
+  // the topbar dropdown (shared/includes/teacher_topbar_right.php), so
+  // there's no sidebar-footer logout button to wire up here anymore.
+  function collapseTeacherSidebar() { teacherSidebar.classList.add('collapsed'); localStorage.setItem(TEACHER_SIDEBAR_KEY, '1'); }
+  function expandTeacherSidebar()   { teacherSidebar.classList.remove('collapsed'); localStorage.setItem(TEACHER_SIDEBAR_KEY, '0'); }
+  function toggleTeacherSidebar()   { teacherSidebar.classList.contains('collapsed') ? expandTeacherSidebar() : collapseTeacherSidebar(); }
 
-  // Restore open/closed state from the previous page (multi-page app —
-  // every navigation is a full reload, so state has to persist here).
-  if (localStorage.getItem(TEACHER_SIDEBAR_KEY) === '1') { openTeacherSidebar(); }
-  // Clear any collapsed flag left over from when this sidebar had a
-  // collapse toggle — that control no longer exists, so a leftover '1'
-  // here would strand the sidebar in mini-rail mode with no way back.
-  localStorage.removeItem(TEACHER_COLLAPSE_KEY);
-
-  // Logo/brand area closes the sidebar when open.
-  const teacherBrand = teacherSidebar.querySelector('.teacher-sidebar-brand');
-  if (teacherBrand) {
-    teacherBrand.style.cursor = 'pointer';
-    teacherBrand.addEventListener('click', closeTeacherSidebar);
-  }
+  // Restore collapsed/expanded state from the previous page (this is a
+  // multi-page app — every navigation is a full reload, so state has to
+  // persist here).
+  if (localStorage.getItem(TEACHER_SIDEBAR_KEY) === '1') { collapseTeacherSidebar(); }
+  // Clear the old off-canvas drawer's leftover flag, if any — that control
+  // no longer exists, so a stale '1' here would be meaningless.
+  localStorage.removeItem('sidebarOpen');
 
   document.addEventListener('DOMContentLoaded', function () {
 
-    // Inject hamburger button into existing .teacher-topbar — but only if
-    // the page hasn't already placed its own toggle button.
-    var teacherTopbar = document.querySelector('.teacher-topbar');
-    if (teacherTopbar && !teacherTopbar.querySelector('.btn-teacher-sidebar-toggle')) {
-      var btn = document.createElement('button');
-      btn.className = 'btn-teacher-sidebar-toggle';
-      btn.setAttribute('aria-label', 'Toggle menu');
-      btn.innerHTML = '<span></span><span></span><span></span>';
-      btn.addEventListener('click', toggleTeacherSidebar);
+    var toggleBtn = document.getElementById('teacherSidebarToggle');
+    if (toggleBtn) { toggleBtn.addEventListener('click', toggleTeacherSidebar); }
 
-      var left = teacherTopbar.querySelector('.teacher-topbar-left');
-      if (left) { left.insertBefore(btn, left.firstChild); }
-      else { teacherTopbar.prepend(btn); }
-    }
-
-    teacherOverlay.addEventListener('click', closeTeacherSidebar);
-
-    // Logout — SweetAlert (falls back to native confirm() if Swal failed to load)
+    // Logout — SweetAlert (falls back to native confirm() if Swal failed to load).
+    // Distinct id from teacher_topbar_right.php's own logout link — that's a
+    // second, independent logout affordance in the topbar dropdown, so each
+    // gets its own listener rather than sharing/overriding the other's.
     var logoutBtn = document.getElementById('teacherLogoutBtn');
     if (logoutBtn) {
       logoutBtn.addEventListener('click', function (e) {

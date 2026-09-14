@@ -65,77 +65,23 @@ function subject_banner_icon(string $subjectName): string {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Courses — SHS Enrollment</title>
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_student.css') ?>">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_lms.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_lms.css') ?>">
     <style>
       .mc-picker { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
       .mc-picker select {
-        height:36px; border:0.5px solid #D4D4E0; border-radius:8px; background:#FAFAFC;
-        padding:0 10px; font-size:13px; font-family:inherit; color:#1A1A2E;
+        appearance: none; -webkit-appearance: none;
+        height:36px; border:1px solid var(--lms-border, #DCE5DE); border-radius:8px;
+        background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 24 16'%3E%3Cpolygon points='2,3 22,3 12,15' fill='%230A3925'/%3E%3C/svg%3E") no-repeat right 12px center;
+        background-size: 12px;
+        padding:0 34px 0 12px; font-size:13px; font-family:inherit; color:#1A1A2E;
+        cursor: pointer; transition: border-color .15s ease;
       }
-
-      /* ══════════════════════════════════════════════════════════════════
-         Glassmorphism trial — My Courses only. Mirrors the liquid-blob
-         backdrop and frosted-glass surfaces from roles/lms/lms_login.php
-         (see css_lms.css's .auth-backdrop / .auth-shell), re-applied to this
-         page's existing student-layout/course-card structure instead of the
-         login screen's split panel. Everything below is scoped under
-         body.mc-glass-page so it can never leak into any other page that
-         also loads css_student.css. */
-
-      body.mc-glass-page .student-main { background: transparent; }
-
-      body.mc-glass-page {
-        background-image:
-          repeating-linear-gradient(90deg, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent 4px),
-          linear-gradient(160deg, #FBFDF9 0%, #EDF5EE 32%, #D9E8DE 66%, #C3DACB 100%);
-        background-attachment: fixed;
+      .mc-picker select:hover, .mc-picker select:focus {
+        outline: none; border-color: var(--lms-ink, #0A3925);
       }
-
-      /* Anchored inside .student-content (not the full viewport) — that
-         area is the only part of this layout not already covered by an
-         opaque sidebar/topbar, so the blobs need to live there to read at
-         all instead of drifting, unseen, behind the app chrome. */
-      body.mc-glass-page .student-content { position: relative; }
-      .mc-glass-backdrop {
-        position: absolute; inset: 0; z-index: 0;
-        overflow: hidden; pointer-events: none;
-      }
-      .mc-glass-backdrop span {
-        position: absolute; filter: blur(70px); will-change: transform, border-radius;
-        animation: mc-drift 20s ease-in-out infinite;
-      }
-      .mc-blob-cream { width: 30vw; aspect-ratio: 1; top: -8%; left: 4%; background: var(--color-accent, #FEFAE0); opacity: 0.8; }
-      .mc-blob-info  { width: 26vw; aspect-ratio: 1; top: 6%; right: 6%; background: var(--color-info, #CADEDE); opacity: 0.85; animation-duration: 24s; animation-direction: reverse; }
-      .mc-blob-primary { width: 30vw; aspect-ratio: 1; bottom: -12%; left: 30%; background: var(--color-primary, #386641); opacity: 0.4; animation-duration: 27s; }
-      @keyframes mc-drift {
-        0%, 100% { transform: translate(0,0) scale(1); border-radius: 42% 58% 65% 35% / 45% 40% 60% 55%; }
-        50%      { transform: translate(4%, 5%) scale(1.08); border-radius: 60% 40% 45% 55% / 55% 60% 40% 45%; }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .mc-glass-backdrop span { animation: none; }
-      }
-
-      body.mc-glass-page .student-panel-block { position: relative; z-index: 1; }
-
-      body.mc-glass-page .student-topbar {
-        background: rgba(255,255,255,0.55);
-        backdrop-filter: blur(18px) saturate(150%);
-        -webkit-backdrop-filter: blur(18px) saturate(150%);
-        border-bottom: 1px solid rgba(255,255,255,0.6);
-      }
-
-      body.mc-glass-page .student-panel-block,
-      body.mc-glass-page .course-card {
-        background: rgba(255,255,255,0.42);
-        backdrop-filter: blur(28px) saturate(180%);
-        -webkit-backdrop-filter: blur(28px) saturate(180%);
-        border: 1px solid rgba(255,255,255,0.65);
-        box-shadow: 0 20px 50px -20px rgba(28,38,40,0.25), inset 0 1px 0 rgba(255,255,255,0.7);
-      }
-      body.mc-glass-page .student-panel-block { border-radius: 20px; }
-      body.mc-glass-page .course-card { border-radius: 16px; }
     </style>
 </head>
-<body class="student-layout lms-layout mc-glass-page">
+<body class="student-layout lms-layout lms-warm-bg">
 <?php if (!require_login('student', null, 'ignore', 'bool')): ?>
   <p>You are not logged in. Please <a href="lms_login">log in</a> to access this page.</p>
 
@@ -250,11 +196,6 @@ function subject_banner_icon(string $subjectName): string {
     </div>
 
     <div class="student-content">
-      <div class="mc-glass-backdrop" aria-hidden="true">
-        <span class="mc-blob-cream"></span>
-        <span class="mc-blob-info"></span>
-        <span class="mc-blob-primary"></span>
-      </div>
       <div class="student-panel-block">
         <div class="student-panel-header">
           <div class="student-panel-header-left">
@@ -286,18 +227,24 @@ function subject_banner_icon(string $subjectName): string {
                 $subjId    = (int) $c['subject_id'];
                 $dueItems  = $dueBySubject[$subjId] ?? [];
                 $threadCnt = $threadCountBySubject[$subjId] ?? 0;
+
+                // Carried by every link off this card, so the subject-scoped
+                // academics pages (and their subj-tabstrip) land on the same
+                // school year / semester the student is currently browsing.
+                $subjQsFull = http_build_query(['subject_id' => $subjId, 'sy' => $selected_sy, 'sem' => $selected_sem]);
+                $subjQsNoSem = http_build_query(['subject_id' => $subjId, 'sy' => $selected_sy]);
               ?>
-                <div class="course-card">
+                <div class="course-card" data-href="student_lessons?<?= $subjQsFull ?>" tabindex="0" role="link" aria-label="Open <?= htmlspecialchars($c['subject_name']) ?>">
                   <div class="course-card-banner palette-<?= $i % $palette_count ?>">
                     <div class="course-card-menu">
                       <button type="button" class="course-card-menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="Course options">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
                       </button>
                       <div class="course-card-menu-panel">
-                        <a href="student_lessons">Lessons</a>
-                        <a href="student_discussions?subject_id=<?= $subjId ?>">Discussions</a>
-                        <a href="student_assignments">Assignments</a>
-                        <a href="student_quizzes">Quizzes</a>
+                        <a href="student_lessons?<?= $subjQsFull ?>">Lessons</a>
+                        <a href="student_discussions?<?= $subjQsNoSem ?>">Discussions</a>
+                        <a href="student_assignments?<?= $subjQsFull ?>">Assignments</a>
+                        <a href="student_quizzes?<?= $subjQsFull ?>">Quizzes</a>
                       </div>
                     </div>
                     <span class="course-card-banner-icon"><?= subject_banner_icon($c['subject_name']) ?></span>
@@ -306,7 +253,7 @@ function subject_banner_icon(string $subjectName): string {
                     <div class="course-card-title"><?= htmlspecialchars($c['subject_name']) ?></div>
                     <div class="course-card-teacher"><?= htmlspecialchars($c['teacher_name'] ?? 'Teacher not yet assigned') ?></div>
 
-                    <a class="course-card-thread-link" href="student_discussions?subject_id=<?= $subjId ?>">
+                    <a class="course-card-thread-link" href="student_discussions?<?= $subjQsNoSem ?>">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8-1.222 0-2.386-.216-3.447-.61L3 21l1.395-4.184A7.94 7.94 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
                       <?= $threadCnt ?> <?= $threadCnt === 1 ? 'thread' : 'threads' ?>
                     </a>
@@ -350,6 +297,22 @@ function subject_banner_icon(string $subjectName): string {
     });
     document.addEventListener('click', function () {
       document.querySelectorAll('.course-card-menu.open').forEach(function (m) { m.classList.remove('open'); });
+    });
+
+    // Clicking anywhere on a course card opens that subject's Lessons page —
+    // except the 3-dot menu and its own links, which handle their own
+    // navigation (menu links jump straight to Discussions/Assignments/Quizzes).
+    document.querySelectorAll('.course-card[data-href]').forEach(function (card) {
+      card.addEventListener('click', function (e) {
+        if (e.target.closest('a, .course-card-menu')) return;
+        window.location.href = card.dataset.href;
+      });
+      card.addEventListener('keydown', function (e) {
+        if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('a, .course-card-menu')) {
+          e.preventDefault();
+          window.location.href = card.dataset.href;
+        }
+      });
     });
   </script>
 <?php endif; ?>

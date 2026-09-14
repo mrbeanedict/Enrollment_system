@@ -18,7 +18,11 @@ $topbar_term         = semester_for_date($topbar_school_year, date('Y-m-d'));
 
 function navLink($href, $label, $icon_svg, $current_page, $match) {
     $active = ($current_page === $match) ? ' active' : '';
-    echo '<a href="' . $href . '" class="nav-link' . $active . '">' . $icon_svg . $label . '</a>';
+    // Label is wrapped so the collapsed (icon-only) sidebar state can hide
+    // just the text without hiding the icon that sits next to it; title=
+    // gives collapsed users a hover tooltip in place of the visible label
+    // (mirrors staffNavLink() in shared/includes/staff_sidebar.php).
+    echo '<a href="' . $href . '" class="nav-link' . $active . '" title="' . htmlspecialchars($label) . '">' . $icon_svg . '<span class="nav-link-text">' . $label . '</span></a>';
 }
 ?>
 
@@ -26,21 +30,23 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
 <script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
 <script src="<?= APP_URL ?>/assets/js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="<?= APP_URL ?>/logout"></script>
 
-<!-- Sidebar overlay -->
-<div class="sidebar-overlay" id="sidebarOverlay"></div>
-
 <div class="page-loader" id="pageLoader"><div class="page-loader-spinner"></div></div>
 
 <aside class="sidebar" id="adminSidebar">
 
-  <div class="sidebar-brand">
-    <div class="sidebar-logo-crop">
-      <img src="<?= APP_URL ?>/assets/images/logo.png" alt="Logo">
+  <div class="sidebar-top">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo-crop">
+        <img src="<?= APP_URL ?>/assets/images/logo.png" alt="Logo">
+      </div>
+      <div class="sidebar-brand-text">
+        <div class="sidebar-brand-name">Greenfield Senior<br>High School</div>
+        <div class="sidebar-brand-role">Admin Panel</div>
+      </div>
     </div>
-    <div class="sidebar-brand-text">
-      <span class="sidebar-brand-name">Greenfield Senior High School</span>
-      <span class="sidebar-brand-role">Admin Panel</span>
-    </div>
+    <button type="button" class="btn-sidebar-toggle" id="sidebarToggle" aria-label="Collapse menu">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
   </div>
 
   <nav class="sidebar-nav">
@@ -84,7 +90,7 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
   </nav>
 
   <div class="sidebar-photo">
-    <img src="<?= APP_URL ?>/assets/images/background/ui.png" alt="">
+    <img src="<?= APP_URL ?>/assets/images/background/sidebar.png" alt="">
   </div>
 
   <div class="sidebar-footer">
@@ -92,14 +98,11 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
       <div class="sidebar-avatar">
         <?= strtoupper(substr($_SESSION['username'] ?? 'A', 0, 1)) ?>
       </div>
-      <div class="sidebar-user-text">
-        <span class="sidebar-username"><?= htmlspecialchars($_SESSION['username'] ?? 'Admin') ?></span>
-        <span class="sidebar-role">System Administrator</span>
-      </div>
-      <a href="<?= APP_URL ?>/logout" class="btn-logout" id="logoutBtn" aria-label="Log out" title="Log out">
-        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-      </a>
+      <span class="sidebar-username"><?= htmlspecialchars($_SESSION['username'] ?? 'Admin') ?></span>
     </div>
+    <a href="<?= APP_URL ?>/logout" class="btn-logout" id="logoutBtn" title="Log out">
+      <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg><span class="btn-logout-text">Log out</span>
+    </a>
   </div>
 
 </aside>
@@ -107,48 +110,46 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
 <script>
 (function () {
   const sidebar  = document.getElementById('adminSidebar');
-  const overlay  = document.getElementById('sidebarOverlay');
-  const SIDEBAR_KEY = 'sidebarOpen';
+  const SIDEBAR_KEY = 'sidebarCollapsed';
 
-  function openSidebar()  { sidebar.classList.add('open');  overlay.classList.add('open');  localStorage.setItem(SIDEBAR_KEY, '1'); }
-  function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('open'); localStorage.setItem(SIDEBAR_KEY, '0'); }
-  function toggleSidebar() { sidebar.classList.contains('open') ? closeSidebar() : openSidebar(); }
+  // The sidebar is always visible now — collapsing narrows it to an
+  // icon-only rail instead of hiding it entirely, so there's no overlay
+  // backdrop to manage anymore (matches shared/includes/staff_sidebar.php's
+  // .staff-sidebar.collapsed behavior exactly).
+  function collapseSidebar() { sidebar.classList.add('collapsed'); localStorage.setItem(SIDEBAR_KEY, '1'); }
+  function expandSidebar()   { sidebar.classList.remove('collapsed'); localStorage.setItem(SIDEBAR_KEY, '0'); }
+  function toggleSidebar()   { sidebar.classList.contains('collapsed') ? expandSidebar() : collapseSidebar(); }
 
-  // Restore open/closed state from the previous page (this is a multi-page
-  // app — every navigation is a full reload, so state has to persist here).
-  // Defaults to open (matches the sidebar's always-visible appearance
-  // before this toggle existed) unless explicitly closed.
-  if (localStorage.getItem(SIDEBAR_KEY) !== '0') { openSidebar(); }
+  // Restore collapsed/expanded state from the previous page (this is a
+  // multi-page app — every navigation is a full reload, so state has to
+  // persist here).
+  if (localStorage.getItem(SIDEBAR_KEY) === '1') { collapseSidebar(); }
 
-  // Inject the shared topbar chrome into every page's own .topbar: a
-  // hamburger (CSS-hides itself above the 900px off-canvas breakpoint), and
-  // a static profile display on the right. Centralized here — same
-  // reasoning as the confirm-dialog handler below — so no admin page has
-  // to duplicate this markup itself.
-  //
-  // The search box is opt-in via topbar.dataset.search (its value becomes
-  // the placeholder): only pages that actually wire up #topbarSearchInput
-  // to a live filter should declare it. Injecting it unconditionally on
-  // every page — as this used to do — put a focusable, brand-styled input
-  // in front of the admin on pages with no filter behind it at all, so it
-  // silently ate keystrokes and read as broken chrome rather than an
-  // unbuilt feature.
   document.addEventListener('DOMContentLoaded', function () {
+    const toggleBtn = document.getElementById('sidebarToggle');
+    if (toggleBtn) { toggleBtn.addEventListener('click', toggleSidebar); }
+
+    // Inject the shared topbar chrome into every page's own .topbar: an
+    // opt-in search box on the left, and the A.Y./term pill on the right.
+    // Centralized here — same reasoning as the confirm-dialog handler below
+    // — so no admin page has to duplicate this markup itself. The sidebar
+    // toggle now lives in .sidebar-top above, not in the topbar, so there's
+    // no hamburger to inject here anymore.
+    //
+    // The search box is opt-in via topbar.dataset.search (its value becomes
+    // the placeholder): only pages that actually wire up #topbarSearchInput
+    // to a live filter should declare it. Injecting it unconditionally on
+    // every page — as this used to do — put a focusable, brand-styled input
+    // in front of the admin on pages with no filter behind it at all, so it
+    // silently ate keystrokes and read as broken chrome rather than an
+    // unbuilt feature.
     const topbar = document.querySelector('.topbar');
     if (!topbar) return;
 
-    const left = document.createElement('div');
-    left.className = 'topbar-left';
-
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = 'btn-sidebar-toggle';
-    toggleBtn.type = 'button';
-    toggleBtn.setAttribute('aria-label', 'Toggle menu');
-    toggleBtn.innerHTML = '<span></span><span></span><span></span>';
-    toggleBtn.addEventListener('click', toggleSidebar);
-    left.appendChild(toggleBtn);
-
     if (topbar.dataset.search) {
+      const left = document.createElement('div');
+      left.className = 'topbar-left';
+
       const search = document.createElement('div');
       search.className = 'topbar-search';
       search.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>';
@@ -159,13 +160,13 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
       searchInput.setAttribute('aria-label', topbar.dataset.search);
       search.appendChild(searchInput);
       left.appendChild(search);
+
+      topbar.prepend(left);
     }
 
-    topbar.prepend(left);
-
-    // Rightmost topbar content — just the date + A.Y./term pill. Admin
-    // identity already lives in the sidebar footer card below, so there's
-    // no separate profile display here to duplicate it.
+    // Rightmost topbar content — just the date + A.Y./term pill, no
+    // notification bell. Admin identity already lives in the sidebar
+    // footer below, so there's no separate profile display here either.
     const right = topbar.querySelector('.topbar-right') || topbar.appendChild(Object.assign(document.createElement('div'), { className: 'topbar-right' }));
 
     const termLabel = <?= json_encode('A.Y. ' . $topbar_school_year . ' • Term ' . $topbar_term, JSON_UNESCAPED_UNICODE) ?>;
@@ -174,15 +175,6 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
     termBadge.textContent = termLabel;
     right.appendChild(termBadge);
   });
-
-  // Logo/brand area closes the sidebar when open.
-  const brand = sidebar.querySelector('.sidebar-brand');
-  if (brand) {
-    brand.style.cursor = 'pointer';
-    brand.addEventListener('click', closeSidebar);
-  }
-
-  overlay.addEventListener('click', closeSidebar);
 
   // A confirmed submit or logout shows #pageLoader and disables the
   // trigger before navigating away (see doSubmit() below and the logout

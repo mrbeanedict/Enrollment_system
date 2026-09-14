@@ -168,41 +168,49 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Discussions — SHS Enrollment</title>
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_student.css') ?>">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_lms.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_lms.css') ?>">
     <style>
       .dc-picker { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
       .dc-picker select {
-        height:36px; border:0.5px solid #D4D4E0; border-radius:8px; background:#FAFAFC;
-        padding:0 10px; font-size:13px; font-family:inherit; color:#1A1A2E;
+        appearance: none; -webkit-appearance: none;
+        height:36px; border:1px solid var(--lms-border, #DCE5DE); border-radius:8px;
+        background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 24 16'%3E%3Cpolygon points='2,3 22,3 12,15' fill='%230A3925'/%3E%3C/svg%3E") no-repeat right 12px center;
+        background-size: 12px;
+        padding:0 34px 0 12px; font-size:13px; font-family:inherit; color:#1A1A2E;
+        cursor: pointer; transition: border-color .15s ease;
       }
-      .dc-subject-title { font-size:13px; font-weight:700; color:#2F6B4F; text-transform:uppercase; letter-spacing:.04em; margin:1rem 0 .5rem; }
+      .dc-picker select:hover, .dc-picker select:focus {
+        outline: none; border-color: var(--lms-ink, #0A3925);
+      }
+      .dc-subject-title { font-size:13px; font-weight:700; color:var(--lms-ink); text-transform:uppercase; letter-spacing:.04em; margin:1rem 0 .5rem; }
       .dc-subject-title:first-child { margin-top:0; }
-      .dc-thread-row { padding:10px 0; border-bottom:0.5px solid #EBEBF0; }
+      .dc-thread-row { padding:10px 0; border-bottom:1px solid var(--lms-border-2); }
       .dc-thread-row:last-child { border-bottom:none; }
       .dc-thread-title { font-weight:600; font-size:13px; color:#1A1A2E; }
       .dc-thread-title a { color:inherit; text-decoration:none; }
-      .dc-thread-title a:hover { color:var(--brand-primary); }
+      .dc-thread-title a:hover { color:var(--lms-ink); }
       .dc-thread-meta { font-size:11px; color:#8A8A9A; }
       .dc-lock-badge { font-size:10px; color:#C0392B; font-weight:600; margin-left:6px; }
       .dc-new-form { display:flex; flex-direction:column; gap:8px; margin-bottom:1rem; }
       .dc-new-form input[type="text"], .dc-new-form textarea {
-        border:0.5px solid #D4D4E0; border-radius:8px; padding:8px 10px; font-size:13px; font-family:inherit; box-sizing:border-box;
+        border:1px solid var(--lms-border); border-radius:8px; padding:8px 10px; font-size:13px; font-family:inherit; box-sizing:border-box;
       }
       .dc-new-form textarea { min-height:70px; resize:vertical; }
-      .btn-primary-dc { height:38px; padding:0 18px; background:var(--brand-primary); border:none; border-radius:8px; color:#fff; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; align-self:flex-start; }
-      .btn-primary-dc:hover { background:var(--brand-primary-hover); }
-      .dc-post { border-bottom:0.5px solid #EBEBF0; padding:10px 0; }
+      .btn-primary-dc { height:38px; padding:0 18px; background:var(--lms-ink); border:none; border-radius:8px; color:#fff; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; align-self:flex-start; }
+      .btn-primary-dc:hover { background:var(--lms-ink-hover); }
+      .dc-post { border-bottom:1px solid var(--lms-border-2); padding:10px 0; }
       .dc-post:last-child { border-bottom:none; }
       .dc-post-meta { font-size:11px; color:#8A8A9A; margin-bottom:3px; }
       .dc-post-author { font-weight:600; color:#1A1A2E; }
       .dc-post-body { font-size:13px; color:#3A3A4A; white-space:pre-wrap; }
-      .btn-sm { height:28px; padding:0 10px; border:0.5px solid #D4D4E0; border-radius:6px; background:#fff; font-size:11px; font-family:inherit; cursor:pointer; color:#5A5A72; }
-      .btn-sm:hover { border-color:var(--brand-accent); color:var(--brand-primary); }
+      .btn-sm { height:28px; padding:0 10px; border:1px solid var(--lms-border); border-radius:6px; background:#fff; font-size:11px; font-family:inherit; cursor:pointer; color:#5A5A72; }
+      .btn-sm:hover { border-color:var(--lms-ink); color:var(--lms-ink); }
       .btn-sm.danger:hover { border-color:#F5C6C2; color:#C0392B; }
       .dc-back { font-size:12px; color:#5A5A72; text-decoration:none; display:inline-block; margin-bottom:.75rem; }
-      .dc-back:hover { color:var(--brand-primary); }
+      .dc-back:hover { color:var(--lms-ink); }
     </style>
 </head>
-<body class="student-layout lms-layout">
+<body class="student-layout lms-layout lms-warm-bg">
 <?php if (!$is_student): ?>
   <p>You are not logged in. Please <a href="lms_login">log in</a> to access this page.</p>
 
@@ -240,6 +248,13 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
     $sel_subject = (int) ($_GET['subject_id'] ?? 0);
     $sel_thread  = (int) ($_GET['thread_id'] ?? 0);
 
+    // Whether this page was reached with an explicit subject_id (e.g. from
+    // a My Courses card) — drives the subj-tabstrip below. Not the same as
+    // $sel_subject, which also gets auto-filled to the first subject when
+    // none is given, for this page's own subject picker.
+    $subject_id   = (int) ($_GET['subject_id'] ?? 0);
+    $subject_name = null;
+
     $subjects = [];
     if ($sec_id > 0) {
         $subj_stmt = mysqli_prepare($conn, "
@@ -255,6 +270,9 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
     }
     if ($sel_subject <= 0 && !empty($subjects)) {
         $sel_subject = (int) $subjects[0]['subject_id'];
+    }
+    foreach ($subjects as $s) {
+        if ((int) $s['subject_id'] === $subject_id) { $subject_name = $s['subject_name']; break; }
     }
 
     $threads = [];
@@ -306,6 +324,8 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
       </div>
       <span class="student-topbar-date"><?= date('F j, Y') ?></span>
     </div>
+
+    <?php include BASE_PATH . '/shared/includes/lms_subject_tabs.php'; ?>
 
     <div class="student-content">
 

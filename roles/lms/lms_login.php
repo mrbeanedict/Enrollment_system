@@ -120,7 +120,7 @@ $conn->close();
       </div>
 
       <div class="gradient-top">
-        <img src="<?= APP_URL ?>/assets/images/logo_mini2.png" alt="Greenfield Senior High School" class="brand-logo2" width="505" height="55">
+        <img src="<?= APP_URL ?>/assets/images/logo_mini.png" alt="Greenfield Senior High School" class="brand-logo2" width="505" height="55">
       </div>
 
       <div class="gradient-bottom">

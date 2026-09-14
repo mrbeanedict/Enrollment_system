@@ -9,7 +9,9 @@
   --brand-tint: #EAF3EE;
   --page-bg: #F2F9F4;
   --icon-circle-bg: #E3F3E9;
-  --sidebar-w-expanded: 220px;
+  /* Same dimensions as .staff-sidebar in css_staff.css, so the two portals'
+     sidebars read as the same component. */
+  --sidebar-w-expanded: 232px;
   --sidebar-w-collapsed: 76px;
 }
 
@@ -33,10 +35,16 @@ body.teacher-layout {
 
 /* ─── Sidebar ─────────────────────────────────────────────────────────────── */
 
+/* Always visible now (no off-canvas/overlay state) — matches
+   shared/includes/staff_sidebar.php's redesign. The hamburger inside the
+   brand row toggles between this full width and .collapsed's icon-only
+   rail; profile + logout live in the topbar's dropdown
+   (shared/includes/teacher_topbar_right.php) instead of a sidebar footer,
+   so there's no footer/avatar/logout block here at all anymore. */
 .teacher-sidebar {
-  width: 0;
+  width: var(--sidebar-w-expanded);
   background: #FCFEFC;
-  border-right: 0 solid #E8E8E2;
+  border-right: 0.5px solid #E8E8E2;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -44,57 +52,59 @@ body.teacher-layout {
   left: 0;
   top: 0;
   height: 100vh;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   z-index: 300;
   transition: width 0.2s ease;
 }
 
-.teacher-sidebar.open {
-  width: var(--sidebar-w-expanded);
-  border-right-width: 0.5px;
-  overflow-y: auto;
-}
-
-/* Mini icon-rail — an additional state on top of .open (not a replacement
-   for the mobile hide/show toggle): same collapse concept as
-   studentportal's .student-sidebar.collapsed, adapted to this sidebar's
-   own light color scheme instead of switching to student's dark gradient. */
-.teacher-sidebar.open.collapsed {
-  width: var(--sidebar-w-collapsed);
-}
-
-.teacher-sidebar-overlay {
-  display: none;
+.teacher-sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.4rem 1.1rem 1.2rem 1.3rem;
+  border-bottom: 0.5px solid #EBEBE4;
 }
 
 .teacher-sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 1.4rem 1.25rem 1rem;
-  border-bottom: 0.5px solid #EBEBE4;
-  transition: padding 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.teacher-sidebar.collapsed .teacher-sidebar-brand {
-  justify-content: center;
-  padding: 1.4rem 0 1rem;
+  gap: 9px;
+  min-width: 0;
 }
 
 .teacher-sidebar-brand-text {
+  min-width: 0;
   opacity: 1;
   max-width: 200px;
   overflow: hidden;
+  white-space: nowrap;
   transition: opacity 0.16s ease, max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.teacher-sidebar.collapsed .teacher-sidebar-brand-text {
-  opacity: 0;
-  max-width: 0;
-  transition: opacity 0.1s ease, max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+/* Quiet icon button, matching staff_sidebar.php's toggle exactly. */
+.btn-teacher-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: #fff;
+  border: 1px solid #E3ECE8;
+  border-radius: 7px;
+  color: #8A9992;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.teacher-sidebar.collapsed .sidebar-logo-crop { margin: 0 auto; }
+.btn-teacher-sidebar-toggle svg { width: 16px; height: 16px; }
+
+.btn-teacher-sidebar-toggle:hover {
+  background: var(--brand-tint);
+  color: var(--brand-primary);
+  border-color: var(--brand-accent);
+}
 
 .sidebar-logo-crop {
   width: 32px;
@@ -115,17 +125,17 @@ body.teacher-layout {
 }
 
 .teacher-sidebar-brand-name {
+  font-family: 'Georgia', 'Times New Roman', serif;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--brand-primary);
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .teacher-sidebar-brand-role {
-  font-size: 10px;
-  color: #8A8A7E;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  color: #8A9992;
+  font-weight: 500;
 }
 
 .teacher-sidebar-nav {
@@ -142,16 +152,6 @@ body.teacher-layout {
   padding: 0.85rem 1.55rem 0.35rem;
   display: block;
   white-space: nowrap;
-}
-
-.teacher-sidebar.collapsed .teacher-nav-label {
-  width: 26px;
-  height: 1px;
-  padding: 0;
-  margin: 0.7rem auto;
-  font-size: 0;
-  overflow: hidden;
-  background: #E0E0D8;
 }
 
 .teacher-nav-link {
@@ -176,10 +176,12 @@ body.teacher-layout {
   color: var(--brand-primary);
 }
 
+/* Light active-tab tint, matching staff_sidebar.php's current treatment
+   instead of the old solid dark-green pill. */
 .teacher-nav-link.active {
-  background: var(--brand-primary);
-  color: #ffffff;
-  font-weight: 500;
+  background: var(--brand-tint);
+  color: var(--brand-primary);
+  font-weight: 600;
 }
 
 .teacher-nav-link svg {
@@ -195,41 +197,54 @@ body.teacher-layout {
   opacity: 1;
   max-width: 160px;
   overflow: hidden;
+  white-space: nowrap;
   transition: opacity 0.16s ease, max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Collapsed: links become centred rounded icon buttons */
-.teacher-sidebar.collapsed .teacher-nav-link {
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  margin: 0 auto 8px;
-  border-radius: 50%;
+/* Building photo — identical technique to staff_sidebar.php's. */
+.teacher-sidebar-photo {
+  height: 140px;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
 }
 
-.teacher-sidebar.collapsed .teacher-nav-link-text {
-  opacity: 0;
-  max-width: 0;
-  transition: opacity 0.1s ease, max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+.teacher-sidebar-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center bottom;
+  display: block;
 }
 
+.teacher-sidebar-photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(0deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 58%, #FCFEFC 100%),
+              linear-gradient(0deg, rgba(30,77,59,0.05), rgba(30,77,59,0.05));
+  pointer-events: none;
+}
+
+/* Just a logout button — profile/name/avatar already live in the topbar
+   dropdown (shared/includes/teacher_topbar_right.php) too, but the
+   sidebar keeps its own name+logout row as well — same layout as
+   .staff-sidebar-footer. */
 .teacher-sidebar-footer {
   padding: 0.75rem 1rem;
   border-top: 0.5px solid #EBEBE4;
-  transition: padding 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-
-.teacher-sidebar.collapsed .teacher-sidebar-footer { padding: 0.75rem 0.5rem; }
 
 .teacher-sidebar-user {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 0.6rem;
+  flex: 1;
+  min-width: 0;
 }
-
-.teacher-sidebar.collapsed .teacher-sidebar-user { justify-content: center; }
 
 .teacher-sidebar-avatar {
   width: 28px;
@@ -252,57 +267,15 @@ body.teacher-layout {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  opacity: 1;
-  max-width: 160px;
-  transition: opacity 0.16s ease, max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
-
-.teacher-sidebar.collapsed .teacher-sidebar-username {
-  opacity: 0;
-  max-width: 0;
-  transition: opacity 0.1s ease, max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.teacher-sidebar.collapsed .teacher-btn-logout-text {
-  opacity: 0;
-  max-width: 0;
-  overflow: hidden;
-}
-
-.teacher-sidebar.collapsed .teacher-btn-logout {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 50%;
-  margin: 0 auto;
-}
-
-.btn-teacher-collapse-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  margin-left: auto;
-  background: none;
-  border: 0.5px solid #E0E0D8;
-  border-radius: 6px;
-  color: #8A8A7E;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: transform 0.2s ease, background 0.12s;
-}
-
-.btn-teacher-collapse-toggle:hover { background: var(--icon-circle-bg); color: var(--brand-primary); }
-.btn-teacher-collapse-toggle svg { width: 13px; height: 13px; transition: transform 0.2s ease; }
-.teacher-sidebar.collapsed .btn-teacher-collapse-toggle svg { transform: rotate(180deg); }
 
 .teacher-btn-logout {
-  width: 100%;
+  width: 34px;
   height: 34px;
-  background: #F0F0EA;
+  flex-shrink: 0;
+  background: #ffffff;
   border: 0.5px solid #E0E0D8;
-  border-radius: 7px;
+  border-radius: 8px;
   color: #55554B;
   font-size: 12px;
   font-weight: 500;
@@ -312,14 +285,86 @@ body.teacher-layout {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
   text-decoration: none;
 }
+
+.teacher-btn-logout-text { display: none; }
 
 .teacher-btn-logout:hover {
   background: rgba(192,57,43,0.12);
   border-color: rgba(192,57,43,0.3);
   color: #C0392B;
+}
+
+/* ─── Collapsed sidebar (icon-only rail) ─────────────────────────────────
+   Desktop-only: the mobile media query further down already forces the
+   sidebar to a full-width static stack with no toggle, so all of this is
+   scoped to min-width:901px to avoid fighting that. */
+@media (min-width: 901px) {
+  .teacher-sidebar.collapsed { width: var(--sidebar-w-collapsed); }
+
+  .teacher-sidebar.collapsed .teacher-sidebar-top {
+    flex-direction: column-reverse;
+    gap: 10px;
+    padding: 1.1rem 0 0.7rem;
+  }
+  .teacher-sidebar.collapsed .teacher-sidebar-brand { justify-content: center; width: 100%; }
+  .teacher-sidebar.collapsed .teacher-sidebar-brand-text {
+    opacity: 0;
+    max-width: 0;
+    transition: opacity 0.1s ease, max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Same as .staff-sidebar.collapsed .staff-sidebar-nav — the container
+     itself centers its items in a column, instead of each nav-link
+     centering itself with its own auto margins. Same visual result most
+     of the time, but it's what staff's rail actually does, so this
+     follows suit rather than drifting from it. */
+  .teacher-sidebar.collapsed .teacher-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 0.5rem 0;
+  }
+
+  /* Hidden outright, same as .staff-sidebar.collapsed .staff-nav-label —
+     not turned into a divider line, which was cluttering the rail with a
+     stray line before every icon group (Overview/Classes/Assessment/
+     Content). */
+  .teacher-sidebar.collapsed .teacher-nav-label { display: none; }
+
+  /* Same dimensions as .staff-sidebar.collapsed .staff-nav-link — 42px
+     circle, 4px gap, 17px icon — instead of the larger, more spread-out
+     44px/8px this used to be. */
+  .teacher-sidebar.collapsed .teacher-nav-link {
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    margin: 0 0 4px;
+    border-radius: 50%;
+  }
+  .teacher-sidebar.collapsed .teacher-nav-link svg { width: 17px; height: 17px; }
+  .teacher-sidebar.collapsed .teacher-nav-link-text {
+    opacity: 0;
+    max-width: 0;
+    transition: opacity 0.1s ease, max-width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .teacher-sidebar.collapsed .teacher-sidebar-photo { display: none; }
+
+  /* Same as .staff-sidebar.collapsed .staff-sidebar-footer — stacks the
+     avatar above the logout button instead of leaving logout alone, so
+     the rail keeps the same rhythm of circles top to bottom. */
+  .teacher-sidebar.collapsed .teacher-sidebar-footer {
+    flex-direction: column;
+    gap: 10px;
+    padding: 0.9rem 0;
+  }
+  .teacher-sidebar.collapsed .teacher-sidebar-user { justify-content: center; }
+  .teacher-sidebar.collapsed .teacher-sidebar-username { display: none; }
+  .teacher-sidebar.collapsed .teacher-btn-logout { border-radius: 50%; }
 }
 
 /* ─── Main content ────────────────────────────────────────────────────────── */
@@ -1029,22 +1074,31 @@ body.teacher-layout {
   flex-shrink: 0;
 }
 
+/* Same style as .staff-topbar-icon-btn (shared/includes/staff_sidebar.php's
+   injected search/notif buttons) — white background, light border, subtle
+   shadow, hover shifts border/icon color instead of filling with a tint —
+   instead of this button's old tinted-background look. */
 .teacher-topbar-notif {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #5A5A72;
+  color: #3F5850;
   flex-shrink: 0;
-  background: var(--page-bg);
-  border: 1px solid var(--brand-tint);
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  background: #fff;
+  border: 1px solid #D6E4DD;
+  box-shadow: 0 1px 2px rgba(20, 40, 30, 0.06);
+  transition: border-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
-.teacher-topbar-notif:hover { background: var(--icon-circle-bg); border-color: var(--brand-primary); color: #1A1A2E; }
-.teacher-topbar-notif svg { width: 19px; height: 19px; }
+.teacher-topbar-notif:hover {
+  border-color: var(--brand-accent);
+  color: var(--brand-primary);
+  box-shadow: 0 2px 6px rgba(30, 77, 59, 0.14);
+}
+.teacher-topbar-notif svg { width: 16px; height: 16px; stroke-width: 2; }
 
 .teacher-notif-wrap { position: relative; }
 .teacher-notif-badge {
@@ -1072,29 +1126,37 @@ body.teacher-layout {
 
 .teacher-topbar-profile-wrapper { position: relative; flex-shrink: 0; }
 
+/* Same style as .staff-topbar-icon-btn — white background, light border,
+   subtle shadow, hover shifts border color instead of filling with a
+   tint — instead of this chip's old tinted-background look. */
 .teacher-topbar-profile {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 4px 8px 4px 4px;
-  border-radius: 999px;
-  background: var(--page-bg);
-  border: 1px solid var(--brand-tint);
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px 0 3px;
+  border-radius: 17px;
+  background: #fff;
+  border: 1px solid #D6E4DD;
+  box-shadow: 0 1px 2px rgba(20, 40, 30, 0.06);
   cursor: pointer;
   font-family: inherit;
   text-decoration: none;
-  transition: background 0.12s, border-color 0.12s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.teacher-topbar-profile:hover { background: var(--icon-circle-bg); border-color: var(--brand-primary); }
+.teacher-topbar-profile:hover {
+  border-color: var(--brand-accent);
+  box-shadow: 0 2px 6px rgba(30, 77, 59, 0.14);
+}
 
 .teacher-topbar-profile-avatar {
-  width: 40px;
-  height: 40px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--brand-accent), var(--brand-gradient));
   color: #fff;
-  font-size: 13px;
+  font-size: 11.5px;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -1607,29 +1669,19 @@ a.btn-teacher-primary { text-decoration: none; }
   color: #ADADBD;
 }
 
-/* ─── Responsive sidebar (mobile off-canvas) ─────────────────────────────── */
+/* ─── Responsive sidebar (mobile: static full-width stack, no collapse) ──── */
 
-.btn-teacher-sidebar-toggle {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  width: 32px;
-  height: 32px;
-  background: none;
-  border: 0.5px solid #E0E0D8;
-  border-radius: 7px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.btn-teacher-sidebar-toggle span {
-  display: block;
-  width: 16px;
-  height: 1.5px;
-  margin: 0 auto;
-  background: #5A5A50;
-  border-radius: 1px;
+@media (max-width: 900px) {
+  body.teacher-layout { flex-direction: column; }
+  .teacher-sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    border-right: none;
+    border-bottom: 0.5px solid #E8E8E2;
+  }
+  .teacher-sidebar-photo { display: none; }
+  .btn-teacher-sidebar-toggle { display: none; }
 }
 
 /* ─── Teacher login (photo backdrop + frosted glass card) ─────────────────

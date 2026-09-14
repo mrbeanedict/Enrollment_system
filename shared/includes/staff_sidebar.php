@@ -55,7 +55,10 @@ if (($_SESSION['role'] ?? '') !== 'staff' || $department === null) {
 function staffNavLink($href, $label, $icon, $current, $match, $badge = 0) {
     $active = ($current === $match) ? ' active' : '';
     $badgeHtml = $badge > 0 ? '<span class="staff-nav-badge">' . $badge . '</span>' : '';
-    echo '<a href="' . $href . '" class="staff-nav-link' . $active . '">' . $icon . $label . $badgeHtml . '</a>';
+    // Label is wrapped so the collapsed (icon-only) sidebar state can hide
+    // just the text without hiding the icon that sits next to it; title=
+    // gives collapsed users a hover tooltip in place of the visible label.
+    echo '<a href="' . $href . '" class="staff-nav-link' . $active . '" title="' . htmlspecialchars($label) . '">' . $icon . '<span class="staff-nav-link-text">' . $label . '</span>' . $badgeHtml . '</a>';
 }
 
 // ---------------------------------------------------------------
@@ -75,6 +78,9 @@ $ico_docreview = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" str
 $ico_accountabilities = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-5 9l2 2 4-4"/></svg>';
 $ico_teachers  = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422A12.083 12.083 0 0121 15.5V17a2 2 0 01-2 2H5a2 2 0 01-2-2v-1.5c0-1.487.44-2.887 1.34-4.078L12 14zm0 0v7"/></svg>';
 $ico_logout    = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>';
+$ico_burger    = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16"/></svg>';
+$ico_search    = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.3-4.3"/></svg>';
+$ico_bell      = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>';
 
 // ---------------------------------------------------------------
 // Department-scoped nav + status panel data
@@ -123,7 +129,7 @@ if ($department === 'registrar') {
     if ($sb_q) { $sb_r = mysqli_fetch_row($sb_q); $awaitingSemester2 = (int)$sb_r[0]; }
 
     $navItems = [
-        ['roles/staff/dashboard', 'Dashboard',  $ico_dashboard, 'dashboard.php', 0],
+        ['roles/staff/dashboard', 'Dashboard',  $ico_dashboard, 'dashboard.php', 0, 'Overview'],
         ['roles/staff/registrar/enrollment', 'Enrollment', $ico_enroll,    'enrollment.php',      $pendingEnrollments],
     ];
 
@@ -183,9 +189,9 @@ if ($department === 'registrar') {
     if ($sb_q) { $sb_r = mysqli_fetch_row($sb_q); $accountabilitiesCount = (int)$sb_r[0]; }
 
     $navItems = [
-        ['roles/staff/dashboard',        'Dashboard',              $ico_dashboard,        'dashboard.php', 0],
-        ['roles/staff/records/document_review',      'Document Review',       $ico_docreview,        'document_review.php', $awaitingReview],
-        ['roles/staff/records/accountabilities',     'Accountabilities',      $ico_accountabilities, 'accountabilities.php', $accountabilitiesCount],
+        ['roles/staff/dashboard',        'Dashboard',              $ico_dashboard,        'dashboard.php', 0, 'Overview'],
+        ['roles/staff/records/document_review',      'Document Review',       $ico_docreview,        'document_review.php', $awaitingReview, 'Records'],
+        ['roles/staff/records/accountabilities',     'Accountabilities',      $ico_accountabilities, 'accountabilities.php', $accountabilitiesCount, 'Records'],
     ];
 
     $statusRows = [
@@ -215,7 +221,7 @@ if ($department === 'registrar') {
     if ($sb_q) { $sb_r = mysqli_fetch_row($sb_q); $onlinePaymentsPendingCount = (int)$sb_r[0]; }
 
     $navItems = [
-        ['roles/staff/dashboard',      'Dashboard',        $ico_dashboard, 'dashboard.php',   0],
+        ['roles/staff/dashboard',      'Dashboard',        $ico_dashboard, 'dashboard.php',   0, 'Overview'],
         ['roles/staff/treasury/enrollments_staff', 'All Payments',     $ico_payment,   'enrollments_staff.php', 0],
         ['roles/staff/treasury/online_payments',   'Online Payments',  $ico_payment,   'online_payments.php',   $onlinePaymentsPendingCount],
     ];
@@ -264,12 +270,12 @@ if ($department === 'registrar') {
         $pendingApprovals = $pendingSections + $pendingSubjects + $pendingSchedules;
 
         $navItems = [
-            ['roles/staff/dashboard',     'Dashboard',         $ico_dashboard,  'dashboard.php', 0],
-            ['roles/staff/scheduler/sections',        'Sections',          $ico_sections,   'sections.php',        0],
-            ['roles/staff/scheduler/curriculum',      'Curriculum',        $ico_curriculum, 'curriculum.php',      0],
-            ['roles/staff/scheduler/scheduling',      'Class Scheduling',  $ico_schedule,   'scheduling.php',      $unscheduledSections],
-            ['roles/staff/coordinator/approvals',     'Approvals',         $ico_approvals,  'approvals.php',       $pendingApprovals],
-            ['roles/staff/coordinator/teacher_manage', 'Teachers',         $ico_teachers,   'teacher_manage.php',  0],
+            ['roles/staff/dashboard',     'Dashboard',         $ico_dashboard,  'dashboard.php', 0, 'Overview'],
+            ['roles/staff/scheduler/sections',        'Sections',          $ico_sections,   'sections.php',        0, 'Scheduling'],
+            ['roles/staff/scheduler/curriculum',      'Curriculum',        $ico_curriculum, 'curriculum.php',      0, 'Scheduling'],
+            ['roles/staff/scheduler/scheduling',      'Class Scheduling',  $ico_schedule,   'scheduling.php',      $unscheduledSections, 'Scheduling'],
+            ['roles/staff/coordinator/approvals',     'Approvals',         $ico_approvals,  'approvals.php',       $pendingApprovals, 'Coordinator'],
+            ['roles/staff/coordinator/teacher_manage', 'Teachers',         $ico_teachers,   'teacher_manage.php',  0, 'Coordinator'],
         ];
 
         $statusRows = [
@@ -279,11 +285,11 @@ if ($department === 'registrar') {
         ];
     } else {
         $navItems = [
-            ['roles/staff/dashboard', 'Dashboard',       $ico_dashboard,  'dashboard.php', 0],
-            ['roles/staff/scheduler/sections',   'Sections',         $ico_sections,   'sections.php',        0],
-            ['roles/staff/scheduler/curriculum', 'Curriculum',       $ico_curriculum, 'curriculum.php',      0],
-            ['roles/staff/scheduler/scheduling', 'Class Scheduling', $ico_schedule,   'scheduling.php',      $unscheduledSections],
-            ['roles/staff/scheduler/create_schedule', 'Create Schedule', $ico_schedule, 'create_schedule.php', 0],
+            ['roles/staff/dashboard', 'Dashboard',       $ico_dashboard,  'dashboard.php', 0, 'Overview'],
+            ['roles/staff/scheduler/sections',   'Sections',         $ico_sections,   'sections.php',        0, 'Scheduler'],
+            ['roles/staff/scheduler/curriculum', 'Curriculum',       $ico_curriculum, 'curriculum.php',      0, 'Scheduler'],
+            ['roles/staff/scheduler/scheduling', 'Class Scheduling', $ico_schedule,   'scheduling.php',      $unscheduledSections, 'Scheduler'],
+            ['roles/staff/scheduler/create_schedule', 'Create Schedule', $ico_schedule, 'create_schedule.php', 0, 'Scheduler'],
         ];
 
         $statusRows = [
@@ -299,27 +305,39 @@ if ($department === 'registrar') {
 <script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
 <script src="<?= APP_URL ?>/assets/js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="<?= APP_URL ?>/logout"></script>
 
-<!-- Sidebar overlay -->
-<div class="staff-sidebar-overlay" id="staffSidebarOverlay"></div>
-
 <div class="page-loader" id="pageLoader"><div class="page-loader-spinner"></div></div>
 
 <aside class="staff-sidebar" id="staffSidebar">
 
-  <div class="staff-sidebar-brand">
-    <div class="sidebar-logo-crop">
-      <img src="<?= APP_URL ?>/assets/images/logo.png" alt="Logo">
+  <div class="staff-sidebar-top">
+    <div class="staff-sidebar-brand">
+      <div class="sidebar-logo-crop">
+        <img src="<?= APP_URL ?>/assets/images/logo.png" alt="Logo">
+      </div>
+      <div class="staff-sidebar-brand-text">
+        <div class="staff-sidebar-brand-name">Greenfield Senior<br>High School</div>
+        <div class="staff-sidebar-brand-role"><?= htmlspecialchars($roleLabel) ?> Portal</div>
+      </div>
     </div>
-    <div>
-      <div class="staff-sidebar-brand-name">Greenfield Senior High School</div>
-      <div class="staff-sidebar-brand-role"><?= htmlspecialchars($roleLabel) ?> Portal</div>
-    </div>
+    <button type="button" class="btn-staff-sidebar-toggle" id="staffSidebarToggle" aria-label="Collapse menu">
+      <?= $ico_burger ?>
+    </button>
   </div>
 
   <nav class="staff-sidebar-nav">
 
-    <span class="staff-nav-label"><?= htmlspecialchars($roleLabel) ?></span>
-    <?php foreach ($navItems as $item): ?>
+    <?php
+        // Item[5] is an optional group label (e.g. records splits its nav
+        // into "Overview" / "Records"); departments that don't set one just
+        // keep the single $roleLabel header they've always had.
+        $sb_lastGroup = null;
+        foreach ($navItems as $item):
+            $sb_group = $item[5] ?? $roleLabel;
+            if ($sb_group !== $sb_lastGroup):
+                $sb_lastGroup = $sb_group;
+    ?>
+        <span class="staff-nav-label"><?= htmlspecialchars($sb_lastGroup) ?></span>
+    <?php endif; ?>
         <?php staffNavLink(APP_URL . '/' . $item[0], $item[1], $item[2], $current, $item[3], $item[4]); ?>
     <?php endforeach; ?>
 
@@ -338,7 +356,7 @@ if ($department === 'registrar') {
   </nav>
 
   <div class="staff-sidebar-photo">
-    <img src="<?= APP_URL ?>/assets/images/background/ui.png" alt="">
+    <img src="<?= APP_URL ?>/assets/images/background/sidebar.png" alt="">
   </div>
 
   <div class="staff-sidebar-footer">
@@ -348,8 +366,8 @@ if ($department === 'registrar') {
       </div>
       <span class="staff-sidebar-username"><?= htmlspecialchars($_SESSION['username'] ?? 'Staff') ?></span>
     </div>
-    <a href="<?= APP_URL ?>/logout" class="staff-btn-logout" id="staffLogoutBtn">
-      <?= $ico_logout ?> Log out
+    <a href="<?= APP_URL ?>/logout" class="staff-btn-logout" id="staffLogoutBtn" title="Log out">
+      <?= $ico_logout ?><span class="staff-btn-logout-text">Log out</span>
     </a>
   </div>
 
@@ -358,33 +376,63 @@ if ($department === 'registrar') {
 <script>
 (function () {
   const staffSidebar  = document.getElementById('staffSidebar');
-  const staffOverlay  = document.getElementById('staffSidebarOverlay');
-  const STAFF_SIDEBAR_KEY = 'staffSidebarOpen';
+  const STAFF_SIDEBAR_KEY = 'staffSidebarCollapsed';
 
-  function openStaffSidebar()  { staffSidebar.classList.add('open');  staffOverlay.classList.add('open');  localStorage.setItem(STAFF_SIDEBAR_KEY, '1'); }
-  function closeStaffSidebar() { staffSidebar.classList.remove('open'); staffOverlay.classList.remove('open'); localStorage.setItem(STAFF_SIDEBAR_KEY, '0'); }
-  function toggleStaffSidebar() { staffSidebar.classList.contains('open') ? closeStaffSidebar() : openStaffSidebar(); }
+  // The sidebar is always visible now — collapsing narrows it to an
+  // icon-only rail instead of hiding it entirely, so there's no overlay
+  // backdrop to manage anymore (unlike the old off-canvas drawer).
+  function collapseStaffSidebar() { staffSidebar.classList.add('collapsed'); localStorage.setItem(STAFF_SIDEBAR_KEY, '1'); }
+  function expandStaffSidebar()   { staffSidebar.classList.remove('collapsed'); localStorage.setItem(STAFF_SIDEBAR_KEY, '0'); }
+  function toggleStaffSidebar()   { staffSidebar.classList.contains('collapsed') ? expandStaffSidebar() : collapseStaffSidebar(); }
 
-  // Restore open/closed state from the previous page (this is a multi-page
-  // app — every navigation is a full reload, so state has to persist here).
-  if (localStorage.getItem(STAFF_SIDEBAR_KEY) === '1') { openStaffSidebar(); }
+  // Restore collapsed/expanded state from the previous page (this is a
+  // multi-page app — every navigation is a full reload, so state has to
+  // persist here).
+  if (localStorage.getItem(STAFF_SIDEBAR_KEY) === '1') { collapseStaffSidebar(); }
 
   document.addEventListener('DOMContentLoaded', function () {
 
-    // Inject hamburger button into .staff-topbar-left (already exists on
-    // every staff page — no wrapping needed, unlike admin/sidebar.php).
-    var staffTopbarLeft = document.querySelector('.staff-topbar-left');
-    if (staffTopbarLeft && !staffTopbarLeft.querySelector('.btn-staff-sidebar-toggle')) {
-      var toggleBtn = document.createElement('button');
-      toggleBtn.type = 'button';
-      toggleBtn.className = 'btn-staff-sidebar-toggle';
-      toggleBtn.setAttribute('aria-label', 'Toggle menu');
-      toggleBtn.innerHTML = '<span></span><span></span><span></span>';
-      toggleBtn.addEventListener('click', toggleStaffSidebar);
-      staffTopbarLeft.prepend(toggleBtn);
-    }
+    var toggleBtn = document.getElementById('staffSidebarToggle');
+    if (toggleBtn) { toggleBtn.addEventListener('click', toggleStaffSidebar); }
 
-    staffOverlay.addEventListener('click', closeStaffSidebar);
+    // Inject a search button (and a plain decorative bell, only where a
+    // real notification widget isn't already present — see
+    // shared/includes/staff_notifications.php) next to every page's
+    // existing .staff-topbar-date pill, so every staff page gets the same
+    // topbar controls without editing each page's markup individually.
+    // These are HTML/CSS only for now — no search or notification
+    // behavior is wired up yet.
+    var staffTopbarEl = document.querySelector('.staff-topbar');
+    var staffDateEl = staffTopbarEl ? staffTopbarEl.querySelector('.staff-topbar-date') : null;
+    if (staffDateEl) {
+      // .staff-topbar uses justify-content:space-between, so the date pill
+      // and the new buttons need to share one wrapper — otherwise they'd
+      // each become their own flex item and get spread across the row
+      // instead of clustering together on the right.
+      var actionsWrap = document.createElement('div');
+      actionsWrap.className = 'staff-topbar-actions';
+      staffDateEl.parentNode.insertBefore(actionsWrap, staffDateEl);
+      actionsWrap.appendChild(staffDateEl);
+
+      var searchBtn = document.createElement('button');
+      searchBtn.type = 'button';
+      searchBtn.className = 'staff-topbar-icon-btn';
+      searchBtn.setAttribute('aria-label', 'Search');
+      searchBtn.innerHTML = <?= json_encode($ico_search) ?>;
+      actionsWrap.appendChild(searchBtn);
+
+      // Only add a decorative bell where a real notification widget isn't
+      // already rendered (see shared/includes/staff_notifications.php) —
+      // avoids showing two bells on the pages that already have one.
+      if (!staffTopbarEl.querySelector('.staff-notif-wrap')) {
+        var bellBtn = document.createElement('button');
+        bellBtn.type = 'button';
+        bellBtn.className = 'staff-topbar-icon-btn';
+        bellBtn.setAttribute('aria-label', 'Notifications');
+        bellBtn.innerHTML = <?= json_encode($ico_bell) ?>;
+        actionsWrap.appendChild(bellBtn);
+      }
+    }
 
     // Logout — SweetAlert (falls back to native confirm() if Swal failed to load)
     var logoutBtn = document.getElementById('staffLogoutBtn');

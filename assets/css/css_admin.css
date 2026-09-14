@@ -29,7 +29,7 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background: #F5F5F7;
+  background: #ffffff;
   min-height: 100vh;
   color: #1A1A2E;
   display: flex;
@@ -37,13 +37,13 @@ body {
 
 /* ─── Sidebar ─────────────────────────────────────────────────────────────── */
 
-/* Collapsible at every width via the shared .open class (toggled by
-   admin/sidebar.php's JS, defaulting to open). Above 900px it collapses
-   in-flow (width 236px <-> 0, content reflows via the body flex layout);
-   below 900px (see the media query) it's a fixed off-canvas drawer instead
-   — same breakpoint already used by css_student.css's .student-sidebar. */
+/* Always visible now (no off-canvas/overlay state) — the toggle button in
+   .sidebar-top switches between this full width and .collapsed's icon-only
+   rail (see the collapsed-state block below), it no longer shows or hides
+   the sidebar outright. Mirrors shared/includes/staff_sidebar.php's
+   .staff-sidebar exactly. */
 .sidebar {
-  width: 236px;
+  width: 232px;
   background: #FAFAF8;
   border-right: 0.5px solid #E8E8E2;
   display: flex;
@@ -54,60 +54,53 @@ body {
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  overflow-x: hidden;
   z-index: 300;
+  transition: width 0.2s ease;
 }
 
 .sidebar-overlay {
   display: none;
 }
 
-@media (min-width: 901px) {
-  .sidebar {
-    width: 0;
-    border-right-width: 0;
-    overflow: hidden;
-    transition: width 0.22s ease, border-right-width 0.22s ease;
-  }
-
-  .sidebar.open {
-    width: 236px;
-    border-right-width: 0.5px;
-    overflow-y: auto;
-  }
+/* Wraps .sidebar-brand + the toggle button as two siblings. */
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.4rem 1.1rem 1.2rem 1.3rem;
+  border-bottom: 0.5px solid #EBEBE4;
 }
 
-@media (max-width: 900px) {
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100vh;
-    width: 236px;
-    transform: translateX(-110%);
-    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-  }
+/* Quiet icon button — matches staff_sidebar.php's .btn-staff-sidebar-toggle. */
+.btn-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: #fff;
+  border: 1px solid #E3ECE8;
+  border-radius: 7px;
+  color: #8A9992;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
 
-  .sidebar.open {
-    transform: translateX(0);
-    box-shadow: 0 0 32px rgba(0, 0, 0, 0.18);
-  }
+.btn-sidebar-toggle svg { width: 16px; height: 16px; }
 
-  .sidebar-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(28, 38, 40, 0.45);
-    z-index: 290;
-  }
-
-  .sidebar-overlay.open { display: block; }
+.btn-sidebar-toggle:hover {
+  background: var(--brand-tint);
+  color: var(--brand-primary);
+  border-color: var(--brand-accent);
 }
 
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 1.4rem 1.25rem 1rem;
-  border-bottom: 0.5px solid #EBEBE4;
+  gap: 9px;
+  min-width: 0;
 }
 
 /* logo.png is a full brand lockup (crest + school name) on a large mostly-
@@ -132,24 +125,20 @@ body {
   max-width: none;
 }
 
-.sidebar-brand-text {
-  display: flex;
-  flex-direction: column;
-}
+.sidebar-brand-text { min-width: 0; }
 
 .sidebar-brand-name {
+  font-family: 'Georgia', 'Times New Roman', serif;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--brand-primary);
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .sidebar-brand-role {
-  font-size: 10px;
-  font-weight: 400;
-  color: #8A8A7E;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 10.5px;
+  color: #8A9992;
+  font-weight: 500;
 }
 
 /* ─── Nav ─────────────────────────────────────────────────────────────────── */
@@ -166,6 +155,7 @@ body {
   letter-spacing: 0.1em;
   color: #ADADA0;
   padding: 0.85rem 1.25rem 0.35rem;
+  display: block;
 }
 
 .nav-link {
@@ -232,10 +222,13 @@ body {
 .nav-badge {
   margin-left: auto;
   font-size: 10px;
-  background: #EBEBE4;
-  color: #5A5A50;
-  border-radius: 4px;
-  padding: 1px 6px;
+  font-weight: 600;
+  background: #E67E22;
+  color: #fff;
+  border-radius: 20px;
+  padding: 1px 7px;
+  min-width: 18px;
+  text-align: center;
 }
 
 /* ─── Sidebar building photo ─────────────────────────────────────────────── */
@@ -251,7 +244,7 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: bottom;
+  object-position: center bottom;
   display: block;
 }
 
@@ -259,7 +252,9 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(250,250,248,0.85) 0%, rgba(250,250,248,0) 35%);
+  background: linear-gradient(0deg, rgba(250,250,248,0) 0%, rgba(250,250,248,0) 58%, #FAFAF8 100%),
+              linear-gradient(0deg, rgba(56,102,65,0.05), rgba(56,102,65,0.05));
+  pointer-events: none;
 }
 
 /* ─── Sidebar footer ──────────────────────────────────────────────────────── */
@@ -267,80 +262,133 @@ body {
 .sidebar-footer {
   padding: 0.75rem 1rem;
   border-top: 0.5px solid #EBEBE4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-/* Single rounded card — avatar, name/role stack, and an icon-only logout
-   button all in one row (previously: an avatar+name row above a separate
-   full-width "Log out" button). */
 .sidebar-user {
   display: flex;
   align-items: center;
-  gap: 9px;
-  background: #F0F0EA;
-  border: 0.5px solid #E5E5DC;
-  border-radius: 12px;
-  padding: 7px 7px 7px 9px;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 .sidebar-avatar {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--brand-accent), var(--brand-gradient));
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: #ffffff;
   flex-shrink: 0;
 }
 
-.sidebar-user-text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  flex: 1;
-  line-height: 1.3;
-}
-
 .sidebar-username {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: #1A1A2E;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sidebar-role {
-  font-size: 10.5px;
-  color: #8A8A9A;
+  font-size: 12px;
+  font-weight: 500;
+  color: #5A5A50;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .btn-logout {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   flex-shrink: 0;
   background: #ffffff;
   border: 0.5px solid #E0E0D8;
   border-radius: 8px;
-  color: #5A5A50;
+  color: #55554B;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition: background 0.12s, color 0.12s;
   display: flex;
   align-items: center;
   justify-content: center;
   text-decoration: none;
 }
 
+/* Icon-only, like staff_sidebar.php's .staff-btn-logout — the title="Log
+   out" attribute covers accessibility in place of the visible label. */
+.btn-logout-text { display: none; }
+
 .btn-logout:hover {
   background: rgba(192,57,43,0.12);
   border-color: rgba(192,57,43,0.3);
   color: #C0392B;
+}
+
+/* ─── Collapsed sidebar (icon-only rail) ─────────────────────────────────
+   Desktop-only, same breakpoint/behavior as staff_sidebar.php's
+   .staff-sidebar.collapsed — the mobile media query below already forces
+   the sidebar to a full-width static stack with no toggle. */
+@media (min-width: 901px) {
+  .sidebar.collapsed { width: 76px; }
+
+  .sidebar.collapsed .sidebar-top {
+    flex-direction: column-reverse;
+    gap: 10px;
+    padding: 1.1rem 0 0.7rem;
+  }
+  .sidebar.collapsed .sidebar-brand { justify-content: center; width: 100%; }
+  .sidebar.collapsed .sidebar-brand-text { display: none; }
+
+  .sidebar.collapsed .sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.5rem 0;
+  }
+  .sidebar.collapsed .nav-section-label { display: none; }
+
+  .sidebar.collapsed .nav-link {
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    margin-bottom: 4px;
+    border-radius: 50%;
+  }
+  .sidebar.collapsed .nav-link svg { width: 17px; height: 17px; }
+  .sidebar.collapsed .nav-link-text,
+  .sidebar.collapsed .nav-badge { display: none; }
+  .sidebar.collapsed .nav-link.active::before { display: none; }
+
+  .sidebar.collapsed .sidebar-photo { display: none; }
+
+  .sidebar.collapsed .sidebar-footer {
+    flex-direction: column;
+    gap: 10px;
+    padding: 0.9rem 0;
+  }
+  .sidebar.collapsed .sidebar-user { justify-content: center; }
+  .sidebar.collapsed .sidebar-username { display: none; }
+  .sidebar.collapsed .btn-logout { border-radius: 50%; }
+}
+
+@media (max-width: 900px) {
+  body { flex-direction: column; }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    border-right: none;
+    border-bottom: 0.5px solid #E8E8E2;
+  }
+  .sidebar-photo { display: none; }
+  /* Collapsing is a desktop-only affordance (see the min-width:901px block
+     above) — on mobile the sidebar is already a static full-width stack. */
+  .btn-sidebar-toggle { display: none; }
 }
 
 /* ─── Main content ────────────────────────────────────────────────────────── */
@@ -353,17 +401,16 @@ body {
   width: 100%;
 }
 
-/* Dark by default across every admin page — merges visually with each
-   page's .staff-hero band directly below it (same var, so there's no seam
-   at the boundary). */
+/* Light, matches shared/includes/staff_sidebar.php's .staff-topbar exactly
+   (same bg/border/height) — no more dark merge with .staff-hero below it. */
 .topbar {
-  background: var(--brand-primary-active);
-  border-bottom: none;
+  background: #EFF5F3;
+  border-bottom: 1.5px solid #CFE0D7;
   padding: 0 1.25rem 0 1rem;
-  height: 54px;
+  height: 52px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.75rem;
   flex-shrink: 0;
 }
@@ -372,33 +419,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  flex: 1;
   min-width: 0;
-}
-
-/* Hamburger — always visible, toggles the sidebar open/closed at any
-   screen width (collapsible in-flow above 900px, off-canvas drawer below). */
-.btn-sidebar-toggle {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  width: 32px;
-  height: 32px;
-  background: none;
-  border: 0.5px solid #E0E0D8;
-  border-radius: 7px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.btn-sidebar-toggle span {
-  display: block;
-  width: 16px;
-  height: 1.5px;
-  margin: 0 auto;
-  background: #5A5A50;
-  border-radius: 1px;
 }
 
 /* Leftmost topbar element (replaces the old per-page title, which just
@@ -417,24 +438,33 @@ body {
 .topbar-search input::placeholder { color: #ADADBD; }
 .topbar-search:focus-within { border-color: var(--brand-accent); background: #fff; }
 
+/* margin-left:auto (not justify-content:space-between on .topbar) so this
+   still lands rightmost even on the pages with no .topbar-left — a lone
+   flex child under space-between collapses to flex-start instead of
+   staying at the end, which was pinning this to the LEFT on every admin
+   page that skips the optional search box (i.e. most of them). */
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
+  gap: 8px;
+  margin-left: auto;
   flex-shrink: 0;
 }
 
+/* Boxed white chip — matches staff_sidebar.php's .staff-topbar-date exactly. */
 .topbar-date {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  height: 30px;
-  padding: 0 13px 0 11px;
-  border: 0.5px solid rgba(255, 255, 255, 0.25);
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.75);
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 9px;
+  border: 1px solid #D6E4DD;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(20, 40, 30, 0.06);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1A1A2E;
   white-space: nowrap;
 }
 
@@ -443,21 +473,24 @@ body {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  opacity: 0.75;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='3'/%3E%3Cpath d='M16 2v4M8 2v4M3 10h18'/%3E%3C/svg%3E") no-repeat center / contain;
+  background-color: var(--brand-accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath stroke-linecap='round' d='M8 3v4M16 3v4M3 10h18'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath stroke-linecap='round' d='M8 3v4M16 3v4M3 10h18'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 
-/* Tinted pill (A.Y. + term) injected by sidebar.php's shared topbar script,
-   right after this page's own .topbar-date. */
+/* A.Y. + term pill, injected by sidebar.php's shared topbar script right
+   after this page's own .topbar-date — same boxed-chip language as
+   .topbar-date above, tinted with the brand accent instead of plain white. */
 .topbar-term-badge {
   display: inline-flex;
   align-items: center;
-  height: 30px;
+  height: 34px;
   padding: 0 14px;
-  border-radius: 20px;
+  border-radius: 9px;
+  border: 1px solid #D6E4DD;
   background: var(--brand-tint);
   color: var(--brand-primary);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
@@ -999,30 +1032,25 @@ body {
 .btn-toggle:hover { border-color: var(--brand-accent); color: var(--brand-accent); }
 .btn-toggle:active { transform: scale(0.96); }
 
-/* ── Dark hero header — every admin page's own .topbar merges into this
-   band directly below it (same --brand-primary-active, so there's no seam),
-   and whatever content follows (filters, cards) is pulled up over its
-   bottom edge via .staff-overlap so it visually overlaps the header.
-   .staff-hero/.staff-overlap are shared components used on every admin
-   page, not just staff_manage.php — the "staff-" prefix is a naming
-   leftover from where they were first built, not a scope restriction.
-   Layered radial glows give the band depth without breaking the flat
-   --brand-primary-active base color it shares with .topbar. ── */
+/* ── Light hero header — flat #EFF5F3, the same tone as .topbar directly
+   above it so the two now merge with no seam (previously a dark green band
+   with radial glows). Whatever content follows (filters, cards) is still
+   pulled up over its bottom edge via .staff-overlap so it visually overlaps
+   the header. .staff-hero/.staff-overlap are shared components used on
+   every admin page, not just staff_manage.php — the "staff-" prefix is a
+   naming leftover from where they were first built, not a scope restriction. ── */
 .staff-hero {
-  background:
-    radial-gradient(circle at 8% 0%, rgba(76, 138, 108, 0.4), transparent 45%),
-    radial-gradient(circle at 92% 30%, rgba(76, 138, 108, 0.28), transparent 50%),
-    var(--brand-primary-active);
+  background: #EFF5F3;
   margin: -1.75rem -2rem 0;
   padding: 1.5rem 2rem 2rem;
   position: relative;
   overflow: hidden;
 }
-.staff-hero .page-title { color: #ffffff; margin-bottom: 0.5rem; }
-.staff-hero .page-sub { color: rgba(255, 255, 255, 0.68); }
+.staff-hero .page-title { color: #1A1A2E; margin-bottom: 0.5rem; }
+.staff-hero .page-sub { color: #5A5A72; }
 
 .staff-hero-desc {
-  font-size: 13px; line-height: 1.55; color: rgba(255, 255, 255, 0.68);
+  font-size: 13px; line-height: 1.55; color: #5A5A72;
   max-width: 46ch;
 }
 
@@ -1233,9 +1261,9 @@ body {
    avatar, and pagination footer (staff_manage.php's table view only). ── */
 .staff-breadcrumb {
   font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.55); margin-bottom: 0.4rem;
+  color: #8A9992; margin-bottom: 0.4rem;
 }
-.staff-breadcrumb-current { color: #ffffff; }
+.staff-breadcrumb-current { color: #1A1A2E; }
 
 .staff-record-count { font-weight: 400; color: #8A8A9A; }
 

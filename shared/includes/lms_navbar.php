@@ -42,9 +42,6 @@ function lmsNavPanelLink($href, $label, $current, $match) {
 $ico_chevron = '<svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>';
 $ico_bell    = '<svg width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>';
 
-// Profile chip is avatar-only (+ dropdown) here, unlike lms_sidebar.php's
-// name/section chip — so this only needs the photo, not the section lookup
-// lms_sidebar.php also does for its role line.
 $stu_stmt = mysqli_prepare($conn, "
     SELECT s.family_name, s.given_name, us.photo_path
     FROM students s
@@ -57,7 +54,24 @@ mysqli_stmt_bind_result($stu_stmt, $sb_family_name, $sb_given_name, $sb_photo_pa
 mysqli_stmt_fetch($stu_stmt);
 mysqli_stmt_close($stu_stmt);
 
+// Same enrollment -> section lookup lms_sidebar.php uses for its profile
+// chip's role line.
+$sb_section_name = null;
+$sec_stmt = mysqli_prepare($conn, "
+    SELECT sec.section_name
+    FROM enrollments e JOIN sections sec ON sec.section_id = e.section_id
+    WHERE e.student_id = ?
+    ORDER BY e.enrollment_date DESC, e.enrollment_id DESC
+    LIMIT 1
+");
+mysqli_stmt_bind_param($sec_stmt, "i", $_SESSION['student_id']);
+mysqli_stmt_execute($sec_stmt);
+mysqli_stmt_bind_result($sec_stmt, $sb_section_name);
+mysqli_stmt_fetch($sec_stmt);
+mysqli_stmt_close($sec_stmt);
+
 $profile_name = trim(($sb_given_name ?? '') . ' ' . ($sb_family_name ?? '')) ?: ($_SESSION['username'] ?? 'Student');
+$profile_role = $sb_section_name ?: 'Student';
 
 // ── Notification bell — same shape as staff/staff_notifications.php,
 // scoped to recipient_type='student' (see notify.php). Same underlying
@@ -101,7 +115,8 @@ function lms_time_ago($dt) {
 <nav class="lms-foldernav" id="lmsFolderNav">
   <div class="lms-foldernav-inner">
     <a href="<?= APP_URL ?>/roles/lms/lms_home" class="lms-foldernav-logo">
-      <img src="<?= APP_URL ?>/assets/images/log_ui.png" alt="Greenfield Senior High School">
+      <img src="<?= APP_URL ?>/assets/images/log_ui.png" alt="">
+      <span class="lms-foldernav-logo-text">Greenfield Senior High School</span>
     </a>
 
     <button type="button" class="lms-foldernav-toggle" id="lmsFolderNavToggle" aria-label="Toggle menu"><span></span><span></span><span></span></button>
@@ -154,6 +169,10 @@ function lms_time_ago($dt) {
             <?php else: ?>
               <?= strtoupper(substr($profile_name, 0, 1)) ?>
             <?php endif; ?>
+          </span>
+          <span class="lms-foldernav-profile-text">
+            <span class="lms-foldernav-profile-name"><?= htmlspecialchars($profile_name) ?></span>
+            <span class="lms-foldernav-profile-role"><?= htmlspecialchars($profile_role) ?></span>
           </span>
           <span class="lms-foldernav-profile-chevron"><?= $ico_chevron ?></span>
         </button>

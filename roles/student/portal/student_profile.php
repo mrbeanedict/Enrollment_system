@@ -382,8 +382,9 @@ if ($course_line === '') { $course_line = 'Senior High School'; }
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Profile — SHS Enrollment</title>
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_student.css') ?>">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_lms.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_lms.css') ?>">
 </head>
-<body class="student-layout<?= $is_lms_mode ? ' lms-layout' : '' ?>">
+<body class="student-layout<?= $is_lms_mode ? ' lms-layout lms-warm-bg' : '' ?>">
   <?php include_once $is_lms_mode ? BASE_PATH . '/shared/includes/lms_navbar.php' : BASE_PATH . '/shared/includes/student_sidebar.php'; ?>
 
   <div class="student-main">

@@ -140,20 +140,21 @@ unset($_SESSION['tq_flash'], $_SESSION['tq_flash_type']);
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Take Quiz — SHS Enrollment</title>
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_student.css') ?>">
+    <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_lms.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_lms.css') ?>">
     <style>
       .tq-back { font-size:12px; color:#5A5A72; text-decoration:none; display:inline-block; margin-bottom:.75rem; }
-      .tq-back:hover { color:var(--brand-primary); }
+      .tq-back:hover { color:var(--lms-ink); }
       .tq-timer { font-size:13px; font-weight:700; color:#C0392B; margin-bottom:1rem; }
-      .tq-question { border-bottom:0.5px solid #EBEBF0; padding:14px 0; }
+      .tq-question { border-bottom:1px solid var(--lms-border-2); padding:14px 0; }
       .tq-question:last-child { border-bottom:none; }
       .tq-qtext { font-weight:600; font-size:14px; color:#1A1A2E; margin-bottom:8px; }
       .tq-choice { display:flex; align-items:center; gap:8px; font-size:13px; color:#333; padding:4px 0; }
-      .btn-primary-gb { height:38px; padding:0 18px; background:var(--brand-primary); border:none; border-radius:8px; color:#fff; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; margin-top:1rem; }
-      .btn-primary-gb:hover { background:var(--brand-primary-hover); }
+      .btn-primary-gb { height:38px; padding:0 18px; background:var(--lms-ink); border:none; border-radius:8px; color:#fff; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; margin-top:1rem; }
+      .btn-primary-gb:hover { background:var(--lms-ink-hover); }
       .tq-result { font-size:20px; font-weight:700; color:#1A6B4A; background:#EBF7F2; border:0.5px solid #A8D9C5; border-radius:10px; padding:20px; text-align:center; }
     </style>
 </head>
-<body class="student-layout lms-layout">
+<body class="student-layout lms-layout lms-warm-bg">
 <?php if (!$is_student): ?>
   <p>You are not logged in. Please <a href="lms_login">log in</a> to access this page.</p>
 

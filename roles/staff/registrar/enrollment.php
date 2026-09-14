@@ -1659,9 +1659,6 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
   <div class="staff-main">
     <div class="staff-topbar">
       <div class="staff-topbar-left">
-        <button class="btn-sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
-          <span></span><span></span><span></span>
-        </button>
         <div class="staff-topbar-title">
           Enrollment
           <span class="staff-topbar-subtitle">Step <?= $step ?> of 5 — <?= htmlspecialchars($steps[$step] ?? '') ?></span>
@@ -2401,10 +2398,6 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
 <?php endif; ?>
 
 <script>
-const sidebarToggle = document.getElementById('sidebarToggle');
-const sidebar = document.getElementById('staffSidebar');
-sidebarToggle?.addEventListener('click', () => sidebar.classList.toggle('open'));
-
 // ── Step 2: inline Strand Shift edit toggle ─────────────────────────────
 function toggleStrandShift() {
   const row = document.getElementById('strand-shift-row');
