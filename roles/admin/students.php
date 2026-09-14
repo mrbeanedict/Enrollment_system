@@ -2,12 +2,7 @@
 session_start();
 require_once __DIR__ . '/../../bootstrap.php';
 
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header("Location: " . APP_URL . "/login"); exit();
-}
-if ($_SESSION['role'] !== 'admin') {
-    header("Location: " . APP_URL . "/login"); exit();
-}
+require_login('admin');
 
 header("Cache-Control: no-store, no-cache, must-revalidate");
 header("Pragma: no-cache");

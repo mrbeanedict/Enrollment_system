@@ -3,12 +3,7 @@ session_start();
 require_once __DIR__ . '/../../bootstrap.php';
 require_once __DIR__ . '/../../config/mail.php';
 
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header("Location: " . APP_URL . "/login"); exit();
-}
-if ($_SESSION['role'] !== 'admin') {
-    header("Location: " . APP_URL . "/login"); exit();
-}
+require_login('admin');
 
 // Departments a staff account can be provisioned into (excludes 'faculty' —
 // teachers are provisioned separately via admin/teacher_accounts.php).

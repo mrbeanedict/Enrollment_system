@@ -2,12 +2,7 @@
 session_start();
 require_once __DIR__ . '/../../bootstrap.php';
 
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header("Location: " . APP_URL . "/login"); exit();
-}
-if ($_SESSION['role'] !== 'admin') {
-    header("Location: " . APP_URL . "/login"); exit();
-}
+require_login('admin');
 
 // ── Auto-create + seed tuition_fees table if missing (same bootstrap as
 //    payment.php, so this page works standalone even before treasury has
