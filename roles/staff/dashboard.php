@@ -6,11 +6,11 @@ require_once __DIR__ . '/../../bootstrap.php';
 // this only inside staff_sidebar.php's own guard is too late here, since
 // this page already prints <head>/<style> before including it, and a
 // header() redirect after output has started fails silently (with a
-// "headers already sent" warning) instead of actually redirecting.
-if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') !== 'staff') {
-    header("Location: " . APP_URL . "/login");
-    exit();
-}
+// "headers already sent" warning) instead of actually redirecting. The
+// not-logged-in-at-all case is left to the inline check further down
+// (this page's own "You are not logged in" message), so onNotLoggedIn
+// is 'ignore' here rather than redirecting immediately.
+require_login('staff', null, 'redirect', 'ignore');
 guard_password_change('change_password');
 ?>
 <!DOCTYPE html>

@@ -5,10 +5,7 @@ session_start();
 require_once __DIR__ . '/../../../bootstrap.php';
 
 // ── Auth guard ─────────────────────────────────────────────────────────────
-if (!isset($_SESSION['user_id'])) {
-    header("Location: " . APP_URL . "/login");
-    exit();
-}
+require_login();
 guard_password_change(APP_URL . '/roles/staff/change_password');
 
 $is_admin = isset($_SESSION['role']) && $_SESSION['role'] === 'admin';

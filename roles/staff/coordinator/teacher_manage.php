@@ -3,9 +3,7 @@ session_start();
 require_once __DIR__ . '/../../../bootstrap.php';
 require_once __DIR__ . '/../../../config/mail.php';
 
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header("Location: " . APP_URL . "/login"); exit();
-}
+require_login();
 guard_password_change(APP_URL . '/roles/staff/change_password');
 
 $role       = $_SESSION['role']       ?? '';

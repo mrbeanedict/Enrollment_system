@@ -2,9 +2,7 @@
 session_start();
 require_once __DIR__ . '/../../bootstrap.php';
 
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || ($_SESSION['role'] ?? '') !== 'staff') {
-    header("Location: " . APP_URL . "/login"); exit();
-}
+require_login('staff');
 
 // Nothing to force — send them on to the normal dashboard.
 if (empty($_SESSION['must_change_password'])) {
