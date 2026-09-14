@@ -75,6 +75,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['post_lesson'])) {
                 if (!in_array($ext, LESSON_ALLOWED_EXT, true) || $size > LESSON_MAX_BYTES) {
                     $_SESSION['ls_flash'] = 'Attachment must be PDF, Word, PowerPoint, JPG, or PNG — 10 MB max.';
                     $_SESSION['ls_flash_type'] = 'error';
+                } elseif (!upload_content_matches_ext($_FILES['attachment']['tmp_name'], $ext)) {
+                    $_SESSION['ls_flash'] = 'This file\'s content does not match its extension. Please re-check the file.';
+                    $_SESSION['ls_flash_type'] = 'error';
                 } else {
                     $stored_name = uniqid('lesson_', true) . '.' . $ext;
                     $dest = __DIR__ . '/../../uploads/lesson_attachments/' . $stored_name;
@@ -316,7 +319,26 @@ unset($_SESSION['ls_flash'], $_SESSION['ls_flash_type']);
               <input type="hidden" name="school_year" value="<?= htmlspecialchars($sel_sy) ?>">
               <input type="text" name="title" placeholder="Lesson title" required>
               <textarea name="body" placeholder="Lesson content" required></textarea>
-              <input type="file" name="attachment" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png">
+              <div class="attach-upload-control">
+                <label class="attach-dropzone" for="lessonAttachment">
+                  <input type="file" id="lessonAttachment" name="attachment" accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png" hidden>
+                  <svg class="attach-dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M20 16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg>
+                  <span class="attach-dropzone-text"><strong>Click to upload</strong> or drag and drop</span>
+                  <span class="field-hint">PDF, Word, PowerPoint, JPG, or PNG — 10 MB max.</span>
+                </label>
+                <div class="attach-file-card" style="display:none;">
+                  <div class="attach-icon"></div>
+                  <div class="attach-file-body">
+                    <span class="attach-file-name"></span>
+                    <div class="attach-file-meta"></div>
+                    <div class="attach-file-actions">
+                      <button type="button" class="attach-change-btn">Change</button>
+                      <button type="button" class="attach-remove-btn">Remove</button>
+                    </div>
+                  </div>
+                </div>
+                <button type="button" class="attach-add-btn" title="Multiple attachments per lesson are coming soon">+ Add attachment</button>
+              </div>
               <button type="submit" name="post_lesson" class="btn-primary-ls">Post Lesson</button>
             </form>
 
@@ -331,9 +353,12 @@ unset($_SESSION['ls_flash'], $_SESSION['ls_flash_type']);
                     <?= $l['updated_at'] ? ' · edited ' . date('M j, Y g:i A', strtotime($l['updated_at'])) : '' ?>
                   </div>
                   <div class="ls-item-body"><?= nl2br(htmlspecialchars($l['body'])) ?></div>
-                  <?php if ($l['attachment_path']): ?>
+                  <?php if ($l['attachment_path']): $fi = file_icon_meta($l['attachment_original_name']); ?>
                     <div class="ls-item-attachment">
-                      <a href="lesson_attachment?id=<?= (int)$l['lesson_id'] ?>" target="_blank">📎 <?= htmlspecialchars($l['attachment_original_name']) ?></a>
+                      <a href="lesson_attachment?id=<?= (int)$l['lesson_id'] ?>" target="_blank" class="attach-chip">
+                        <span class="attach-icon <?= $fi['cls'] ?>"><?= htmlspecialchars($fi['label']) ?></span>
+                        <span class="attach-chip-name"><?= htmlspecialchars($l['attachment_original_name']) ?></span>
+                      </a>
                     </div>
                   <?php endif; ?>
                   <div class="ls-item-actions">
@@ -404,6 +429,91 @@ unset($_SESSION['ls_flash'], $_SESSION['ls_flash_type']);
           document.getElementById('editLessonForm').submit();
         });
       });
+    });
+
+    // ── Attachment dropzone (click-to-browse + drag-and-drop) ─────────────
+    // Purely a nicer picker for the same <input type="file"> the form already
+    // posts — no separate upload step, the file still travels with the rest
+    // of the form on submit.
+    document.querySelectorAll('.attach-upload-control').forEach(function (control) {
+      var input    = control.querySelector('input[type="file"]');
+      var dropzone = control.querySelector('.attach-dropzone');
+      var card     = control.querySelector('.attach-file-card');
+      if (!input || !dropzone || !card) return;
+
+      var icon      = card.querySelector('.attach-icon');
+      var nameEl    = card.querySelector('.attach-file-name');
+      var metaEl    = card.querySelector('.attach-file-meta');
+      var changeBtn = card.querySelector('.attach-change-btn');
+      var removeBtn = card.querySelector('.attach-remove-btn');
+
+      function iconMeta(filename) {
+        var ext = (filename.split('.').pop() || '').toUpperCase();
+        var cls = 'attach-icon-generic';
+        if (ext === 'PDF') cls = 'attach-icon-pdf';
+        else if (['JPG', 'JPEG', 'PNG', 'GIF', 'WEBP'].indexOf(ext) !== -1) cls = 'attach-icon-img';
+        else if (['DOC', 'DOCX'].indexOf(ext) !== -1) cls = 'attach-icon-doc';
+        else if (['PPT', 'PPTX'].indexOf(ext) !== -1) cls = 'attach-icon-ppt';
+        return { label: ext, cls: cls };
+      }
+
+      function showFile(file) {
+        var meta = iconMeta(file.name);
+        icon.textContent = meta.label;
+        icon.className = 'attach-icon ' + meta.cls;
+        nameEl.textContent = file.name;
+        metaEl.textContent = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+        dropzone.style.display = 'none';
+        card.style.display = '';
+      }
+
+      function reset() {
+        dropzone.style.display = '';
+        card.style.display = 'none';
+      }
+
+      input.addEventListener('change', function () {
+        if (input.files && input.files.length > 0) {
+          showFile(input.files[0]);
+        } else {
+          reset();
+        }
+      });
+
+      if (changeBtn) changeBtn.addEventListener('click', function () { input.click(); });
+      if (removeBtn) {
+        removeBtn.addEventListener('click', function () {
+          input.value = '';
+          reset();
+        });
+      }
+
+      ['dragenter', 'dragover'].forEach(function (evt) {
+        dropzone.addEventListener(evt, function (e) {
+          e.preventDefault();
+          dropzone.classList.add('is-dragover');
+        });
+      });
+      ['dragleave', 'dragend'].forEach(function (evt) {
+        dropzone.addEventListener(evt, function () { dropzone.classList.remove('is-dragover'); });
+      });
+      dropzone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        dropzone.classList.remove('is-dragover');
+        var dt = e.dataTransfer;
+        if (dt && dt.files && dt.files.length) {
+          input.files = dt.files;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+
+      reset();
+    });
+
+    // Prevent a file dropped outside a dropzone from navigating the browser
+    // away from the page.
+    ['dragover', 'drop'].forEach(function (evt) {
+      window.addEventListener(evt, function (e) { e.preventDefault(); });
     });
   </script>
 <?php endif; ?>

@@ -323,7 +323,7 @@ function school_year_months(string $schoolYear): array
           input.disabled = true;
           input.classList.remove('gb-saved', 'gb-save-error');
 
-          fetch('../ajax/teacher_save_attendance', { method: 'POST', body: body })
+          fetch('<?= APP_URL ?>/ajax/teacher_save_attendance', { method: 'POST', body: body })
             .then(function (r) { return r.json(); })
             .then(function (data) {
               input.disabled = false;

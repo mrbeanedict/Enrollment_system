@@ -2452,7 +2452,7 @@ document.addEventListener('click', (e) => {
 
 async function fetchSuggestions(q) {
   try {
-    const res = await fetch('../ajax/student_number_autocomplete?q=' + encodeURIComponent(q));
+    const res = await fetch('<?= APP_URL ?>/ajax/student_number_autocomplete?q=' + encodeURIComponent(q));
     const data = await res.json();
     renderSuggestions(data.results || []);
   } catch (e) {
@@ -2496,7 +2496,7 @@ async function runSearch(query) {
   selectForm.classList.add('hidden');
 
   try {
-    const res = await fetch('../ajax/student_number_search?q=' + encodeURIComponent(query));
+    const res = await fetch('<?= APP_URL ?>/ajax/student_number_search?q=' + encodeURIComponent(query));
     const data = await res.json();
     renderResult(data);
   } catch (e) {

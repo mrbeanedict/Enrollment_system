@@ -9,8 +9,6 @@ if ($_SESSION['role'] !== 'admin') {
     header("Location: " . APP_URL . "/roles/staff/dashboard"); exit();
 }
 
-const DEFAULT_TEACHER_PASSWORD = 'Teacher123!';
-
 // Given-name-only username, lowercase letters only; falls back to
 // appending the teacher_id on a uniqueness collision (none exist today,
 // but this keeps future additions safe).
@@ -31,14 +29,34 @@ function generate_teacher_username($conn, $given_name, $teacher_id) {
     return $username;
 }
 
+// An 8-character temporary password from an unambiguous charset (no 0/O,
+// 1/l/I) — same convention as admin/staff_manage.php's
+// generate_temp_password(), never derived from any account information,
+// only ever held in memory for this one request (display), only its
+// bcrypt hash is stored.
+function generate_temp_password() {
+    $charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    $max     = strlen($charset) - 1;
+    $pw      = '';
+    for ($i = 0; $i < 8; $i++) {
+        $pw .= $charset[random_int(0, $max)];
+    }
+    return $pw;
+}
+
+// Returns ['username' => ..., 'password' => ...] — the plaintext password
+// is only ever the caller's to display once; must_change_password forces
+// the teacher to set their own on first login (see teacher_login.php /
+// teacher_change_password.php, which already gate on this column).
 function provision_teacher_account($conn, $teacher_id, $given_name) {
     $username = generate_teacher_username($conn, $given_name, $teacher_id);
-    $hash     = password_hash(DEFAULT_TEACHER_PASSWORD, PASSWORD_BCRYPT);
+    $temp_password = generate_temp_password();
+    $hash = password_hash($temp_password, PASSWORD_BCRYPT);
 
     mysqli_begin_transaction($conn);
     $stmt = mysqli_prepare($conn, "
-        INSERT INTO users (username, password_hash, role, is_active, created_at)
-        VALUES (?, ?, 'teacher', 1, CURRENT_TIMESTAMP)
+        INSERT INTO users (username, password_hash, role, is_active, must_change_password, created_at)
+        VALUES (?, ?, 'teacher', 1, 1, CURRENT_TIMESTAMP)
     ");
     mysqli_stmt_bind_param($stmt, "ss", $username, $hash);
     mysqli_stmt_execute($stmt);
@@ -51,12 +69,13 @@ function provision_teacher_account($conn, $teacher_id, $given_name) {
     mysqli_stmt_close($upd);
     mysqli_commit($conn);
 
-    return $username;
+    return ['username' => $username, 'password' => $temp_password];
 }
 
 $success = '';
 $error   = '';
-$created_usernames = [];
+$new_credentials  = null; // single create — one-time reveal, mirrors admin/staff_manage.php
+$bulk_credentials = [];   // create-all-missing — one row per newly provisioned account
 
 // "Family, Given[ Middle][ Suffix]" -> two-letter avatar initials — same
 // technique as students.php/enrollments.php's name_initials().
@@ -72,8 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_account'])) {
     $teacher_id  = (int) ($_POST['teacher_id'] ?? 0);
     $given_name  = trim($_POST['given_name'] ?? '');
     if ($teacher_id && $given_name) {
-        $username = provision_teacher_account($conn, $teacher_id, $given_name);
-        $success = "Account created: username \"$username\", password \"" . DEFAULT_TEACHER_PASSWORD . "\".";
+        $new_credentials = provision_teacher_account($conn, $teacher_id, $given_name);
     }
 }
 
@@ -89,12 +107,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_all_missing'])
     mysqli_stmt_close($missing_stmt);
 
     foreach ($missing as $m) {
-        $created_usernames[] = provision_teacher_account($conn, $m['teacher_id'], $m['given_name']);
+        $bulk_credentials[] = provision_teacher_account($conn, $m['teacher_id'], $m['given_name']);
     }
 
-    if ($created_usernames) {
-        $success = count($created_usernames) . " account(s) created with password \"" . DEFAULT_TEACHER_PASSWORD . "\": " . implode(', ', $created_usernames);
-    } else {
+    if (!$bulk_credentials) {
         $success = "All teachers already have accounts.";
     }
 }
@@ -202,7 +218,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             </button>
             <?php if ($missing_count > 0): ?>
               <form method="POST" action="teacher_accounts"
-                    data-confirm="Create accounts for all <?= $missing_count ?> teacher(s) without a login? Each will get username = their given name and password \"<?= DEFAULT_TEACHER_PASSWORD ?>\".">
+                    data-confirm="Create accounts for all <?= $missing_count ?> teacher(s) without a login? Each will get a random temporary password (shown once after creation) and must change it on first login.">
                 <button type="submit" name="create_all_missing" class="btn-add-all">Create All Missing (<?= $missing_count ?>)</button>
               </form>
             <?php endif; ?>
@@ -391,6 +407,178 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
       });
     });
   </script>
+
+  <?php if ($new_credentials): ?>
+    <div class="modal-overlay" id="credOverlay">
+      <div class="modal-panel cred-modal">
+        <h2>Teacher Account Created</h2>
+
+        <div class="cred-rows">
+          <div class="cred-row">
+            <span class="cred-row-label">Username</span>
+            <span class="cred-row-value" id="credUsername"><?= htmlspecialchars($new_credentials['username']) ?></span>
+          </div>
+          <div class="cred-row">
+            <span class="cred-row-label">Temporary Password</span>
+            <span class="cred-row-value" id="credPassword"><?= htmlspecialchars($new_credentials['password']) ?></span>
+          </div>
+        </div>
+
+        <p class="cred-note"><strong>This password will not be shown again.</strong> Copy it before closing — a password change is required on first login.</p>
+
+        <div class="cred-actions">
+          <button type="button" class="btn-cred-copy" id="btnCopyCred">Copy Credentials</button>
+          <button type="button" class="btn-cred-done" id="btnDoneCred">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var overlay = document.getElementById('credOverlay');
+        var copyBtn = document.getElementById('btnCopyCred');
+        var doneBtn = document.getElementById('btnDoneCred');
+        var username = document.getElementById('credUsername').textContent;
+        var password = document.getElementById('credPassword').textContent;
+        var hasCopied = false; // this password exists nowhere else once the modal closes
+
+        copyBtn.addEventListener('click', function () {
+          var text = 'Username: ' + username + '\nTemporary Password: ' + password;
+          var done = function () {
+            hasCopied = true;
+            copyBtn.textContent = 'Copied!';
+            copyBtn.classList.add('copied');
+            setTimeout(function () {
+              copyBtn.textContent = 'Copy Credentials';
+              copyBtn.classList.remove('copied');
+            }, 1500);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, done);
+          } else {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            done();
+          }
+        });
+
+        function closeCredModal() { overlay.remove(); }
+
+        doneBtn.addEventListener('click', function () {
+          if (hasCopied) { closeCredModal(); return; }
+
+          var warning = 'You haven’t copied the temporary password yet. It cannot be recovered once this closes.';
+          if (typeof Swal === 'undefined') {
+            if (window.confirm(warning + ' Close anyway?')) closeCredModal();
+            return;
+          }
+          Swal.fire({
+            title: 'Close without copying?',
+            text: warning,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#C0392B',
+            cancelButtonColor: '#386641',
+            confirmButtonText: 'Close anyway',
+            cancelButtonText: 'Go back and copy'
+          }).then(function (result) {
+            if (result.isConfirmed) closeCredModal();
+          });
+        });
+      })();
+    </script>
+  <?php endif; ?>
+
+  <?php if ($bulk_credentials): ?>
+    <div class="modal-overlay" id="bulkCredOverlay">
+      <div class="modal-panel cred-modal">
+        <h2><?= count($bulk_credentials) ?> Teacher Account(s) Created</h2>
+
+        <div class="cred-rows" style="max-height:320px; overflow-y:auto;">
+          <?php foreach ($bulk_credentials as $cred): ?>
+            <div class="cred-row">
+              <span class="cred-row-label"><?= htmlspecialchars($cred['username']) ?></span>
+              <span class="cred-row-value"><?= htmlspecialchars($cred['password']) ?></span>
+            </div>
+          <?php endforeach; ?>
+        </div>
+
+        <p class="cred-note"><strong>These passwords will not be shown again.</strong> Copy them before closing — each account must change its password on first login.</p>
+
+        <div class="cred-actions">
+          <button type="button" class="btn-cred-copy" id="btnCopyBulkCred">Copy All Credentials</button>
+          <button type="button" class="btn-cred-done" id="btnDoneBulkCred">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        var overlay = document.getElementById('bulkCredOverlay');
+        var copyBtn = document.getElementById('btnCopyBulkCred');
+        var doneBtn = document.getElementById('btnDoneBulkCred');
+        var pairs = <?= json_encode(array_map(function ($c) {
+            return $c['username'] . "\t" . $c['password'];
+        }, $bulk_credentials), JSON_HEX_TAG | JSON_HEX_APOS) ?>;
+        var hasCopied = false;
+
+        copyBtn.addEventListener('click', function () {
+          var text = pairs.map(function (p) {
+            var parts = p.split('\t');
+            return 'Username: ' + parts[0] + '  Temporary Password: ' + parts[1];
+          }).join('\n');
+          var done = function () {
+            hasCopied = true;
+            copyBtn.textContent = 'Copied!';
+            copyBtn.classList.add('copied');
+            setTimeout(function () {
+              copyBtn.textContent = 'Copy All Credentials';
+              copyBtn.classList.remove('copied');
+            }, 1500);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, done);
+          } else {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            done();
+          }
+        });
+
+        function closeCredModal() { overlay.remove(); }
+
+        doneBtn.addEventListener('click', function () {
+          if (hasCopied) { closeCredModal(); return; }
+
+          var warning = 'You haven’t copied these temporary passwords yet. They cannot be recovered once this closes.';
+          if (typeof Swal === 'undefined') {
+            if (window.confirm(warning + ' Close anyway?')) closeCredModal();
+            return;
+          }
+          Swal.fire({
+            title: 'Close without copying?',
+            text: warning,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#C0392B',
+            cancelButtonColor: '#386641',
+            confirmButtonText: 'Close anyway',
+            cancelButtonText: 'Go back and copy'
+          }).then(function (result) {
+            if (result.isConfirmed) closeCredModal();
+          });
+        });
+      })();
+    </script>
+  <?php endif; ?>
 
 </body>
 </html>

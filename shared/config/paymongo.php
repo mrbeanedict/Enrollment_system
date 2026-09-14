@@ -1,14 +1,16 @@
 <?php
 
+require_once __DIR__ . '/../helpers/env.php';
+load_env();
+
 // ── PayMongo credentials ─────────────────────────────────────────────────
-// Same convention as config/mail.php — hardcoded constants, no .env
-// pattern exists in this project. Paste your real PayMongo TEST keys
-// (from the PayMongo Dashboard → Developers → API Keys) directly into
-// this file yourself; never paste a secret key into chat/tickets/etc.
-// Swap to the sk_live_.../pk_live_... pair only once you're ready to
-// accept real payments.
-define('PAYMONGO_SECRET_KEY', 'sk_test_REDACTED');
-define('PAYMONGO_PUBLIC_KEY', 'pk_test_REDACTED');
+// Read from the untracked .env file (see .env.example) rather than
+// hardcoded here — keeps API keys out of git. Set PAYMONGO_SECRET_KEY /
+// PAYMONGO_PUBLIC_KEY to your TEST keys locally (PayMongo Dashboard →
+// Developers → API Keys); swap to the sk_live_.../pk_live_... pair only in
+// the production .env once you're ready to accept real payments.
+define('PAYMONGO_SECRET_KEY', $_ENV['PAYMONGO_SECRET_KEY'] ?? '');
+define('PAYMONGO_PUBLIC_KEY', $_ENV['PAYMONGO_PUBLIC_KEY'] ?? '');
 define('PAYMONGO_API_BASE', 'https://api.paymongo.com/v1');
 
 // Minimal curl-based client — PayMongo's REST API is simple enough that

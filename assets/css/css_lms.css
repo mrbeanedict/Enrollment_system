@@ -804,3 +804,137 @@ body.lms-warm-bg .student-topbar-subtitle {
 .subj-tabstrip a:hover { color: var(--lms-ink); }
 .subj-tabstrip a.active { color: var(--lms-ink); border-bottom-color: var(--lms-ink); }
 
+/* ─── Attachment dropzone + file chip (student_lessons.php,
+   student_assignments.php) ────────────────────────────────────────────
+   Same visual language as roles/student/public/admission.php's requirement
+   dropzone and roles/teacher/teacher_lessons.php's lesson-attachment
+   widget, so "attach a file" looks and behaves the same everywhere in the
+   system, just recolored with the LMS's own ink/border tokens. */
+
+.attach-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  padding: 16px 12px;
+  border: 1.5px dashed var(--lms-border, #CFE9D4);
+  border-radius: 8px;
+  background: #FBFDFC;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.attach-dropzone:hover,
+.attach-dropzone.is-dragover {
+  border-color: var(--lms-ink);
+  background: var(--lms-border-2, #E3F5E6);
+}
+.attach-dropzone-icon { width: 20px; height: 20px; color: #8A9A90; margin-bottom: 2px; }
+.attach-dropzone-text { font-size: 12.5px; color: #5A6A60; }
+.attach-dropzone-text strong { color: var(--lms-ink); }
+.attach-dropzone .field-hint { display: block; margin-top: 2px; font-size: 11px; color: #8A8A9A; }
+
+.attach-upload-control { display: flex; flex-direction: column; gap: 8px; max-width: 420px; }
+
+.attach-file-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--lms-border-2, #E3F5E6);
+  border-radius: 8px;
+  background: #FBFDFC;
+}
+.attach-file-body { flex: 1; min-width: 0; }
+.attach-file-name {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1A1A2E;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attach-file-meta { font-size: 11px; color: #8A8A9A; margin-top: 2px; }
+.attach-file-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+.attach-change-btn,
+.attach-remove-btn {
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 0.5px solid transparent;
+  font-family: inherit;
+}
+.attach-change-btn { background: var(--lms-border-2, #E3F5E6); color: var(--lms-ink); border-color: var(--lms-border, #CFE9D4); }
+.attach-change-btn:hover { background: var(--lms-border, #CFE9D4); }
+.attach-remove-btn { background: #FDF0EF; color: #C0392B; border-color: #F0B8B2; }
+.attach-remove-btn:hover { background: #F5C6C2; }
+
+/* "+ Add attachment" — visibly present but intentionally not wired up yet
+   (multi-attachment support). Styled like the change/remove chips so it
+   reads as a real, if quiet, control rather than a disabled stub. */
+.attach-add-btn {
+  align-self: flex-start;
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  background: #fff;
+  color: #5A6A60;
+  border: 0.5px dashed var(--lms-border, #CFE9D4);
+}
+.attach-add-btn:hover { border-color: var(--lms-ink); color: var(--lms-ink); }
+
+/* File-type icon badge — same color coding as fileIconMeta() in
+   admission.php so a given extension always reads the same color across
+   the whole system. */
+.attach-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: #8A9A90;
+}
+.attach-icon-pdf { background: #E74C3C; }
+.attach-icon-img { background: #3B82C4; }
+.attach-icon-doc { background: #2E5FA3; }
+.attach-icon-ppt { background: #D35400; }
+.attach-icon-generic { background: #8A9A90; }
+
+/* Compact link version — an already-posted attachment or submission shown
+   inline, in place of a bare "📎 filename.ext" line. */
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 6px;
+  border: 0.5px solid var(--lms-border-2, #E3F5E6);
+  border-radius: 999px;
+  background: #FBFDFC;
+  text-decoration: none;
+  max-width: 100%;
+}
+.attach-chip:hover { border-color: var(--lms-ink); background: var(--lms-border-2, #E3F5E6); }
+.attach-chip .attach-icon { width: 24px; height: 24px; font-size: 8px; }
+.attach-chip-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1A1A2E;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+

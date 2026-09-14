@@ -58,6 +58,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_work']) && $is
             if (!in_array($ext, SUB_ALLOWED_EXT, true) || $size > SUB_MAX_BYTES) {
                 $_SESSION['as_flash'] = 'File must be PDF, Word, PowerPoint, JPG, PNG, or ZIP — 15 MB max.';
                 $_SESSION['as_flash_type'] = 'error';
+            } elseif (!upload_content_matches_ext($_FILES['work']['tmp_name'], $ext)) {
+                $_SESSION['as_flash'] = 'This file\'s content does not match its extension. Please re-check the file.';
+                $_SESSION['as_flash_type'] = 'error';
             } else {
                 $stored_name = uniqid('submission_', true) . '.' . $ext;
                 $dest = __DIR__ . '/../../uploads/gradebook_submissions/' . $stored_name;
@@ -199,8 +202,7 @@ unset($_SESSION['as_flash'], $_SESSION['as_flash_type']);
       .as-item-title { font-weight:600; font-size:14px; color:#1A1A2E; }
       .as-item-meta { font-size:11px; color:#8A8A9A; margin:2px 0 8px; }
       .as-overdue { color:#C0392B; font-weight:600; }
-      .as-form { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-      .as-form input[type="file"] { font-size:12px; }
+      .as-form { display:flex; gap:10px; align-items:flex-start; flex-wrap:wrap; }
       .btn-sm { height:32px; padding:0 12px; border:1px solid var(--lms-border); border-radius:6px; background:#fff; font-size:12px; font-family:inherit; cursor:pointer; color:#5A5A72; }
       .btn-sm:hover { border-color:var(--lms-ink); color:var(--lms-ink); }
       .as-remove-btn:hover { border-color:#E0A8A8; color:#C0392B; }
@@ -263,7 +265,7 @@ unset($_SESSION['as_flash'], $_SESSION['as_flash_type']);
             $it_stmt = mysqli_prepare($conn, "
                 SELECT gi.item_id, gi.title, gi.due_date, gi.category,
                        sub.subject_name,
-                       gsub.submitted_at, gsub.is_late
+                       gsub.submitted_at, gsub.is_late, gsub.original_filename
                 FROM gradebook_items gi
                 JOIN subjects sub ON sub.subject_id = gi.subject_id
                 JOIN section_subjects ss ON ss.section_id = gi.section_id AND ss.subject_id = gi.subject_id AND ss.semester = ?
@@ -276,7 +278,7 @@ unset($_SESSION['as_flash'], $_SESSION['as_flash_type']);
             $it_stmt = mysqli_prepare($conn, "
                 SELECT gi.item_id, gi.title, gi.due_date, gi.category,
                        sub.subject_name,
-                       gsub.submitted_at, gsub.is_late
+                       gsub.submitted_at, gsub.is_late, gsub.original_filename
                 FROM gradebook_items gi
                 JOIN subjects sub ON sub.subject_id = gi.subject_id
                 JOIN section_subjects ss ON ss.section_id = gi.section_id AND ss.subject_id = gi.subject_id AND ss.semester = ?
@@ -361,16 +363,38 @@ unset($_SESSION['as_flash'], $_SESSION['as_flash_type']);
                     <?php if ($isOverdue): ?> <span class="as-overdue">— Overdue</span><?php endif; ?>
                   </div>
 
-                  <?php if ($it['submitted_at']): ?>
+                  <?php if ($it['submitted_at']): $fi = file_icon_meta($it['original_filename'] ?? ''); ?>
                     <div class="as-submitted">
                       ✓ Submitted <?= date('M j, Y g:i A', strtotime($it['submitted_at'])) ?>
                       <?php if ($it['is_late']): ?><span class="as-late-tag">Late</span><?php endif; ?>
-                      <a href="submission_attachment?item_id=<?= (int)$it['item_id'] ?>" target="_blank">View</a>
+                      <a href="submission_attachment?item_id=<?= (int)$it['item_id'] ?>" target="_blank" class="attach-chip">
+                        <span class="attach-icon <?= $fi['cls'] ?>"><?= htmlspecialchars($fi['label']) ?></span>
+                        <span class="attach-chip-name"><?= htmlspecialchars($it['original_filename'] ?? 'View') ?></span>
+                      </a>
                     </div>
                     <form method="POST" enctype="multipart/form-data" class="as-form" style="margin-top:6px;">
                       <input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>">
                       <input type="hidden" name="return_qs" value="<?= htmlspecialchars($return_qs) ?>">
-                      <input type="file" name="work" required>
+                      <div class="attach-upload-control">
+                        <label class="attach-dropzone" for="work<?= (int)$it['item_id'] ?>">
+                          <input type="file" id="work<?= (int)$it['item_id'] ?>" name="work" required hidden>
+                          <svg class="attach-dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M20 16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg>
+                          <span class="attach-dropzone-text"><strong>Click to upload</strong> or drag and drop</span>
+                          <span class="field-hint">PDF, Word, PowerPoint, JPG, PNG, or ZIP — 15 MB max.</span>
+                        </label>
+                        <div class="attach-file-card" style="display:none;">
+                          <div class="attach-icon"></div>
+                          <div class="attach-file-body">
+                            <span class="attach-file-name"></span>
+                            <div class="attach-file-meta"></div>
+                            <div class="attach-file-actions">
+                              <button type="button" class="attach-change-btn">Change</button>
+                              <button type="button" class="attach-remove-btn">Remove</button>
+                            </div>
+                          </div>
+                        </div>
+                        <button type="button" class="attach-add-btn" title="Multiple attachments per submission are coming soon">+ Add attachment</button>
+                      </div>
                       <button type="submit" name="submit_work" class="btn-sm">Replace Submission</button>
                     </form>
                     <form method="POST" class="as-form" style="margin-top:6px;" data-confirm="Remove your submission? You can upload again before the due date." data-icon="warning">
@@ -382,7 +406,26 @@ unset($_SESSION['as_flash'], $_SESSION['as_flash_type']);
                     <form method="POST" enctype="multipart/form-data" class="as-form">
                       <input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>">
                       <input type="hidden" name="return_qs" value="<?= htmlspecialchars($return_qs) ?>">
-                      <input type="file" name="work" required>
+                      <div class="attach-upload-control">
+                        <label class="attach-dropzone" for="work<?= (int)$it['item_id'] ?>">
+                          <input type="file" id="work<?= (int)$it['item_id'] ?>" name="work" required hidden>
+                          <svg class="attach-dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M20 16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/></svg>
+                          <span class="attach-dropzone-text"><strong>Click to upload</strong> or drag and drop</span>
+                          <span class="field-hint">PDF, Word, PowerPoint, JPG, PNG, or ZIP — 15 MB max.</span>
+                        </label>
+                        <div class="attach-file-card" style="display:none;">
+                          <div class="attach-icon"></div>
+                          <div class="attach-file-body">
+                            <span class="attach-file-name"></span>
+                            <div class="attach-file-meta"></div>
+                            <div class="attach-file-actions">
+                              <button type="button" class="attach-change-btn">Change</button>
+                              <button type="button" class="attach-remove-btn">Remove</button>
+                            </div>
+                          </div>
+                        </div>
+                        <button type="button" class="attach-add-btn" title="Multiple attachments per submission are coming soon">+ Add attachment</button>
+                      </div>
                       <button type="submit" name="submit_work" class="btn-sm">Submit</button>
                     </form>
                   <?php endif; ?>
@@ -395,6 +438,92 @@ unset($_SESSION['as_flash'], $_SESSION['as_flash_type']);
 
     </div>
   </div>
+  <script>
+    // ── Attachment dropzone (click-to-browse + drag-and-drop) ─────────────
+    // Purely a nicer picker for the same <input type="file"> the form
+    // already posts — no separate upload step, the file still travels with
+    // the rest of the form on submit.
+    document.querySelectorAll('.attach-upload-control').forEach(function (control) {
+      var input    = control.querySelector('input[type="file"]');
+      var dropzone = control.querySelector('.attach-dropzone');
+      var card     = control.querySelector('.attach-file-card');
+      if (!input || !dropzone || !card) return;
+
+      var icon      = card.querySelector('.attach-icon');
+      var nameEl    = card.querySelector('.attach-file-name');
+      var metaEl    = card.querySelector('.attach-file-meta');
+      var changeBtn = card.querySelector('.attach-change-btn');
+      var removeBtn = card.querySelector('.attach-remove-btn');
+
+      function iconMeta(filename) {
+        var ext = (filename.split('.').pop() || '').toUpperCase();
+        var cls = 'attach-icon-generic';
+        if (ext === 'PDF') cls = 'attach-icon-pdf';
+        else if (['JPG', 'JPEG', 'PNG', 'GIF', 'WEBP'].indexOf(ext) !== -1) cls = 'attach-icon-img';
+        else if (['DOC', 'DOCX'].indexOf(ext) !== -1) cls = 'attach-icon-doc';
+        else if (['PPT', 'PPTX'].indexOf(ext) !== -1) cls = 'attach-icon-ppt';
+        return { label: ext, cls: cls };
+      }
+
+      function showFile(file) {
+        var meta = iconMeta(file.name);
+        icon.textContent = meta.label;
+        icon.className = 'attach-icon ' + meta.cls;
+        nameEl.textContent = file.name;
+        metaEl.textContent = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+        dropzone.style.display = 'none';
+        card.style.display = '';
+      }
+
+      function reset() {
+        dropzone.style.display = '';
+        card.style.display = 'none';
+      }
+
+      input.addEventListener('change', function () {
+        if (input.files && input.files.length > 0) {
+          showFile(input.files[0]);
+        } else {
+          reset();
+        }
+      });
+
+      if (changeBtn) changeBtn.addEventListener('click', function () { input.click(); });
+      if (removeBtn) {
+        removeBtn.addEventListener('click', function () {
+          input.value = '';
+          reset();
+        });
+      }
+
+      ['dragenter', 'dragover'].forEach(function (evt) {
+        dropzone.addEventListener(evt, function (e) {
+          e.preventDefault();
+          dropzone.classList.add('is-dragover');
+        });
+      });
+      ['dragleave', 'dragend'].forEach(function (evt) {
+        dropzone.addEventListener(evt, function () { dropzone.classList.remove('is-dragover'); });
+      });
+      dropzone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        dropzone.classList.remove('is-dragover');
+        var dt = e.dataTransfer;
+        if (dt && dt.files && dt.files.length) {
+          input.files = dt.files;
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+
+      reset();
+    });
+
+    // Prevent a file dropped outside a dropzone from navigating the browser
+    // away from the page.
+    ['dragover', 'drop'].forEach(function (evt) {
+      window.addEventListener(evt, function (e) { e.preventDefault(); });
+    });
+  </script>
 <?php endif; ?>
 </body>
 </html>

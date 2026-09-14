@@ -76,6 +76,28 @@ function guard_password_change(string $redirectPath, string $role = 'staff'): vo
     }
 }
 
+// Small colored file-type badge (PDF/DOC/PPT/image/generic) shown next to
+// an attachment's name in place of a bare paperclip emoji — shared by every
+// place an already-uploaded file (lesson attachment, assignment submission)
+// is linked back to a teacher or student. The CSS classes it returns
+// (attach-icon-*) are defined in both css_teacher.css and css_lms.css.
+function file_icon_meta(string $filename): array
+{
+    $ext = strtoupper(pathinfo($filename, PATHINFO_EXTENSION));
+    if ($ext === 'PDF') {
+        $cls = 'attach-icon-pdf';
+    } elseif (in_array($ext, ['JPG', 'JPEG', 'PNG', 'GIF', 'WEBP'], true)) {
+        $cls = 'attach-icon-img';
+    } elseif (in_array($ext, ['DOC', 'DOCX'], true)) {
+        $cls = 'attach-icon-doc';
+    } elseif (in_array($ext, ['PPT', 'PPTX'], true)) {
+        $cls = 'attach-icon-ppt';
+    } else {
+        $cls = 'attach-icon-generic';
+    }
+    return ['label' => $ext, 'cls' => $cls];
+}
+
 // PH SHS convention: a school year starting in June is labeled
 // "X-(X+1)" from June through the following May. Used to gate admission
 // so an admin-toggled year only actually opens the public form when
@@ -117,6 +139,31 @@ function req_doc_constraints(string $requirement_name): array {
         'hint'      => 'JPG, PNG, or PDF — 5 MB max.',
         'accept'    => '.pdf,.jpg,.jpeg,.png',
     ];
+}
+
+// Extension checks alone only look at the client-supplied filename, which
+// is trivial to spoof (e.g. renaming evil.php to evil.jpg). This adds a
+// magic-byte/MIME check on the actual uploaded content as defense-in-depth
+// — call it after the extension whitelist check, before move_uploaded_file().
+// Covers every extension accepted by any upload handler in this app.
+// docx/pptx/zip all share the same "application/zip" magic bytes (an
+// OOXML file is a zip container), so that's accepted for all three rather
+// than rejecting legitimate docx/pptx uploads.
+function upload_content_matches_ext(string $tmp_name, string $ext): bool
+{
+    $mime = @mime_content_type($tmp_name);
+    $allowed = [
+        'jpg'  => ['image/jpeg'],
+        'jpeg' => ['image/jpeg'],
+        'png'  => ['image/png'],
+        'pdf'  => ['application/pdf'],
+        'doc'  => ['application/msword', 'application/vnd.ms-office', 'application/x-cfb'],
+        'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'],
+        'ppt'  => ['application/vnd.ms-powerpoint', 'application/vnd.ms-office', 'application/x-cfb'],
+        'pptx' => ['application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/zip'],
+        'zip'  => ['application/zip'],
+    ];
+    return isset($allowed[$ext]) && in_array($mime, $allowed[$ext], true);
 }
 
 // Fixed, no-admin-setup calendar convention mapping a quarter to a
@@ -222,23 +269,10 @@ function has_outstanding_balance(mysqli $conn, int $enrollment_id): bool
 // ── Online payment simulation (GCash / Bank Transfer) ───────────────────
 // Staging table only — a submission here never touches `payments` (the
 // trusted ledger every balance calc reads from) until Treasury confirms
-// it. Auto-created here (loaded on every page) rather than duplicated in
-// each of the two pages that use it.
-mysqli_query($conn, "
-    CREATE TABLE IF NOT EXISTS online_payment_submissions (
-        submission_id     INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-        enrollment_id     INT NOT NULL,
-        amount            DECIMAL(10,2) NOT NULL,
-        payment_method    ENUM('GCash','Bank Transfer','Card','Maya','GrabPay') NOT NULL,
-        reference_no      VARCHAR(50) NOT NULL,
-        status            ENUM('pending','confirmed','rejected') NOT NULL DEFAULT 'pending',
-        submitted_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        reviewed_by       INT UNSIGNED NULL,
-        reviewed_at       TIMESTAMP NULL,
-        rejection_reason  VARCHAR(255) NULL,
-        FOREIGN KEY (enrollment_id) REFERENCES enrollments(enrollment_id)
-    )
-");
+// it. Schema lives in schema/online_payment_submissions.sql (the table
+// already exists in the live database; this file used to CREATE TABLE IF
+// NOT EXISTS on every page load, which was pure overhead once the table
+// existed).
 
 // Cosmetic simulation reference number only (e.g. "SIM-GC-20260830-A1B2")
 // — not a real financial identifier, so no strict sequence/uniqueness

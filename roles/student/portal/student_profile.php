@@ -49,6 +49,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_photo'])) {
         $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
         if (!in_array($ext, $photo_allowed_ext, true)) {
             $error = 'Photo must be a JPG or PNG file.';
+        } elseif (!upload_content_matches_ext($file['tmp_name'], $ext)) {
+            $error = 'This file\'s content does not match its extension. Please re-check the file.';
         } else {
             $stored_name = uniqid('student_', true) . '.' . $ext;
             $dest_dir    = __DIR__ . '/../../../uploads/profile_photos/';

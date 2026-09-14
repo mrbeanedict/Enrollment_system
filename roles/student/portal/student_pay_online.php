@@ -241,7 +241,7 @@ if ($logged_in) {
           document.getElementById('paymongoProcessing').style.display = '';
           document.getElementById('paymongoAmountHidden').value = amount;
 
-          fetch('../ajax/paymongo_create_checkout', {
+          fetch('<?= APP_URL ?>/ajax/paymongo_create_checkout', {
             method: 'POST',
             body: new FormData(document.getElementById('paymongoForm'))
           })
@@ -286,7 +286,7 @@ if ($logged_in) {
           var loader = document.getElementById('pageLoader');
           if (loader) loader.classList.add('show');
 
-          fetch('../ajax/paymongo_confirm_return')
+          fetch('<?= APP_URL ?>/ajax/paymongo_confirm_return')
             .then(function (r) { return r.json(); })
             .then(function (data) {
               if (loader) loader.classList.remove('show');

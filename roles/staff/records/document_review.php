@@ -264,6 +264,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_requirements']))
                         $save_errors[] = '"' . $r['requirement_name'] . '": ' . $constraints['hint'];
                         continue;
                     }
+                    if (!upload_content_matches_ext($_FILES['doc_upload']['tmp_name'][$rid], $ext)) {
+                        $save_errors[] = '"' . $r['requirement_name'] . '": file content does not match its extension.';
+                        continue;
+                    }
                     $upload = [
                         'tmp_name'      => $_FILES['doc_upload']['tmp_name'][$rid],
                         'ext'           => $ext,

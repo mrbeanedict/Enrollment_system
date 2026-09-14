@@ -2,3 +2,8 @@
 
 /uploads/*/*
 !/uploads/*/.htaccess
+
+/.env
+
+/storage/*
+!/storage/.gitkeep

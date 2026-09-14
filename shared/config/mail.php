@@ -1,11 +1,14 @@
 <?php
 
 require_once __DIR__ . '/../../vendor/autoload.php';
+require_once __DIR__ . '/../helpers/env.php';
 
 use PHPMailer\PHPMailer\PHPMailer;
 
 function getMailer(): PHPMailer
 {
+    load_env();
+
     $mail = new PHPMailer(true);
 
     $mail->isSMTP();
@@ -14,9 +17,9 @@ function getMailer(): PHPMailer
 
     $mail->SMTPAuth = true;
 
-    $mail->Username = 'aratml2001@gmail.com';
+    $mail->Username = $_ENV['GMAIL_SMTP_USER'] ?? '';
 
-    $mail->Password = 'REDACTED';
+    $mail->Password = $_ENV['GMAIL_SMTP_PASSWORD'] ?? '';
 
     $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
 
@@ -34,7 +37,7 @@ function getMailer(): PHPMailer
     $mail->Timeout = 10;
 
     $mail->setFrom(
-        'aratml2001@gmail.com',
+        $_ENV['GMAIL_SMTP_USER'] ?? '',
         'Greenfield Senior High School'
     );
 

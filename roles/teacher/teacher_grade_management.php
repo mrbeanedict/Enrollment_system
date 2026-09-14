@@ -437,7 +437,7 @@ $valid_quarters = ['1', '2', '3', '4'];
         });
       }
 
-      wireAutosave('.gm-score-input', '../ajax/teacher_save_score', function (input, body) {
+      wireAutosave('.gm-score-input', '<?= APP_URL ?>/ajax/teacher_save_score', function (input, body) {
         body.set('item_id', input.dataset.itemId);
       });
     })();

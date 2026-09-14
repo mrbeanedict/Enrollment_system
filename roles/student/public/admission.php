@@ -448,6 +448,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $admission_open && !$blocked_silent
             continue;
         }
 
+        if (!upload_content_matches_ext($_FILES['requirements']['tmp_name'][$rid], $ext)) {
+            $errors['requirements'][$rid] = 'This file\'s content does not match its extension. Please re-check the file.';
+            continue;
+        }
+
         $uploaded_requirements[$rid] = [
             'tmp_name'      => $_FILES['requirements']['tmp_name'][$rid],
             'ext'           => $ext,
@@ -1986,7 +1991,7 @@ function old(string $key, string $default = ''): string {
   // so data-old-province/-city/-barangay carry the previous codes and get
   // replayed through the same cascade once the province list loads. ────────
   (function () {
-    const PSGC_URL = '../ajax/psgc_lookup';
+    const PSGC_URL = '<?= APP_URL ?>/ajax/psgc_lookup';
 
     function populateSelect(select, items, valueKey, labelKey, placeholder) {
       select.innerHTML = '';

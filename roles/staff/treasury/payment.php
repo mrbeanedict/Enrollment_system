@@ -794,7 +794,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$not_ready) {
       body.append('enrollment_id', String(enrollmentId));
       body.append('amount_given', given.value);
 
-      fetch('../ajax/paymongo_treasury_checkout', { method: 'POST', body: body })
+      fetch('<?= APP_URL ?>/ajax/paymongo_treasury_checkout', { method: 'POST', body: body })
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (data.success && data.checkout_url) {
@@ -832,7 +832,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$not_ready) {
       var loader = document.getElementById('pageLoader');
       if (loader) loader.classList.add('show');
 
-      fetch('../ajax/paymongo_treasury_confirm?enrollment_id=' + encodeURIComponent(enrollmentId))
+      fetch('<?= APP_URL ?>/ajax/paymongo_treasury_confirm?enrollment_id=' + encodeURIComponent(enrollmentId))
         .then(function (r) { return r.json(); })
         .then(function (data) {
           window.history.replaceState({}, '', window.location.pathname + '?enrollment_id=' + enrollmentId);

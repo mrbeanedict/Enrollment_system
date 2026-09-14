@@ -184,9 +184,12 @@ require_once __DIR__ . '/../../bootstrap.php';
                     <?= htmlspecialchars($l['teacher_name'] ?? 'Teacher') ?> · <?= date('M j, Y g:i A', strtotime($l['posted_at'])) ?>
                   </div>
                   <div class="ls-item-body"><?= nl2br(htmlspecialchars($l['body'])) ?></div>
-                  <?php if ($l['attachment_path']): ?>
+                  <?php if ($l['attachment_path']): $fi = file_icon_meta($l['attachment_original_name']); ?>
                     <div class="ls-item-attachment">
-                      <a href="lesson_attachment?id=<?= (int)$l['lesson_id'] ?>" target="_blank">📎 <?= htmlspecialchars($l['attachment_original_name']) ?></a>
+                      <a href="lesson_attachment?id=<?= (int)$l['lesson_id'] ?>" target="_blank" class="attach-chip">
+                        <span class="attach-icon <?= $fi['cls'] ?>"><?= htmlspecialchars($fi['label']) ?></span>
+                        <span class="attach-chip-name"><?= htmlspecialchars($l['attachment_original_name']) ?></span>
+                      </a>
                     </div>
                   <?php endif; ?>
                 </div>
