@@ -4,9 +4,7 @@ session_name('STUDENT_SESSID');
 session_start();
 require_once __DIR__ . '/../../../bootstrap.php';
 
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || ($_SESSION['role'] ?? '') !== 'student') {
-    header("Location: student_login"); exit();
-}
+require_login('student', 'student_login');
 
 $student_id = (int) $_SESSION['student_id'];
 

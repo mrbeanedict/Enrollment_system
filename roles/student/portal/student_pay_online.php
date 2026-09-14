@@ -8,7 +8,7 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-$logged_in = isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') === 'student';
+$logged_in = require_login('student', null, 'ignore', 'bool');
 
 $enrollment  = null;
 $eligible    = false;

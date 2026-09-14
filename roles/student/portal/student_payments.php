@@ -13,7 +13,7 @@ require_once __DIR__ . '/../../../bootstrap.php';
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_student.css') ?>">
 </head>
 <body class="student-layout">
-<?php if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || ($_SESSION['role'] ?? '') !== 'student'): ?>
+<?php if (!require_login('student', null, 'ignore', 'bool')): ?>
   <p>You are not logged in. Please <a href="student_login">log in</a> to access this page.</p>
 
 <?php else: ?>

@@ -11,10 +11,7 @@ session_name($is_lms_mode ? 'STUDENT_LMS_SESSID' : 'STUDENT_SESSID');
 session_start();
 require_once __DIR__ . '/../../../bootstrap.php';
 
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || ($_SESSION['role'] ?? '') !== 'student') {
-    header("Location: " . ($is_lms_mode ? APP_URL . '/roles/lms/lms_login' : 'student_login'));
-    exit();
-}
+require_login('student', $is_lms_mode ? APP_URL . '/roles/lms/lms_login' : 'student_login');
 
 // Appended to every internal redirect/link on this page so LMS context
 // survives tab switches and post-save redirects.

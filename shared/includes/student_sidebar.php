@@ -12,7 +12,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_name('STUDENT_SESSID');
     session_start();
 }
-if (!isset($_SESSION['user_student_id']) || ($_SESSION['role'] ?? '') !== 'student' || !isset($_SESSION['student_id'])) {
+if (!require_login('student', null, 'ignore', 'bool') || !isset($_SESSION['student_id'])) {
     header("Location: student_login");
     exit();
 }
