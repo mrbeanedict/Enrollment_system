@@ -10,10 +10,7 @@ require_once __DIR__ . '/../../bootstrap.php';
 // since this page already prints <head> before including it, and a
 // header() redirect after output has started fails silently (with a
 // "headers already sent" warning) instead of actually redirecting.
-if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') !== 'teacher') {
-    header("Location: teacher_login");
-    exit();
-}
+require_login('teacher', 'teacher_login', 'redirect', 'ignore');
 guard_password_change('teacher_change_password', 'teacher');
 ?>
 <!DOCTYPE html>

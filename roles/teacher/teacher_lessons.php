@@ -23,10 +23,7 @@ function lesson_notify_targets(mysqli $conn, int $subject_id, int $section_id, s
     return $ids;
 }
 
-if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') !== 'teacher') {
-    header("Location: teacher_login");
-    exit();
-}
+require_login('teacher', 'teacher_login', 'redirect', 'ignore');
 guard_password_change('teacher_change_password', 'teacher');
 
 $teacher_id = (int) ($_SESSION['teacher_id'] ?? 0);

@@ -15,7 +15,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_name('TEACHER_SESSID');
     session_start();
 }
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || ($_SESSION['role'] ?? '') !== 'teacher' || !isset($_SESSION['teacher_id'])) {
+if (!require_login('teacher', null, 'ignore', 'bool') || !isset($_SESSION['teacher_id'])) {
     header("Location: teacher_login");
     exit();
 }

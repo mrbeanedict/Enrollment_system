@@ -7,10 +7,7 @@ require_once __DIR__ . '/../../bootstrap.php';
 
 // Redirect non-teacher roles before any HTML output — see teacher_dashboard.php
 // for why this can't just live inside teacher_sidebar.php's own guard.
-if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') !== 'teacher') {
-    header("Location: teacher_login");
-    exit();
-}
+require_login('teacher', 'teacher_login', 'redirect', 'ignore');
 guard_password_change('teacher_change_password', 'teacher');
 ?>
 <!DOCTYPE html>
