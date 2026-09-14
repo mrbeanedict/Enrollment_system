@@ -9,7 +9,7 @@ session_name('STUDENT_LMS_SESSID');
 session_start();
 require_once __DIR__ . '/../../bootstrap.php';
 
-$is_student = isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') === 'student';
+$is_student = require_login('student', null, 'ignore', 'bool');
 $student_id = $is_student ? (int) ($_SESSION['student_id'] ?? 0) : 0;
 
 // Confirm the student is currently enrolled in this exact subject+section+

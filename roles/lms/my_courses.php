@@ -136,7 +136,7 @@ function subject_banner_icon(string $subjectName): string {
     </style>
 </head>
 <body class="student-layout lms-layout mc-glass-page">
-<?php if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || ($_SESSION['role'] ?? '') !== 'student'): ?>
+<?php if (!require_login('student', null, 'ignore', 'bool')): ?>
   <p>You are not logged in. Please <a href="lms_login">log in</a> to access this page.</p>
 
 <?php else: ?>

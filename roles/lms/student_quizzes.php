@@ -8,7 +8,7 @@ session_name('STUDENT_LMS_SESSID');
 session_start();
 require_once __DIR__ . '/../../bootstrap.php';
 
-$is_student = isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true && ($_SESSION['role'] ?? '') === 'student';
+$is_student = require_login('student', null, 'ignore', 'bool');
 $student_id = $is_student ? (int) ($_SESSION['student_id'] ?? 0) : 0;
 ?>
 <!DOCTYPE html>
@@ -36,7 +36,7 @@ $student_id = $is_student ? (int) ($_SESSION['student_id'] ?? 0) : 0;
     </style>
 </head>
 <body class="student-layout lms-layout">
-<?php if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || ($_SESSION['role'] ?? '') !== 'student'): ?>
+<?php if (!$is_student): ?>
   <p>You are not logged in. Please <a href="lms_login">log in</a> to access this page.</p>
 
 <?php else: ?>
