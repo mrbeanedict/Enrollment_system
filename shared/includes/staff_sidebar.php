@@ -52,13 +52,14 @@ if (($_SESSION['role'] ?? '') !== 'staff' || $department === null) {
     exit();
 }
 
-function staffNavLink($href, $label, $icon, $current, $match, $badge = 0) {
+function staffNavLink($href, $label, $icon, $current, $match) {
     $active = ($current === $match) ? ' active' : '';
-    $badgeHtml = $badge > 0 ? '<span class="staff-nav-badge">' . $badge . '</span>' : '';
+    // No count badge on nav links — the Status panel below already shows
+    // the same numbers, so repeating them here was redundant.
     // Label is wrapped so the collapsed (icon-only) sidebar state can hide
     // just the text without hiding the icon that sits next to it; title=
     // gives collapsed users a hover tooltip in place of the visible label.
-    echo '<a href="' . $href . '" class="staff-nav-link' . $active . '" title="' . htmlspecialchars($label) . '">' . $icon . '<span class="staff-nav-link-text">' . $label . '</span>' . $badgeHtml . '</a>';
+    echo '<a href="' . $href . '" class="staff-nav-link' . $active . '" title="' . htmlspecialchars($label) . '">' . $icon . '<span class="staff-nav-link-text">' . $label . '</span></a>';
 }
 
 // ---------------------------------------------------------------
@@ -80,7 +81,6 @@ $ico_teachers  = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" str
 $ico_logout    = '<svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>';
 $ico_burger    = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M4 12h16M4 17h16"/></svg>';
 $ico_search    = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M21 21l-4.3-4.3"/></svg>';
-$ico_bell      = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>';
 
 // ---------------------------------------------------------------
 // Department-scoped nav + status panel data
@@ -96,7 +96,7 @@ $ico_bell      = '<svg width="16" height="16" fill="none" viewBox="0 0 24 24" st
 // isn't a fully scoped function.
 // ---------------------------------------------------------------
 $roleLabel = ucfirst($department);
-$navItems  = [];   // ['href (root-relative)','label','icon','match (basename)','badge']
+$navItems  = [];   // ['href (root-relative)','label','icon','match (basename)','(unused)','group']
 $statusRows = [];  // ['label','value','warn' => bool]
 
 // Every href below is written root-relative (no leading "../") and gets
@@ -264,7 +264,8 @@ if ($department === 'registrar') {
         if ($sb_q) { $sb_r = mysqli_fetch_row($sb_q); $pendingSubjects = (int)$sb_r[0]; }
 
         $pendingSchedules = 0;
-        $sb_q = mysqli_query($conn, "SELECT COUNT(*) FROM sections WHERE schedule_status = 'pending'");
+        // Both semesters' schedule queues (Semester 2 uses the *_sem2 columns).
+        $sb_q = mysqli_query($conn, "SELECT SUM(schedule_status = 'pending') + SUM(schedule_status_sem2 = 'pending') FROM sections");
         if ($sb_q) { $sb_r = mysqli_fetch_row($sb_q); $pendingSchedules = (int)$sb_r[0]; }
 
         $pendingApprovals = $pendingSections + $pendingSubjects + $pendingSchedules;
@@ -273,7 +274,6 @@ if ($department === 'registrar') {
             ['roles/staff/dashboard',     'Dashboard',         $ico_dashboard,  'dashboard.php', 0, 'Overview'],
             ['roles/staff/scheduler/sections',        'Sections',          $ico_sections,   'sections.php',        0, 'Scheduling'],
             ['roles/staff/scheduler/curriculum',      'Curriculum',        $ico_curriculum, 'curriculum.php',      0, 'Scheduling'],
-            ['roles/staff/scheduler/scheduling',      'Class Scheduling',  $ico_schedule,   'scheduling.php',      $unscheduledSections, 'Scheduling'],
             ['roles/staff/coordinator/approvals',     'Approvals',         $ico_approvals,  'approvals.php',       $pendingApprovals, 'Coordinator'],
             ['roles/staff/coordinator/teacher_manage', 'Teachers',         $ico_teachers,   'teacher_manage.php',  0, 'Coordinator'],
         ];
@@ -289,7 +289,6 @@ if ($department === 'registrar') {
             ['roles/staff/scheduler/sections',   'Sections',         $ico_sections,   'sections.php',        0, 'Scheduler'],
             ['roles/staff/scheduler/curriculum', 'Curriculum',       $ico_curriculum, 'curriculum.php',      0, 'Scheduler'],
             ['roles/staff/scheduler/scheduling', 'Class Scheduling', $ico_schedule,   'scheduling.php',      $unscheduledSections, 'Scheduler'],
-            ['roles/staff/scheduler/create_schedule', 'Create Schedule', $ico_schedule, 'create_schedule.php', 0, 'Scheduler'],
         ];
 
         $statusRows = [
@@ -303,6 +302,7 @@ if ($department === 'registrar') {
 
 <!-- SweetAlert2 -->
 <script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
+<?php require_once __DIR__ . '/ui_modal_css.php'; ?>
 <script src="<?= APP_URL ?>/assets/js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="<?= APP_URL ?>/logout"></script>
 
 <div class="page-loader" id="pageLoader"><div class="page-loader-spinner"></div></div>
@@ -338,7 +338,7 @@ if ($department === 'registrar') {
     ?>
         <span class="staff-nav-label"><?= htmlspecialchars($sb_lastGroup) ?></span>
     <?php endif; ?>
-        <?php staffNavLink(APP_URL . '/' . $item[0], $item[1], $item[2], $current, $item[3], $item[4]); ?>
+        <?php staffNavLink(APP_URL . '/' . $item[0], $item[1], $item[2], $current, $item[3]); ?>
     <?php endforeach; ?>
 
     <?php if (!empty($statusRows)): ?>
@@ -395,13 +395,10 @@ if ($department === 'registrar') {
     var toggleBtn = document.getElementById('staffSidebarToggle');
     if (toggleBtn) { toggleBtn.addEventListener('click', toggleStaffSidebar); }
 
-    // Inject a search button (and a plain decorative bell, only where a
-    // real notification widget isn't already present — see
-    // shared/includes/staff_notifications.php) next to every page's
-    // existing .staff-topbar-date pill, so every staff page gets the same
-    // topbar controls without editing each page's markup individually.
-    // These are HTML/CSS only for now — no search or notification
-    // behavior is wired up yet.
+    // Inject a search button next to every page's existing
+    // .staff-topbar-date pill, so every staff page gets the same topbar
+    // controls without editing each page's markup individually. HTML/CSS
+    // only for now — no search behavior is wired up yet.
     var staffTopbarEl = document.querySelector('.staff-topbar');
     var staffDateEl = staffTopbarEl ? staffTopbarEl.querySelector('.staff-topbar-date') : null;
     if (staffDateEl) {
@@ -420,18 +417,9 @@ if ($department === 'registrar') {
       searchBtn.setAttribute('aria-label', 'Search');
       searchBtn.innerHTML = <?= json_encode($ico_search) ?>;
       actionsWrap.appendChild(searchBtn);
-
-      // Only add a decorative bell where a real notification widget isn't
-      // already rendered (see shared/includes/staff_notifications.php) —
-      // avoids showing two bells on the pages that already have one.
-      if (!staffTopbarEl.querySelector('.staff-notif-wrap')) {
-        var bellBtn = document.createElement('button');
-        bellBtn.type = 'button';
-        bellBtn.className = 'staff-topbar-icon-btn';
-        bellBtn.setAttribute('aria-label', 'Notifications');
-        bellBtn.innerHTML = <?= json_encode($ico_bell) ?>;
-        actionsWrap.appendChild(bellBtn);
-      }
+      // No fallback bell: pages that should notify include
+      // shared/includes/staff_notifications.php themselves, and the ones that
+      // leave it out (Records) are meant to have no bell at all.
     }
 
     // Logout — SweetAlert (falls back to native confirm() if Swal failed to load)
@@ -448,6 +436,7 @@ if ($department === 'registrar') {
         }
         Swal.fire({
           title: 'Log out?',
+          customClass: { popup: 'ui-swal-logout' },
           text: 'You will be returned to the login page.',
           icon: 'question',
           showCancelButton: true,

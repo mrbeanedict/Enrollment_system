@@ -216,7 +216,7 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
     <div class="teacher-content">
 
       <?php if ($success_message): ?>
-        <div class="notice notice-success"><?= htmlspecialchars($success_message) ?></div>
+        <div class="notice notice-success" data-ui-toast><?= htmlspecialchars($success_message) ?></div>
       <?php endif; ?>
       <?php if ($error_message): ?>
         <div class="notice notice-error"><?= htmlspecialchars($error_message) ?></div>

@@ -70,8 +70,8 @@ guard_password_change('teacher_change_password', 'teacher');
     $sch_stmt = mysqli_prepare($conn, "
         SELECT sec.section_name, sec.grade_level, st.strand_code AS strand,
                sub.subject_name, ta.semester,
-               ss.day, ss.start_time, ss.end_time,
-               COALESCE(ss.room, sec.room) AS room
+               m.day, m.start_time, m.end_time,
+               COALESCE(NULLIF(m.room, ''), sec.room) AS room
         FROM teacher_assignments ta
         JOIN subjects sub ON sub.subject_id = ta.subject_id
         JOIN sections sec ON sec.section_id = ta.section_id
@@ -81,9 +81,13 @@ guard_password_change('teacher_change_password', 'teacher');
               AND ss.subject_id = ta.subject_id
               AND ss.teacher_id = ta.teacher_id
               AND ss.semester = ta.semester
+        -- A subject can meet several times a week: one row per class meeting
+        -- (subjects with no meetings yet still come back once, unscheduled).
+        LEFT JOIN section_subject_meetings m
+               ON m.section_id = ss.section_id AND m.subject_id = ss.subject_id AND m.semester = ss.semester
         WHERE ta.teacher_id = ? AND ta.is_active = 1 AND ta.school_year = ? AND ta.semester = ?
         $sem2_enrolled_clause
-        ORDER BY FIELD(ss.day, 'Mon','Tue','Wed','Thu','Fri'), ss.start_time
+        ORDER BY FIELD(m.day, 'Mon','Tue','Wed','Thu','Fri'), m.start_time
     ");
     mysqli_stmt_bind_param($sch_stmt, "isi", $teacher_id, $selected_sy, $selected_sem);
     mysqli_stmt_execute($sch_stmt);

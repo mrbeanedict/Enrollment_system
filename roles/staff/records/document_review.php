@@ -22,11 +22,11 @@ $is_admin = ($_SESSION['role'] ?? '') === 'admin';
 if (!$is_admin && ($_SESSION['department'] ?? '') !== 'records') {
     http_response_code(403);
     echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Access denied</title>
-          <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_staff.css?v=' . filemtime(__DIR__ . '/../../../assets/css/css_staff.css') . '"></head><body>
+          <link rel="stylesheet" href="' . APP_URL . '/assets/css/css_staff.css?v=' . filemtime(__DIR__ . '/../../../assets/css/css_staff.css') . '"></head><body>
           <div class="card" style="max-width:480px;margin:4rem auto;">
             <h2>Access denied</h2>
             <p>Only the Records department can review admissions.</p>
-            <a href="<?= APP_URL ?>/roles/staff/dashboard">&larr; Back to dashboard</a>
+            <a href="' . APP_URL . '/roles/staff/dashboard">&larr; Back to dashboard</a>
           </div></body></html>';
     exit();
 }
@@ -243,9 +243,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_requirements']))
 
                 // A file-less row moving to 'submitted' (first-time staff
                 // verification) or 'pending_review' (a declined row being
-                // resubmitted — see onManualFileChange()'s JS comment) can
-                // optionally carry a staff-uploaded file (the "Or upload a
-                // file" input next to the "Verified in person" checkbox) —
+                // resubmitted — see onDropzoneFileChange()'s JS comment) can
+                // optionally carry a staff-uploaded file (the dropzone next
+                // to the "Seen in person" checkbox) —
                 // validated the same way as a student's own upload, so
                 // it's indistinguishable to every downstream consumer
                 // (records/view_document.php) once saved.
@@ -539,7 +539,7 @@ $dr_status = trim($_GET['status'] ?? '');
 $dr_grade  = trim($_GET['grade']  ?? '');
 $dr_strand = trim($_GET['strand'] ?? '');
 $dr_page   = max(1, (int) ($_GET['page'] ?? 1));
-$dr_per_page = 15;
+$dr_per_page = 10;
 
 $allowed_statuses_filter = ['review', 'incomplete', 'admitted'];
 if (!in_array($dr_status, $allowed_statuses_filter, true)) $dr_status = '';
@@ -602,6 +602,37 @@ $count_stmt->close();
 $total_pages = max(1, (int) ceil($total_count / $dr_per_page));
 if ($dr_page > $total_pages) $dr_page = $total_pages;
 $dr_offset = ($dr_page - 1) * $dr_per_page;
+
+// ── Workload counters (search + grade + strand applied, status ignored so
+// each counter always shows what clicking it would switch to) ─────────────
+$workload_sql = "
+    SELECT
+        SUM(admission_status != 'admitted' AND review_count > 0) AS c_review,
+        SUM(admission_status != 'admitted' AND review_count = 0) AS c_incomplete,
+        SUM(admission_status = 'admitted') AS c_admitted,
+        COUNT(*) AS c_total
+    FROM (
+        SELECT e.enrollment_id, s.admission_status,
+               (SELECT COUNT(*) FROM enrollment_requirements er
+                  JOIN requirement_types rt ON rt.requirement_type_id = er.requirement_type_id
+                 WHERE er.enrollment_id = e.enrollment_id AND er.status = 'pending_review' AND rt.is_active = 1
+               ) AS review_count
+        FROM enrollments e
+        JOIN students s ON s.student_id = e.student_id
+        WHERE $where_sql
+    ) t
+";
+$workload_stmt = $conn->prepare($workload_sql);
+if ($types !== '') $workload_stmt->bind_param($types, ...$params);
+$workload_stmt->execute();
+$workload = $workload_stmt->get_result()->fetch_assoc();
+$workload_stmt->close();
+$dr_counts = [
+    'review'     => (int) ($workload['c_review'] ?? 0),
+    'incomplete' => (int) ($workload['c_incomplete'] ?? 0),
+    'admitted'   => (int) ($workload['c_admitted'] ?? 0),
+    'total'      => (int) ($workload['c_total'] ?? 0),
+];
 
 // ── Load current page ───────────────────────────────────────────────────────
 $list_sql = "
@@ -695,27 +726,90 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
       border-radius:999px; padding:2px 10px; margin-left:8px;
     }
 
-    /* ── Filter bar ─────────────────────────────────────────────────────── */
-    .pa-filter-bar {
-      display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;
-      background:#fff; border:0.5px solid #E0E0EC; border-radius:10px;
-      padding:12px 14px; margin-bottom:1rem;
+    .sr-only {
+      position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+      overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
     }
-    .pa-filter-field { display:flex; flex-direction:column; gap:4px; }
-    .pa-filter-field label { font-size:11px; font-weight:500; color:#5A5A72; text-transform:uppercase; letter-spacing:.04em; }
-    .pa-filter-field input, .pa-filter-field select {
-      height:34px; padding:0 10px; border:0.5px solid #D4D4E0; border-radius:7px;
-      font-family:inherit; font-size:13px; background:#FAFAFC; min-width:150px;
+
+    /* Toolbar — same search/select/pill visual language as
+       admin/staff_manage.php's .staff-toolbar, reused here as .pa-toolbar
+       since this page keeps its own local <style> block rather than
+       pulling in css_admin.css. */
+    .pa-toolbar {
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+      background:#fff; border:1px solid #E8E8F0; border-radius:12px;
+      padding:14px 16px; margin-bottom:1.25rem; box-shadow:0 10px 24px rgba(16,42,29,.05);
     }
-    .pa-filter-actions { display:flex; gap:8px; margin-left:auto; }
-    .btn-filter, .btn-filter-clear {
-      height:34px; padding:0 14px; border-radius:7px; font-size:13px; font-weight:500;
-      cursor:pointer; font-family:inherit;
+    .pa-search { position:relative; flex:1 1 240px; min-width:180px; }
+    .pa-search svg {
+      position:absolute; left:12px; top:50%; width:15px; height:15px; margin-top:-7.5px;
+      color:#5F6B74; pointer-events:none;
     }
-    .btn-filter { background:#1E4D3B; color:#fff; border:none; }
+    .pa-search input {
+      width:100%; height:38px; box-sizing:border-box; border:1px solid #D4D9D6; border-radius:9px;
+      background:#fff; padding:0 13px 0 34px; font-size:13px; font-family:inherit;
+      color:#1A1A2E; outline:none; transition:border-color .15s, box-shadow .15s;
+    }
+    .pa-search input::placeholder { color:#8A8A9A; }
+    .pa-search input:focus { border-color:#386641; box-shadow:0 0 0 3px rgba(56,102,65,.14); }
+    /* width:auto overrides css_staff.css's global `select { width:100% }` —
+       without it these selects stretch to fill the flex row (and wrap onto
+       their own full-width line) instead of sizing to their content. */
+    .pa-filter-select {
+      width:auto; flex:0 0 auto; height:38px; border:1px solid #D4D9D6; border-radius:9px;
+      background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%235F6B74' d='M6 8L1 3h10z'/%3E%3C/svg%3E") no-repeat right 10px center;
+      padding:0 28px 0 12px; font-size:12.5px; font-weight:500; font-family:inherit; color:#1A1A2E;
+      outline:none; cursor:pointer; appearance:none; -webkit-appearance:none;
+      transition:border-color .15s, box-shadow .15s;
+    }
+    .pa-filter-select:hover { border-color:#386641; }
+    .pa-filter-select:focus { border-color:#386641; box-shadow:0 0 0 3px rgba(56,102,65,.14); }
+    .pa-filter-clear {
+      height:38px; padding:0 14px; border-radius:9px; font-size:13px; font-weight:500;
+      cursor:pointer; font-family:inherit; background:#fff; color:#5A5A72; border:1px solid #D4D9D6;
+      text-decoration:none; display:inline-flex; align-items:center; transition:border-color .15s, color .15s;
+    }
+    .pa-filter-clear:hover { border-color:#ADADBD; color:#1A1A2E; }
+    .btn-filter { background:#1E4D3B; color:#fff; border:none; height:38px; padding:0 14px; border-radius:9px; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; }
     .btn-filter:hover { background:#163829; }
-    .btn-filter-clear { background:#fff; color:#5A5A72; border:0.5px solid #D4D4E0; text-decoration:none; display:inline-flex; align-items:center; }
-    .btn-filter-clear:hover { border-color:#ADADBD; }
+
+    /* ── Workload counters — compact clickable pills above the toolbar ──── */
+    /* ── Workload counters — compact icon+card summary (same colored-chip
+       language as the dashboard's .staff-stat-card, laid out horizontally
+       and clickable as a status filter). ── */
+    .pa-counters { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:14px; margin-bottom:1.1rem; }
+    .pa-counter {
+      display:flex; align-items:center; gap:16px; background:#fff; border:1px solid #E8E8F0;
+      border-radius:14px; padding:20px 24px; min-height:88px; cursor:pointer; font-family:inherit; text-align:left;
+      text-decoration:none; color:inherit;
+      box-shadow:0 1px 3px rgba(30,77,59,.06);
+      transition:border-color .15s, background-color .15s, box-shadow .15s, transform .1s;
+    }
+    .pa-counter:visited { color:inherit; }
+    .pa-counter:hover, .pa-counter:focus { text-decoration:none; }
+    .pa-counter:hover { border-color:#B7C8BF; box-shadow:0 3px 10px rgba(30,77,59,.1); }
+    .pa-counter:active { transform:scale(0.98); }
+    .pa-counter-icon {
+      flex-shrink:0; width:46px; height:46px; border-radius:12px;
+      display:flex; align-items:center; justify-content:center;
+      background:#F0F0F4; color:#6B6B7D;
+    }
+    .pa-counter-icon svg { width:22px; height:22px; }
+    .pa-counter-body { display:flex; flex-direction:column; gap:3px; }
+    .pa-counter-value { font-size:26px; font-weight:700; color:#1A1A2E; line-height:1.15; }
+    .pa-counter-label { font-size:11.5px; font-weight:600; color:#8A8A9A; text-transform:uppercase; letter-spacing:.05em; }
+
+    .pa-counter--total .pa-counter-icon      { background:#EEF0F4; color:#5A6472; }
+    .pa-counter--review .pa-counter-icon     { background:#FEF6E8; color:#A9720A; }
+    .pa-counter--incomplete .pa-counter-icon { background:#F0F0F4; color:#6B6B7D; }
+    .pa-counter--admitted .pa-counter-icon   { background:#EAF3EE; color:#1E4D3B; }
+
+    .pa-counter--total.active      { border-color:#B9C2CC; background:#F7F8FA; }
+    .pa-counter--review.active     { border-color:#F3D896; background:#FEF9EF; }
+    .pa-counter--incomplete.active { border-color:#C7C7D4; background:#F7F7FA; }
+    .pa-counter--admitted.active   { border-color:#8FB59B; background:#F1F8F4; }
+
+    .pa-result-count { font-size:12.5px; color:#5A5A72; margin:0.6rem 0 0.4rem; }
 
     /* ── Table ─────────────────────────────────────────────────────────── */
     .pa-table { width:100%; border-collapse:collapse; font-size:13px; background:#fff; }
@@ -739,7 +833,7 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
     .req-bar { flex:1; height:5px; border-radius:3px; background:#EBEBF0; overflow:hidden; }
     .req-bar-fill { height:100%; border-radius:3px; }
     .req-bar-fill.full    { background:#2ECC71; }
-    .req-bar-fill.partial { background:#E67E22; }
+    .req-bar-fill.partial { background:#6FCF97; }
     .req-bar-fill.empty   { background:#D8D8E4; }
     .req-bar-text { font-size:11px; color:#5A5A72; white-space:nowrap; }
 
@@ -778,9 +872,9 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
     .pa-modal-overlay.open { display:flex; }
     .pa-modal {
       background:#fff; border-radius:12px; max-width:880px; width:100%;
-      max-height:94vh; overflow-y:auto; padding:1.35rem 1.6rem;
+      max-height:94vh; overflow-y:auto; padding:1.1rem 1.4rem;
     }
-    .pa-modal-head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:1rem; gap:12px; }
+    .pa-modal-head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.75rem; gap:12px; }
     .pa-modal-title { font-size:16px; font-weight:600; color:#1A1A2E; }
     .pa-modal-title .status-flag { margin-left:6px; vertical-align:middle; }
     .pa-modal-sub { font-size:12px; color:#5A5A72; margin-top:2px; }
@@ -788,7 +882,7 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
     .pa-modal-close:hover { color:#1A1A2E; }
     .pa-modal-section-title {
       font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.08em;
-      color:#2F6B4F; margin:16px 0 6px; padding-bottom:4px; border-bottom:0.5px solid #EBEBF0;
+      color:#2F6B4F; margin:12px 0 6px; padding-bottom:4px; border-bottom:0.5px solid #EBEBF0;
     }
     .pa-modal-section-title:first-of-type { margin-top:0; }
 
@@ -799,59 +893,119 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
     .req-review-table { width:100%; border-collapse:collapse; font-size:13px; }
     .req-review-table th {
       text-align:left; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
-      color:#8A8A9A; padding:10px 8px 10px 0; border-bottom:0.5px solid #EBEBF0;
+      color:#8A8A9A; padding:9px 8px 9px 0; border-bottom:0.5px solid #EBEBF0;
     }
-    .req-review-table td { padding:9px 8px 9px 0; border-bottom:0.5px solid #EBEBF0; vertical-align:middle; }
+    .req-review-table td { padding:7px 8px 7px 0; border-bottom:0.5px solid #EBEBF0; vertical-align:middle; }
     .req-review-table tr:last-child td { border-bottom:none; }
+    .req-review-table tr.no-border td { border-bottom:none; }
     .req-name { font-weight:500; color:#1A1A2E; }
-    .req-status-cell { display:flex; flex-direction:column; align-items:flex-start; gap:5px; min-width:170px; }
-    .req-decision { display:flex; gap:8px; }
+    .req-status-cell { display:flex; flex-direction:column; align-items:flex-start; gap:6px; width:190px; }
+    /* Grid instead of flex — two equal columns regardless of "Approve" vs
+       "Decline" content width. Flex-basis alone still let intrinsic content
+       widen a pill past its share; grid columns are a hard equal split. */
+    .req-decision { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; }
     .req-radio {
       display:inline-flex; align-items:center; justify-content:center; gap:5px;
-      flex:1 1 0; box-sizing:border-box; min-width:92px;
+      width:100%; min-width:0; box-sizing:border-box;
       font-size:12px; font-weight:600;
-      cursor:pointer; padding:5px 11px; border-radius:20px; border:0.5px solid #D4D4E0;
+      cursor:pointer; padding:4px 9px; border-radius:20px; border:0.5px solid #D4D4E0;
       background:#FAFAFC; color:#5A5A72; user-select:none;
       transition:background-color .15s, border-color .15s, color .15s;
     }
     .req-radio input[type="radio"] { accent-color:currentColor; margin:0; cursor:pointer; width:14px; height:14px; flex-shrink:0; }
     .req-radio-approve.is-checked { background:#EAF3EE; border-color:#BFE0CD; color:#1E4D3B; }
     .req-radio-reject.is-checked { background:#FDF0EF; border-color:#F0B8B2; color:#C0392B; }
+    .req-radio-disabled { opacity:0.45; cursor:not-allowed; }
+    .req-radio-disabled input { cursor:not-allowed; }
+
+    /* Full-row reason field — a second <tr> spanning all three columns,
+       shown only while a Decline decision is active on that requirement.
+       The row above drops its own border while this is open (see the
+       .no-border toggle in onDecisionChange) so no rule sits directly
+       above the textbox. */
+    .req-reason-row { display:none; }
+    .req-reason-row.show { display:table-row; }
+    .req-reason-row td { padding-top:0; border-bottom:0.5px solid #EBEBF0; }
     .req-reason-input {
-      display:none; width:100%; min-width:160px; height:30px; padding:0 8px; margin-top:2px;
-      border:0.5px solid #D4D4E0; border-radius:6px; font-family:inherit; font-size:12px; background:#FFFAFA;
+      width:100%; box-sizing:border-box; height:32px; padding:0 10px;
+      border:0.5px solid #F0B8B2; border-radius:6px; font-family:inherit; font-size:12px; background:#FFFAFA;
     }
-    .req-reason-input.show { display:block; }
+    .req-reason-input:focus { outline:none; border-color:#C0392B; }
+
+    .req-verify-toggle {
+      display:inline-flex; border:0.5px solid #D4D4E0; border-radius:20px; padding:2px; background:#FAFAFC;
+    }
+    .req-verify-toggle button {
+      border:none; background:none; font-family:inherit; font-size:11px; font-weight:600; color:#8A8A9A;
+      padding:4px 12px; border-radius:20px; cursor:pointer; transition:background-color .15s, color .15s;
+    }
+    .req-verify-toggle button.active { background:#1E4D3B; color:#fff; }
+    .req-verify-toggle button:not(.active):hover { color:#1A1A2E; }
+
     .req-manual-confirm {
       display:flex; align-items:center; gap:6px;
       font-size:11px; color:#A9720A; cursor:pointer; user-select:none;
       background:#FEF6E8; border:0.5px solid #F3D896; border-radius:20px; padding:5px 14px;
     }
     .req-manual-confirm input[type="checkbox"] { margin:0; accent-color:#1E4D3B; flex-shrink:0; cursor:pointer; }
-    .req-upload-label {
-      display:flex; align-items:center; gap:6px;
-      font-size:11px; color:#5A5A72; cursor:pointer; user-select:none;
-      background:#FAFAFC; border:0.5px solid #D4D4E0; border-radius:20px; padding:5px 14px;
-      max-width:200px; overflow:hidden;
+
+    .req-note { font-size:11px; color:#5A5A72; }
+
+    /* File column: empty state is a real dropzone, filled state is a chip */
+    .req-dropzone {
+      display:flex; align-items:center; gap:6px; justify-content:center;
+      border:1.5px dashed #D4D4E0; border-radius:8px; padding:10px 10px;
+      min-width:150px; max-width:210px; cursor:pointer; text-align:center;
+      color:#8A8A9A; font-size:11px; font-weight:500; background:#FAFAFC;
+      transition:border-color .15s, background-color .15s, color .15s;
     }
-    .req-upload-label:hover { border-color:var(--brand-accent); color:var(--brand-primary); }
-    .req-upload-label span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .req-upload-input { position:absolute; width:1px; height:1px; opacity:0; overflow:hidden; }
+    .req-dropzone:hover, .req-dropzone.is-dragover {
+      border-color:var(--brand-accent, #1E4D3B); background:#EEF6F1; color:#1E4D3B;
+    }
+    .req-dropzone svg { flex-shrink:0; }
+    .req-dropzone-input { position:absolute; width:1px; height:1px; opacity:0; overflow:hidden; }
+
+    .req-file-chip {
+      display:flex; align-items:center; gap:8px; border:0.5px solid #E0E0EC; border-radius:8px;
+      padding:6px 8px; background:#fff; max-width:210px;
+    }
+    .req-file-chip-icon {
+      flex-shrink:0; width:26px; height:26px; border-radius:6px; background:#EAF3EE;
+      display:flex; align-items:center; justify-content:center; color:#1E4D3B;
+    }
+    .req-file-chip-info { min-width:0; flex:1; display:flex; flex-direction:column; }
+    .req-file-chip-name {
+      font-size:12px; font-weight:500; color:#1A1A2E; text-decoration:none;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:130px;
+    }
+    a.req-file-chip-name:hover { color:#1E4D3B; text-decoration:underline; }
+    .req-file-chip-meta { font-size:10.5px; color:#8A8A9A; }
+    .req-file-chip-remove {
+      flex-shrink:0; width:20px; height:20px; border-radius:50%; border:none; background:transparent;
+      color:#ADADBD; cursor:pointer; display:flex; align-items:center; justify-content:center;
+      font-size:15px; line-height:1; padding:0;
+    }
+    .req-file-chip-remove:hover { background:#FDF0EF; color:#C0392B; }
+
     .req-file-link {
-      display:inline-flex; align-items:center; gap:5px; text-decoration:none; max-width:180px;
+      display:inline-flex; align-items:center; gap:8px; text-decoration:none; max-width:210px;
+      border:0.5px solid #E0E0EC; border-radius:8px; padding:6px 8px; background:#fff;
+      transition:border-color .15s;
+    }
+    .req-file-link-icon {
+      flex-shrink:0; width:26px; height:26px; border-radius:6px; background:#EAF3EE;
+      display:flex; align-items:center; justify-content:center; color:#1E4D3B;
     }
     .req-file-name {
-      color:#8A8A9A; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+      color:#1A1A2E; font-size:12px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     }
-    .req-file-link svg { flex-shrink:0; color:#5A5A72; }
+    .req-file-link:hover { border-color:var(--brand-accent, #1E4D3B); }
     .req-file-link:hover .req-file-name { color:#1E4D3B; text-decoration:underline; }
-    .req-file-link:hover svg { color:#1E4D3B; }
     .req-file-empty { display:inline-block; color:#ADADBD; font-size:12px; }
     .req-blur-badge-warn {
       display:inline-block; margin-top:3px; font-size:10.5px; font-weight:600;
       color:#C06A10; background:#FFF4E6; border-radius:10px; padding:1px 8px;
     }
-    .req-radio-disabled { opacity:0.45; cursor:not-allowed; }
     .req-old-rejection { font-size:11px; color:#C0392B; margin-bottom:2px; }
 
     .dr-modal-footer {
@@ -888,62 +1042,79 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
 <?php include_once BASE_PATH . '/shared/includes/staff_sidebar.php'; ?>
 <div class="staff-main">
   <div class="staff-topbar">
-    <div class="staff-topbar-left">
-      <span class="staff-topbar-title">Document Review</span>
+    <div class="staff-topbar-left"></div>
+    <div style="display:flex; align-items:center; gap:14px;">
+      <span class="staff-topbar-date"><?= date('F j, Y') ?></span>
     </div>
-    <span class="staff-topbar-date"><?= date('F j, Y') ?></span>
   </div>
 
   <div class="staff-content">
 
     <?php if ($flash): ?>
-      <div class="flash flash-<?= htmlspecialchars($flash_type) ?>"><?= htmlspecialchars($flash) ?></div>
+      <div class="flash flash-<?= htmlspecialchars($flash_type) ?>" data-ui-toast><?= htmlspecialchars($flash) ?></div>
     <?php endif; ?>
 
-    <p class="page-eyebrow"><?= $is_admin ? 'Admin Portal' : 'Records portal' ?>
+    <p class="page-eyebrow"><?= $is_admin ? 'Admin Portal' : 'Records Portal' ?>
       <span class="dr-count-pill"><?= $total_count ?></span>
     </p>
     <h1 class="page-title">Admission Document Review</h1>
     <p class="page-sub">Search or filter applications, then open a record to review its submitted documents, set each requirement's status, and admit the student once everything checks out.</p>
 
-    <form method="GET" action="document_review" class="pa-filter-bar">
-      <div class="pa-filter-field">
-        <label for="q">Search</label>
-        <input type="text" id="q" name="q" value="<?= htmlspecialchars($dr_q) ?>" placeholder="Name">
+    <?php
+      $dr_icon_total      = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
+      $dr_icon_review     = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>';
+      $dr_icon_incomplete = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>';
+      $dr_icon_admitted   = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+
+      $counter_base = array_filter(['q' => $dr_q, 'grade' => $dr_grade, 'strand' => $dr_strand]);
+      $counter_defs = [
+        ''           => ['label' => 'Total',        'value' => $dr_counts['total'],       'class' => 'pa-counter--total',      'icon' => $dr_icon_total],
+        'review'     => ['label' => 'Needs Review',  'value' => $dr_counts['review'],      'class' => 'pa-counter--review',     'icon' => $dr_icon_review],
+        'incomplete' => ['label' => 'Incomplete',    'value' => $dr_counts['incomplete'],  'class' => 'pa-counter--incomplete', 'icon' => $dr_icon_incomplete],
+        'admitted'   => ['label' => 'Admitted',      'value' => $dr_counts['admitted'],    'class' => 'pa-counter--admitted',   'icon' => $dr_icon_admitted],
+      ];
+    ?>
+    <div class="pa-counters">
+      <?php foreach ($counter_defs as $status_val => $def): ?>
+        <a class="pa-counter <?= $def['class'] ?><?= $dr_status === $status_val ? ' active' : '' ?>"
+           href="?<?= http_build_query(array_merge($counter_base, ['status' => $status_val])) ?>">
+          <span class="pa-counter-icon"><?= $def['icon'] ?></span>
+          <span class="pa-counter-body">
+            <span class="pa-counter-value"><?= $def['value'] ?></span>
+            <span class="pa-counter-label"><?= $def['label'] ?></span>
+          </span>
+        </a>
+      <?php endforeach; ?>
+    </div>
+
+    <form method="GET" action="document_review" class="pa-toolbar" id="drFilterForm">
+      <div class="pa-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <label for="q" class="sr-only">Search</label>
+        <input type="search" id="q" name="q" value="<?= htmlspecialchars($dr_q) ?>" placeholder="Search by name or control number" autocomplete="off">
       </div>
-      <div class="pa-filter-field">
-        <label for="status">Status</label>
-        <select id="status" name="status">
-          <option value="">All</option>
-          <option value="review"     <?= $dr_status === 'review'     ? 'selected' : '' ?>>Needs Review</option>
-          <option value="incomplete" <?= $dr_status === 'incomplete' ? 'selected' : '' ?>>Incomplete</option>
-          <option value="admitted"   <?= $dr_status === 'admitted'   ? 'selected' : '' ?>>Admitted</option>
-        </select>
-      </div>
-      <div class="pa-filter-field">
-        <label for="grade">Grade</label>
-        <select id="grade" name="grade">
-          <option value="">All</option>
-          <?php foreach ($allowed_grades as $g): ?>
-            <option value="<?= $g ?>" <?= $dr_grade === $g ? 'selected' : '' ?>>Grade <?= $g ?></option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-      <div class="pa-filter-field">
-        <label for="strand">Strand</label>
-        <select id="strand" name="strand">
-          <option value="">All</option>
-          <?php foreach ($allowed_strands as $s): ?>
-            <option value="<?= $s ?>" <?= $dr_strand === $s ? 'selected' : '' ?>><?= $s ?></option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-      <div class="pa-filter-actions">
-        <button type="submit" class="btn-filter">Filter</button>
-        <?php if ($dr_q !== '' || $dr_status !== '' || $dr_grade !== '' || $dr_strand !== ''): ?>
-          <a href="document_review" class="btn-filter-clear">Clear</a>
-        <?php endif; ?>
-      </div>
+      <select class="pa-filter-select" id="status" name="status" aria-label="Filter by status">
+        <option value="">All statuses</option>
+        <option value="review"     <?= $dr_status === 'review'     ? 'selected' : '' ?>>Needs Review</option>
+        <option value="incomplete" <?= $dr_status === 'incomplete' ? 'selected' : '' ?>>Incomplete</option>
+        <option value="admitted"   <?= $dr_status === 'admitted'   ? 'selected' : '' ?>>Admitted</option>
+      </select>
+      <select class="pa-filter-select" id="grade" name="grade" aria-label="Filter by grade">
+        <option value="">All grades</option>
+        <?php foreach ($allowed_grades as $g): ?>
+          <option value="<?= $g ?>" <?= $dr_grade === $g ? 'selected' : '' ?>>Grade <?= $g ?></option>
+        <?php endforeach; ?>
+      </select>
+      <select class="pa-filter-select" id="strand" name="strand" aria-label="Filter by strand">
+        <option value="">All strands</option>
+        <?php foreach ($allowed_strands as $s): ?>
+          <option value="<?= $s ?>" <?= $dr_strand === $s ? 'selected' : '' ?>><?= $s ?></option>
+        <?php endforeach; ?>
+      </select>
+      <?php if ($dr_q !== '' || $dr_status !== '' || $dr_grade !== '' || $dr_strand !== ''): ?>
+        <a href="document_review" class="pa-filter-clear">Clear</a>
+      <?php endif; ?>
+      <noscript><button type="submit" class="btn-filter">Filter</button></noscript>
     </form>
 
     <?php if (empty($applicants)): ?>
@@ -955,6 +1126,12 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
       </div>
 
     <?php else: ?>
+
+      <?php
+        $dr_range_start = $total_count === 0 ? 0 : $dr_offset + 1;
+        $dr_range_end   = min($dr_offset + count($applicants), $total_count);
+      ?>
+      <p class="pa-result-count">Showing <?= $dr_range_start ?>&ndash;<?= $dr_range_end ?> of <?= $total_count ?> application<?= $total_count === 1 ? '' : 's' ?></p>
 
       <table class="pa-table">
         <thead>
@@ -1005,7 +1182,7 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
         $base_params = array_filter(['q' => $dr_q, 'status' => $dr_status, 'grade' => $dr_grade, 'strand' => $dr_strand]);
       ?>
         <div class="pa-pagination">
-          <span>Page <?= $dr_page ?> of <?= $total_pages ?> &middot; <?= $total_count ?> total</span>
+          <span>Page <?= $dr_page ?> of <?= $total_pages ?></span>
           <div class="pages">
             <?php if ($dr_page > 1): ?>
               <a href="?<?= http_build_query(array_merge($base_params, ['page' => $dr_page - 1])) ?>">&larr;</a>
@@ -1035,10 +1212,34 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
 </div>
 
 <script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
-<script src="<?= APP_URL ?>/assets/js/blur_detect.js"></script>
+<?php require_once __DIR__ . '/../../../shared/includes/ui_modal_css.php'; ?>
+<script src="<?= APP_URL ?>/assets/js/blur_detect.js?v=<?= filemtime(BASE_PATH . '/assets/js/blur_detect.js') ?>"></script>
 <script>
   const applicantData = <?= json_encode($modal_data, JSON_HEX_TAG | JSON_HEX_APOS) ?>;
   const returnQs = <?= json_encode($return_qs, JSON_HEX_TAG | JSON_HEX_APOS) ?>;
+
+  // ── Realtime toolbar: search re-submits the GET filter form shortly
+  // after typing stops (no "Filter" button needed), status/grade/strand
+  // re-submit the moment a selection changes.
+  (function () {
+    const form = document.getElementById('drFilterForm');
+    const search = document.getElementById('q');
+    if (!form || !search) return;
+    if (search.value) {
+      search.focus();
+      const end = search.value.length;
+      search.setSelectionRange(end, end);
+    }
+    let debounceTimer;
+    search.addEventListener('input', function () {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(function () { form.submit(); }, 400);
+    });
+    ['status', 'grade', 'strand'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', function () { form.submit(); });
+    });
+  })();
 
   function esc(s) {
     return (s ?? '').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1051,62 +1252,142 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
       ' at ' + dt.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit', hour12:true });
   }
 
-  const fileIconSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>';
+  const fileIconSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>';
+  const imageIconSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path stroke-linecap="round" stroke-linejoin="round" d="M21 15l-5-5L5 21"/></svg>';
+  const uploadIconSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0L7 9m5-5l5 5M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>';
+
+  function fileKindIcon(name) {
+    const ext = (name || '').split('.').pop().toLowerCase();
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext) ? imageIconSvg : fileIconSvg;
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes && bytes !== 0) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  const dropzoneMarkup = (rid) =>
+    '<div class="req-dropzone" id="dropzone-' + rid + '" tabindex="0" ' +
+      'onclick="document.getElementById(\'fileinput-' + rid + '\').click()" ' +
+      'ondragover="onDropzoneDragOver(event, this)" ondragleave="onDropzoneDragLeave(event, this)" ' +
+      'ondrop="onDropzoneDrop(event, ' + rid + ')">' +
+      uploadIconSvg + '<span>Drag a file here or click to browse</span>' +
+    '</div>' +
+    '<input type="file" class="req-dropzone-input" id="fileinput-' + rid + '" name="doc_upload[' + rid + ']" ' +
+      'accept=".pdf,.jpg,.jpeg,.png" onchange="onDropzoneFileChange(' + rid + ', this.files[0])">';
+
+  function fileChipMarkup(rid, file) {
+    return (
+      '<div class="req-file-chip" id="filechip-' + rid + '">' +
+        '<div class="req-file-chip-icon">' + fileKindIcon(file.name) + '</div>' +
+        '<div class="req-file-chip-info">' +
+          '<span class="req-file-chip-name">' + esc(file.name) + '</span>' +
+          '<span class="req-file-chip-meta">' + esc((file.name.split('.').pop() || '').toUpperCase()) + ' &middot; ' + formatBytes(file.size) + '</span>' +
+        '</div>' +
+        '<button type="button" class="req-file-chip-remove" title="Remove file" onclick="removeDropzoneFile(' + rid + ')">&times;</button>' +
+      '</div>'
+    );
+  }
 
   function renderRequirementsTab(enrollmentId, requirements) {
     let rows = requirements.map(r => {
       const rid = r.requirement_type_id;
       const fileCell = r.file_path
         ? '<a class="req-file-link" href="view_document?id=' + r.enrollment_requirement_id + '" target="_blank">' +
-            '<span class="req-file-name">' + esc(r.original_filename || 'View file') + '</span>' + fileIconSvg +
+            '<span class="req-file-link-icon">' + fileKindIcon(r.original_filename || r.file_path) + '</span>' +
+            '<span class="req-file-name">' + esc(r.original_filename || 'View file') + '</span>' +
           '</a><span class="req-blur-badge" id="blur-badge-' + r.enrollment_requirement_id + '"></span>'
-        : '<span class="req-file-empty">No file uploaded</span>';
+        : '';
 
-      let control;
+      let control, dropzoneCell, reasonRow = '';
       if (r.status === 'submitted') {
         // Done — nothing left to decide on this row.
         control = '<span class="status-flag status-admitted">Approved</span>';
+        dropzoneCell = fileCell || '<span class="req-file-empty">No file uploaded</span>';
       } else if (r.status === 'pending_review') {
-        // A file is on hand awaiting a decision — one radio click is the
-        // whole action; Reject reveals the (required) reason inline.
-        control =
-          '<div class="req-decision">' +
-            '<label class="req-radio req-radio-approve">' +
-              '<input type="radio" name="requirements[' + rid + ']" value="submitted" onchange="onDecisionChange(this, ' + rid + ')"><span>Approve</span>' +
-            '</label>' +
-            '<label class="req-radio req-radio-reject">' +
-              '<input type="radio" name="requirements[' + rid + ']" value="rejected" onchange="onDecisionChange(this, ' + rid + ')"><span>Decline</span>' +
-            '</label>' +
-          '</div>' +
-          '<input type="text" class="req-reason-input" id="reason-' + rid + '" ' +
-            'name="reasons[' + rid + ']" placeholder="Reason for declining (required)">';
+        // A file is normally already on hand by the time a row reaches
+        // this status. If somehow not (invariant broken), there's nothing
+        // to approve or decline yet, so skip the controls entirely rather
+        // than show a pair of pills that can't be used.
+        control = r.file_path
+          ? '<div class="req-decision">' +
+              '<label class="req-radio req-radio-approve">' +
+                '<input type="radio" name="requirements[' + rid + ']" value="submitted" onchange="onDecisionChange(this, ' + rid + ')"><span>Approve</span>' +
+              '</label>' +
+              '<label class="req-radio req-radio-reject">' +
+                '<input type="radio" name="requirements[' + rid + ']" value="rejected" onchange="onDecisionChange(this, ' + rid + ')"><span>Decline</span>' +
+              '</label>' +
+            '</div>'
+          : '';
+        dropzoneCell = fileCell || '<span class="req-file-empty">No file uploaded</span>';
+        reasonRow =
+          '<tr class="req-reason-row" id="reason-row-' + rid + '">' +
+            '<td></td>' +
+            '<td colspan="2">' +
+              '<input type="text" class="req-reason-input" id="reason-' + rid + '" ' +
+                'name="reasons[' + rid + ']" placeholder="Reason for declining (required) — the student will see this">' +
+            '</td>' +
+          '</tr>';
       } else {
         // 'pending' (nothing uploaded yet) or 'rejected' (file already
-        // deleted, awaiting resubmission) — no file to approve, so the only
-        // path forward here is staff confirming they verified it in person.
-        // Checking the box directly marks it Submitted — no second dropdown
-        // step needed.
+        // deleted, awaiting resubmission).
         const rejectionNote = r.status === 'rejected' && r.rejection_reason
           ? '<div class="req-old-rejection">Declined: ' + esc(r.rejection_reason) + ' — awaiting resubmission</div>'
           : '';
+
         control =
           rejectionNote +
-          '<label class="req-manual-confirm">' +
-            '<input type="checkbox" class="req-manual-checkbox" id="checkbox-' + rid + '" onchange="onManualCheck(this, ' + rid + ')"> Verified in person — mark Submitted' +
-          '</label>' +
-          '<label class="req-upload-label">' +
-            '<input type="file" class="req-upload-input" name="doc_upload[' + rid + ']" accept=".pdf,.jpg,.jpeg,.png" onchange="onManualFileChange(this, ' + rid + ', \'' + r.status + '\')">' +
-            '<span id="upload-name-' + rid + '">Or upload a file</span>' +
-          '</label>' +
+          '<div class="req-verify-toggle" role="group">' +
+            '<button type="button" class="active" data-mode="online" onclick="setVerifyMode(' + rid + ', \'online\', this)">Online</button>' +
+            '<button type="button" data-mode="person" onclick="setVerifyMode(' + rid + ', \'person\', this)">In person</button>' +
+          '</div>' +
+          '<div id="verify-online-' + rid + '">' +
+            '<div class="req-decision" id="decision-' + rid + '" style="display:none;">' +
+              '<label class="req-radio req-radio-approve" id="approve-label-' + rid + '">' +
+                '<input type="radio" name="requirements[' + rid + ']" value="submitted" onchange="onDecisionChange(this, ' + rid + ')"><span>Approve</span>' +
+              '</label>' +
+              '<label class="req-radio req-radio-reject" id="reject-label-' + rid + '">' +
+                '<input type="radio" name="requirements[' + rid + ']" value="rejected" onchange="onDecisionChange(this, ' + rid + ')"><span>Decline</span>' +
+              '</label>' +
+            '</div>' +
+            '<div class="req-note" id="resubmit-note-' + rid + '" style="display:none;">Resubmitted — will need review after saving.</div>' +
+          '</div>' +
+          '<div id="verify-person-' + rid + '" style="display:none;">' +
+            '<label class="req-manual-confirm">' +
+              '<input type="checkbox" class="req-manual-checkbox" id="checkbox-' + rid + '" onchange="onManualCheck(this, ' + rid + ')"> Seen in person — mark Submitted' +
+            '</label>' +
+          '</div>' +
           '<input type="hidden" id="hidden-' + rid + '" name="requirements[' + rid + ']" value="">';
+
+        dropzoneCell =
+          '<div id="file-online-' + rid + '" data-prior-status="' + esc(r.status) + '">' + dropzoneMarkup(rid) + '</div>' +
+          '<div id="file-person-' + rid + '" style="display:none;"><span class="req-file-empty">No file needed</span></div>';
+
+        // Decline only becomes clickable here for a never-before-submitted
+        // row (once a file lands in the dropzone) — a 'rejected' row hides
+        // its decision controls again the moment a resubmitted file
+        // arrives, so it never needs this reason field.
+        if (r.status === 'pending') {
+          reasonRow =
+            '<tr class="req-reason-row" id="reason-row-' + rid + '">' +
+              '<td></td>' +
+              '<td colspan="2">' +
+                '<input type="text" class="req-reason-input" id="reason-' + rid + '" ' +
+                  'name="reasons[' + rid + ']" placeholder="Reason for declining (required) — the student will see this">' +
+              '</td>' +
+            '</tr>';
+        }
       }
 
       return (
-        '<tr>' +
+        '<tr id="req-row-' + rid + '">' +
           '<td class="req-name">' + esc(r.name) + (r.is_required ? ' <span class="req">*</span>' : '') + '</td>' +
           '<td><div class="req-status-cell">' + control + '</div></td>' +
-          '<td>' + fileCell + '</td>' +
-        '</tr>'
+          '<td>' + dropzoneCell + '</td>' +
+        '</tr>' +
+        reasonRow
       );
     }).join('');
 
@@ -1117,13 +1398,9 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
         '<input type="hidden" name="return_qs" value="' + esc(returnQs) + '">' +
         '<div class="req-table-wrap">' +
           '<table class="req-review-table">' +
-            '<thead><tr><th>Requirement</th><th>Status</th><th>File</th></tr></thead>' +
+            '<thead><tr><th>Requirement</th><th>Verification</th><th>File</th></tr></thead>' +
             '<tbody>' + rows + '</tbody>' +
           '</table>' +
-        '</div>' +
-        '<div class="dr-modal-footer">' +
-          '<span class="field-hint">Declining a document requires a reason — the student will see it.</span>' +
-          '<button type="submit" name="save_requirements" class="btn-primary">Save Changes</button>' +
         '</div>' +
       '</form>'
     );
@@ -1134,12 +1411,18 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
     if (group) {
       group.querySelectorAll('.req-radio').forEach(l => l.classList.toggle('is-checked', l.querySelector('input') === radio));
     }
+    const reasonRow = document.getElementById('reason-row-' + rid);
     const reasonInput = document.getElementById('reason-' + rid);
-    if (!reasonInput) return;
+    if (!reasonRow || !reasonInput) return;
     const rejecting = radio.value === 'rejected';
-    reasonInput.classList.toggle('show', rejecting);
+    reasonRow.classList.toggle('show', rejecting);
     if (rejecting) reasonInput.setAttribute('required', 'required');
     else reasonInput.removeAttribute('required');
+
+    // The row above the reason field drops its own border while the
+    // field is open, so no rule sits directly above the textbox.
+    const parentRow = document.getElementById('req-row-' + rid);
+    if (parentRow) parentRow.classList.toggle('no-border', rejecting);
   }
 
   function onManualCheck(checkbox, rid) {
@@ -1148,59 +1431,122 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
     hidden.value = checkbox.checked ? 'submitted' : '';
   }
 
-  function onManualFileChange(input, rid, priorStatus) {
+  // Toggles which verification path is visible for a requirement that has
+  // nothing on file yet — "Online" (dropzone + Approve/Decline once a file
+  // exists) or "In person" (a direct checkbox, no file involved).
+  function setVerifyMode(rid, mode, btn) {
+    const toggle = btn.closest('.req-verify-toggle');
+    if (toggle) toggle.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+
+    const onlineVerify = document.getElementById('verify-online-' + rid);
+    const personVerify = document.getElementById('verify-person-' + rid);
+    const onlineFile   = document.getElementById('file-online-' + rid);
+    const personFile   = document.getElementById('file-person-' + rid);
+    const checkbox     = document.getElementById('checkbox-' + rid);
+    const hidden        = document.getElementById('hidden-' + rid);
+
+    const isOnline = mode === 'online';
+    if (onlineVerify) onlineVerify.style.display = isOnline ? '' : 'none';
+    if (personVerify) personVerify.style.display = isOnline ? 'none' : '';
+    if (onlineFile) onlineFile.style.display = isOnline ? '' : 'none';
+    if (personFile) personFile.style.display = isOnline ? 'none' : '';
+
+    // Switching away from "In person" un-checks it so a stray checked box
+    // doesn't silently mark the item Submitted from a hidden panel.
+    if (isOnline && checkbox && checkbox.checked) {
+      checkbox.checked = false;
+      if (hidden) hidden.value = '';
+    }
+  }
+
+  function refreshApproveGate(rid, hasFile) {
+    const decision = document.getElementById('decision-' + rid);
+    if (decision) decision.style.display = hasFile ? '' : 'none';
+  }
+
+  function onDropzoneDragOver(e, zone) {
+    e.preventDefault();
+    zone.classList.add('is-dragover');
+  }
+  function onDropzoneDragLeave(e, zone) {
+    zone.classList.remove('is-dragover');
+  }
+  function onDropzoneDrop(e, rid) {
+    e.preventDefault();
+    const zone = document.getElementById('dropzone-' + rid);
+    if (zone) zone.classList.remove('is-dragover');
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!file) return;
+    const input = document.getElementById('fileinput-' + rid);
+    if (input) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+    }
+    onDropzoneFileChange(rid, file);
+  }
+
+  function removeDropzoneFile(rid) {
+    const input = document.getElementById('fileinput-' + rid);
+    if (input) input.value = '';
+    const cell = document.getElementById('file-online-' + rid);
+    if (cell) cell.innerHTML = dropzoneMarkup(rid);
     const hidden = document.getElementById('hidden-' + rid);
-    const nameSpan = document.getElementById('upload-name-' + rid);
-    const checkbox = document.getElementById('checkbox-' + rid);
-    const hasFile = input.files && input.files.length > 0;
+    if (hidden) hidden.value = '';
+    const note = document.getElementById('resubmit-note-' + rid);
+    if (note) note.style.display = 'none';
+    refreshApproveGate(rid, false);
+  }
 
-    if (!hasFile) {
-      if (hidden) hidden.value = checkbox && checkbox.checked ? 'submitted' : '';
-      if (nameSpan) nameSpan.textContent = 'Or upload a file';
-      return;
+  function onDropzoneFileChange(rid, file) {
+    const hidden = document.getElementById('hidden-' + rid);
+    const cell = document.getElementById('file-online-' + rid);
+
+    if (!file) { removeDropzoneFile(rid); return; }
+
+    // A file swapped in on a row that was just declined needs a fresh
+    // review — auto-approving a resubmission straight through this
+    // dropzone would silently bypass it, so it goes back to the review
+    // queue instead of exposing Approve here. A never-before-submitted
+    // row keeps the direct Approve/Decline shortcut, gated on sharpness.
+    const isRejected = cell && cell.dataset.priorStatus === 'rejected';
+
+    function finish() {
+      if (cell) cell.innerHTML = fileChipMarkup(rid, file);
+      if (isRejected) {
+        if (hidden) hidden.value = 'pending_review';
+        const note = document.getElementById('resubmit-note-' + rid);
+        if (note) note.style.display = '';
+        const decision = document.getElementById('decision-' + rid);
+        if (decision) decision.style.display = 'none';
+      } else {
+        refreshApproveGate(rid, true);
+      }
     }
 
-    const file = input.files[0];
-
-    // Sets the hidden field once the file has cleared the blur check (or
-    // didn't need one). A file swapped in on a row that was just declined
-    // needs a fresh review — auto-approving a resubmission straight
-    // through this "staff verified in person" shortcut would silently
-    // bypass it. A never-before-submitted 'pending' row keeps the
-    // existing direct-approve shortcut, now gated on sharpness first.
-    function attach() {
-      if (hidden) hidden.value = priorStatus === 'rejected' ? 'pending_review' : 'submitted';
-      if (nameSpan) nameSpan.textContent = file.name;
-    }
-
-    // PDFs (allowed for most requirement types) can't be meaningfully
-    // blur-checked without rendering them first — skip straight to attach.
     if (typeof scoreImageSharpness !== 'function' || !file.type.startsWith('image/')) {
-      attach();
+      finish();
       return;
     }
 
-    if (nameSpan) nameSpan.textContent = 'Checking image sharpness…';
+    if (cell) cell.innerHTML = '<div class="req-note">Checking image sharpness…</div>';
 
     scoreImageSharpness(file).then(function (score) {
       if (score < BLUR_THRESHOLD) {
-        input.value = '';
-        if (nameSpan) nameSpan.textContent = 'Or upload a file';
-        // Leave the hidden field exactly as it was — this file never
-        // gets a chance to be approved by "Save Changes".
+        removeDropzoneFile(rid);
         if (typeof Swal !== 'undefined') {
           Swal.fire({ icon: 'warning', title: 'Image looks blurry', text: 'This image looks blurry — please attach a clearer photo or scan.', confirmButtonColor: '#1E4D3B' });
         } else {
           alert('This image looks blurry — please attach a clearer photo or scan.');
         }
       } else {
-        attach();
+        finish();
       }
     }).catch(function () {
       // Couldn't score it (corrupt/unsupported image) — never block on a
       // check that itself failed; normal server-side validation still
       // catches a genuinely bad file.
-      attach();
+      finish();
     });
   }
 
@@ -1247,7 +1593,7 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
       <div class="pa-modal-head">
         <div>
           <div class="pa-modal-title">${esc(fullName)} <span class="status-flag ${status.cls}">${status.label}</span></div>
-          <div class="pa-modal-sub">${esc(a.control_number || 'No control number yet')} &middot; Grade ${esc(a.grade_level)} &ndash; ${esc(a.strand)}</div>
+          <div class="pa-modal-sub">Grade ${esc(a.grade_level)} &ndash; ${esc(a.strand)}</div>
           <div class="pa-modal-sub">Submitted ${fmtDateTime(a.created_at_iso)}</div>
         </div>
         <button class="pa-modal-close" onclick="closeModal()">&times;</button>
@@ -1256,7 +1602,7 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
       ${renderRequirementsTab(enrollmentId, a.requirements)}
 
       <div class="dr-modal-footer">
-        <button type="button" class="btn-secondary" onclick="closeModal()">Close</button>
+        <button type="submit" form="reqSaveForm" name="save_requirements" class="btn-secondary">Save Changes</button>
         <div class="dr-footer-actions">
           ${followupBtn}
           ${admitBtn}

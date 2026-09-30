@@ -17,7 +17,10 @@ if (!isset($_SESSION['user_student_id'])) {
 
 $user_student_id = (int) $_SESSION['user_student_id'];
 
-$stmt = $conn->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND recipient_type = 'student' AND is_read = 0");
+// Portal-origin rows only (link NOT under roles/lms/) — the LMS bell's own
+// unread rows are marked read separately by lms_mark_notifications_read.php,
+// so the two bells' read state no longer bleed into each other.
+$stmt = $conn->prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND recipient_type = 'student' AND is_read = 0 AND link NOT LIKE 'roles/lms/%'");
 $stmt->bind_param('i', $user_student_id);
 $stmt->execute();
 $stmt->close();

@@ -352,14 +352,9 @@ guard_password_change('change_password');
   ?>
   <div class="staff-main">
     <div class="staff-topbar">
-      <div class="staff-topbar-left">
-        <div class="staff-topbar-title">
-          Dashboard
-          <span class="staff-topbar-subtitle"><?= htmlspecialchars($roleLabel) ?> overview</span>
-        </div>
-      </div>
+      <div class="staff-topbar-left"></div>
       <div style="display:flex; align-items:center; gap:14px;">
-        <?php if (!in_array($department, ['records', 'registrar', 'treasury'], true)) { include_once BASE_PATH . '/shared/includes/staff_notifications.php'; } ?>
+        <?php include_once BASE_PATH . '/shared/includes/staff_notifications.php'; ?>
         <span class="staff-topbar-date"><?= date('F j, Y') ?></span>
       </div>
     </div>

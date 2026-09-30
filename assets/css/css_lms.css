@@ -17,6 +17,27 @@
   --color-muted: #9FB8B8;
   --color-info: #CFE9D4;
   --color-accent: #F0FFF0;
+  /* Width of the centered LMS content column (see "Centered column" below).
+     Wide enough that big screens aren't mostly empty side margins; below
+     this width the column simply fills the screen (minus the side padding). */
+  --lms-col: 1440px;
+
+  /* Student palette (css_student.css :root --color-*) for the LMS top bar
+     and LMS Home — own --st-* names because the --color-* names above are
+     this sheet's older values that lms_login.php still uses. The page
+     canvas is --st-page (#EFF5F3) rather than the student sheet's cream. */
+  --st-primary: #386641;
+  --st-primary-hover: #2F5636;
+  --st-primary-active: #24422A;
+  --st-dark: #1C2628;
+  --st-muted: #9FB8B8;
+  --st-info: #CADEDE;
+  --st-page: #EFF5F3;
+  --st-sub: #5A6868;      /* secondary text on white/light surfaces (--st-muted is too faint there) */
+  --st-line: #D6E3E0;     /* hairlines and card borders */
+  --st-tint: #E6EFED;     /* light blue-grey fill: search box, lesson card */
+  --st-hover: #F4F8F7;    /* row / button hover on white */
+  --st-beige: #FEFAE0;    /* text/icons on charcoal (--st-dark) surfaces — css_student.css's --color-accent */
 }
 
 *, *::before, *::after {
@@ -314,159 +335,161 @@ body.auth-page {
   --lms-on-ink-hover-bg: rgba(255, 255, 255, 0.12);
 }
 
-/* Light neutral/green page canvas on the two revamped LMS pages (Home,
-   My Courses) — scoped to body.lms-warm-bg only, so the academics pages
-   that still share .student-layout/.lms-layout keep their current
-   background untouched. */
-body.lms-warm-bg .student-content { background: var(--lms-surface-soft); }
+/* ─── Every Student LMS page: LMS Home's look ─────────────────────────────
+   The academics pages (Lessons, Assignments, Quizzes, Discussions, Stream,
+   People, My Courses, Take Quiz) style themselves with the --lms-* tokens
+   above. Inside the LMS those tokens are re-pointed at the student palette
+   LMS Home uses (charcoal ink, blue-grey lines/tints, green accent), so
+   every page reads as one product without rewriting each page's rules. */
+body.lms-layout {
+  --lms-ink: var(--st-dark);
+  --lms-ink-hover: var(--st-primary);
+  --lms-ink-accent: var(--st-primary);
+  --lms-cream: var(--st-tint);
+  --lms-surface-soft: var(--st-hover);
+  --lms-border: var(--st-line);
+  --lms-border-2: #E4EDEA;
+  --lms-muted: var(--st-sub);
+  --lms-muted-2: #718282;
+  --lms-on-ink: var(--st-beige);
+  --lms-on-ink-muted: var(--st-muted);
+}
+body.lms-layout,
+body.lms-layout .student-main,
+body.lms-layout .student-content { background: var(--st-page); }
+/* Filters toggle [hidden] on rows that are display:flex — make it win. */
+body.lms-layout [hidden] { display: none !important; }
 
-/* The "Good morning/afternoon/evening" topbar becomes a solid dark-green
-   bar too, with white/light text for contrast, and a brighter green
-   hairline separates it from the content below — scoped to these two
-   pages only. */
-body.lms-warm-bg .student-topbar {
-  background: var(--lms-ink);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-body.lms-warm-bg .student-topbar-title,
-body.lms-warm-bg .student-topbar-date {
-  color: var(--lms-on-ink);
-}
-body.lms-warm-bg .student-topbar-subtitle {
-  color: var(--lms-on-ink-muted);
-}
+/* Page title: LMS Home's serif welcome heading instead of a bar. */
+body.lms-layout .student-topbar { height: auto; padding-top: 26px; padding-bottom: 6px; background: transparent; border: 0; align-items: flex-end; }
+body.lms-layout .student-topbar-title { gap: 4px; font-family: 'Fraunces', Georgia, serif; font-size: clamp(1.45rem, 3vw, 1.85rem); font-weight: 600; line-height: 1.15; color: var(--st-dark); }
+body.lms-layout .student-topbar-subtitle { font-family: 'Inter', sans-serif; font-size: 13.5px; color: var(--st-sub); }
+body.lms-layout .student-topbar-date { font-size: 12.5px; font-weight: 600; color: var(--st-sub); padding-bottom: 3px; }
 
+/* Panels = LMS Home's .hm-panel. */
+body.lms-layout .student-panel-block { background: #fff; border: 1px solid var(--st-line); border-radius: 14px; padding: 18px 20px 20px; box-shadow: none; }
+body.lms-layout .student-panel-header { margin-bottom: 14px; }
+body.lms-layout .student-panel-icon { width: 34px; height: 34px; border-radius: 8px; background: var(--st-info); color: var(--st-dark); }
+body.lms-layout .student-panel-title { font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 600; color: var(--st-dark); }
+body.lms-layout .empty-state { margin: 0; padding: 18px 14px; border-radius: 10px; background: var(--st-hover); font-size: 13px; color: var(--st-sub); text-align: center; }
+
+/* School-year / semester / subject pickers. */
+.lms-picker { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.lms-picker select {
+  appearance: none; -webkit-appearance: none;
+  height: 34px; padding: 0 34px 0 14px; border: 1px solid var(--st-line); border-radius: 999px;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 24 16'%3E%3Cpolygon points='2,3 22,3 12,15' fill='%231C2628'/%3E%3C/svg%3E") no-repeat right 13px center / 10px;
+  font: inherit; font-size: 12.5px; font-weight: 600; color: var(--st-dark); cursor: pointer;
+}
+.lms-picker select:hover { border-color: var(--st-info); background-color: var(--st-hover); }
+.lms-picker select:focus-visible { outline: 2px solid var(--st-primary); outline-offset: 1px; }
+
+/* Subject group heading (All-subjects views): icon tile + serif name,
+   same as a My Courses row on LMS Home. */
+.lms-group-title { display: flex; align-items: center; gap: 10px; margin: 22px 0 10px; font-family: 'Fraunces', Georgia, serif; font-size: 15.5px; font-weight: 600; color: var(--st-dark); }
+.lms-group-title:first-child { margin-top: 4px; }
+.lms-group-title .hm-tile { width: 30px; height: 30px; background: var(--st-info); color: var(--st-dark); }
+.lms-group-title .hm-tile svg { width: 15px; height: 15px; stroke-width: 8; }
+.lms-group-title .count { margin-left: auto; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 700; color: var(--st-sub); }
+
+/* Filter/summary bar above a task list: "3 of 8 turned in" + progress + chips. */
+.lms-summary { display: flex; justify-content: space-between; align-items: center; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.lms-summary .hm-chips { margin: 0; }
+.lms-summary-count { font-size: 12.5px; font-weight: 700; color: var(--st-sub); }
+.lms-summary + .hm-progress { margin-top: -4px; }
+.lms-filter-none { margin-top: 8px; }
+
+/* Task rows outside LMS Home reuse its calendar rows (.hm-cal-item). */
+.hm-cal-item.is-done { background: #fff; border: 1px solid var(--st-line); border-left: 3px solid var(--k); }
+.hm-cal-item.is-done .hm-cal-item-main b { color: var(--st-sub); }
+.hm-open-btn.is-quiet { background: #fff; color: var(--st-dark); box-shadow: inset 0 0 0 1px var(--st-line); }
+.hm-open-btn.is-quiet:hover { background: var(--st-hover); }
+.lms-score { flex: none; padding: 3px 10px; border-radius: 999px; background: #E2ECE6; color: var(--st-primary); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.lms-new { flex: none; display: inline-block; padding: 1px 7px; border-radius: 4px; background: var(--st-primary); color: #fff; font-size: 9.5px; font-weight: 800; letter-spacing: .06em; vertical-align: 2px; }
+
+/* ─── LMS top bar (shared/includes/lms_navbar.php) ────────────────────────
+   Two white rows on the brand palette (:root --color-*): brand + search +
+   bell + account pill, then the section tabs as pills. --color-muted is
+   only used on the dark account pill, where it has the contrast to read. */
 .lms-foldernav {
   position: sticky;
   top: 0;
   z-index: 500;
-  padding: 0 20px;
-  background: var(--lms-ink);
-  border-bottom: 1px solid var(--lms-ink-accent);
+  background: #ffffff;
+  border-bottom: 1px solid var(--color-info);
+  --nav-ink: #14241A;
+  --nav-dark: var(--color-primary-active);
 }
 
-/* Edge-to-edge — no max-width/auto-margin column, so the bar's content
-   fills the full viewport width instead of sitting in a centered gutter
-   on wide screens. */
 .lms-foldernav-inner {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 16px;
   width: 100%;
   height: 60px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--color-info);
 }
 
-.lms-foldernav-logo { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-right: 12px; text-decoration: none; }
-.lms-foldernav-logo img { height: 36px; width: 36px; object-fit: contain; display: block; flex-shrink: 0; }
-.lms-foldernav-logo-text {
-  font-family: 'Fraunces', serif;
-  font-weight: 560;
-  font-size: 14px;
-  line-height: 1.2;
-  color: var(--lms-on-ink);
-  white-space: nowrap;
-}
+.lms-foldernav-logo { display: flex; align-items: center; gap: 10px; flex-shrink: 0; text-decoration: none; }
+.lms-foldernav-logo-tile { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; background: var(--nav-dark); flex-shrink: 0; }
+.lms-foldernav-logo-tile img { width: 24px; height: 24px; object-fit: contain; display: block; }
+.lms-foldernav-logo-text { font-family: 'Fraunces', serif; font-weight: 600; font-size: 16px; color: var(--nav-ink); white-space: nowrap; }
 
-@media (max-width: 640px) {
-  .lms-foldernav-logo-text { display: none; }
-}
-
-.lms-foldernav-toggle {
-  display: none;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  width: 34px;
+/* Search — combobox with a results panel */
+.lms-search { position: relative; flex: 0 1 310px; min-width: 0; margin-left: 8px; }
+.lms-search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: #4B6157; pointer-events: none; }
+.lms-search-input {
+  width: 100%;
   height: 34px;
-  background: transparent;
-  border: 1px solid var(--lms-on-ink-border);
-  border-radius: 6px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.lms-foldernav-toggle span { display: block; width: 16px; height: 2px; margin: 0 auto; background: var(--lms-on-ink); border-radius: 1px; }
-
-.lms-foldernav-tabs { display: flex; align-items: stretch; gap: 2px; flex: 1; min-width: 0; height: 100%; }
-
-/* Flat text tab with a bottom-border indicator for the current page —
-   no pill fill, no rounded chrome; reads like a plain, functional tab bar. */
-.lms-navtab {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 100%;
-  padding: 0 14px;
-  border-radius: 0;
-  background: transparent;
-  color: var(--lms-on-ink-muted);
-  font-size: 13.5px;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-  cursor: pointer;
-  border: none;
-  border-bottom: 2px solid transparent;
-  font-family: inherit;
-  transition: color 0.12s, border-color 0.12s;
-}
-.lms-navtab:hover { color: var(--lms-on-ink); }
-.lms-navtab.active { color: var(--lms-on-ink); border-bottom-color: var(--lms-on-ink); }
-
-.lms-navtab-dropdown { position: relative; height: 100%; }
-.lms-navtab-panel {
-  display: none;
-  position: absolute;
-  top: calc(100% + 1px);
-  left: 0;
-  min-width: 190px;
-  background: #ffffff;
-  border: 1px solid var(--lms-border);
+  padding: 0 12px 0 32px;
+  border: 1px solid var(--color-info);
   border-radius: 8px;
-  box-shadow: 0 4px 14px rgba(20, 40, 29, 0.08);
-  padding: 6px;
-  flex-direction: column;
-  gap: 1px;
-  z-index: 20;
-}
-.lms-navtab-dropdown.open .lms-navtab-panel { display: flex; }
-.lms-navtab-panel-link {
-  display: block;
-  padding: 8px 10px;
-  border-radius: 6px;
+  background: var(--color-accent);
   font-size: 13px;
-  font-weight: 500;
-  color: var(--lms-ink);
-  text-decoration: none;
-  transition: background 0.12s, color 0.12s;
+  font-family: inherit;
+  color: var(--nav-ink);
+  transition: border-color .12s, background-color .12s;
 }
-.lms-navtab-panel-link:hover { background: var(--lms-surface-soft); }
-.lms-navtab-panel-link.active { background: var(--lms-ink); color: #fff; }
+.lms-search-input::placeholder { color: #5E7466; }
+.lms-search-input:focus { outline: none; border-color: var(--color-primary); background: #fff; box-shadow: 0 0 0 3px rgba(56, 102, 65, .15); }
+.lms-search-input::-webkit-search-cancel-button { cursor: pointer; }
+.lms-search-panel {
+  position: absolute; top: calc(100% + 6px); left: 0; width: max(100%, 360px); max-height: min(420px, 70vh); overflow-y: auto;
+  background: #fff; border: 1px solid var(--color-info); border-radius: 10px; box-shadow: 0 10px 28px rgba(20, 40, 29, .14); z-index: 60; padding: 6px;
+}
+.lms-search-status { padding: 6px 8px 4px; font-size: 11.5px; color: #4B6157; }
+.lms-search-status.is-empty { padding: 14px 8px; text-align: center; font-size: 13px; }
+.lms-search-list { list-style: none; margin: 0; padding: 0; }
+.lms-search-group { padding: 8px 8px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-primary); }
+.lms-search-opt { display: flex; flex-direction: column; gap: 1px; padding: 7px 8px; border-radius: 7px; cursor: pointer; }
+.lms-search-opt .t { font-size: 13px; font-weight: 600; color: var(--nav-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lms-search-opt .s { font-size: 11.5px; color: #4B6157; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lms-search-opt.is-active { background: var(--color-accent); box-shadow: inset 3px 0 0 var(--color-primary); }
 
-.lms-foldernav-right { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.lms-foldernav-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; margin-left: auto; }
 
-/* Flat, borderless icon buttons — no pill/glass chrome, just the icon
-   sitting directly on the bar. The divider is the only separator. */
 .lms-foldernav-notif {
   position: relative;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--lms-on-ink-muted);
+  background: var(--color-accent);
+  border: 1px solid var(--color-info);
+  color: var(--nav-dark);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.12s, border-color 0.12s;
 }
-.lms-foldernav-notif:hover { background: var(--lms-on-ink-hover-bg); color: var(--lms-on-ink); }
+.lms-foldernav-notif:hover { background: var(--color-info); }
 .lms-foldernav-notif-dot {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 8px;
-  height: 8px;
+  top: 6px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #B3261E;
   border: 1.5px solid #fff;
@@ -491,22 +514,22 @@ body.lms-warm-bg .student-topbar-subtitle {
 .lms-notif-msg { font-size: 12.5px; color: #1A1A2E; line-height: 1.4; }
 .lms-notif-time { font-size: 11px; color: var(--lms-muted-2); margin-top: 2px; }
 
-.lms-foldernav-divider { width: 1px; height: 24px; background: var(--lms-on-ink-border); flex-shrink: 0; }
-
+/* Account pill */
 .lms-foldernav-profile-wrapper { position: relative; }
 .lms-foldernav-profile {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px 4px 4px;
-  border-radius: 6px;
-  background: transparent;
+  gap: 9px;
+  height: 38px;
+  padding: 3px 14px 3px 4px;
+  border-radius: 999px;
+  background: var(--nav-dark);
   border: none;
   cursor: pointer;
   font-family: inherit;
   transition: background 0.12s;
 }
-.lms-foldernav-profile:hover { background: var(--lms-on-ink-hover-bg); }
+.lms-foldernav-profile:hover, .lms-foldernav-profile-wrapper.open .lms-foldernav-profile { background: var(--color-primary-hover); }
 .lms-foldernav-avatar {
   width: 30px;
   height: 30px;
@@ -516,75 +539,156 @@ body.lms-warm-bg .student-topbar-subtitle {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--lms-cream);
-  color: var(--lms-ink);
-  font-size: 12px;
+  background: var(--color-info);
+  color: var(--nav-dark);
+  font-size: 11.5px;
   font-weight: 700;
 }
 .lms-foldernav-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.lms-foldernav-profile-text { display: flex; flex-direction: column; line-height: 1.3; text-align: left; }
-.lms-foldernav-profile-name { font-size: 13px; font-weight: 600; color: var(--lms-on-ink); white-space: nowrap; }
-.lms-foldernav-profile-role { font-size: 11px; color: var(--lms-on-ink-muted); white-space: nowrap; }
-.lms-foldernav-profile-chevron { display: flex; color: var(--lms-on-ink-muted); }
-.lms-foldernav-profile-chevron svg { width: 12px; height: 12px; transition: transform 0.15s; }
+.lms-foldernav-profile-text { display: flex; flex-direction: column; line-height: 1.25; text-align: left; }
+.lms-foldernav-profile-name { font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; }
+.lms-foldernav-profile-role { font-size: 11px; font-weight: 500; color: var(--color-muted); white-space: nowrap; }
+/* Chevron: says "this opens a menu"; flips up while the menu is open. */
+.lms-foldernav-profile-chevron { display: flex; color: var(--color-info); margin-left: 2px; }
+.lms-foldernav-profile-chevron svg { width: 13px; height: 13px; transition: transform .15s; }
 .lms-foldernav-profile-wrapper.open .lms-foldernav-profile-chevron svg { transform: rotate(180deg); }
 
+/* Profile menu — same design as the "Profile dropdown" in shared/modal.php
+   (rounded card, soft shadow, icon + label rows, divider, coral logout),
+   with the icons in the LMS brand green instead of that mock's teal. */
 .lms-foldernav-dropdown {
   display: none;
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 10px);
   right: 0;
-  min-width: 180px;
+  min-width: 220px;
   background: #ffffff;
-  border: 1px solid var(--lms-border);
-  border-radius: 8px;
-  box-shadow: 0 4px 14px rgba(20, 40, 29, 0.08);
+  border: 1px solid rgba(19, 45, 40, 0.07);
+  border-radius: 16px;
+  box-shadow: 0 16px 36px -14px rgba(19, 45, 40, 0.18);
+  padding: 8px;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 20;
+}
+.lms-foldernav-profile-wrapper.open .lms-foldernav-dropdown { display: flex; }
+.lms-foldernav-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #1C2321;
+  text-decoration: none;
+  transition: background .12s ease;
+}
+.lms-foldernav-dropdown-item svg { flex: 0 0 auto; color: var(--color-primary); }
+.lms-foldernav-dropdown-item:hover { background: #F1F3F2; }
+.lms-foldernav-dropdown-item:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.lms-foldernav-dropdown-divider { height: 1px; background: rgba(19, 45, 40, 0.07); margin: 6px 4px; }
+.lms-foldernav-dropdown-logout,
+.lms-foldernav-dropdown-logout svg { color: #D6503F; }
+.lms-foldernav-dropdown-logout:hover { background: #FBEAE7; }
+
+/* Row 2 — section tabs as pills */
+.lms-foldernav-tabs { display: flex; align-items: center; gap: 6px; height: 50px; padding: 0 28px; }
+.lms-navtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--nav-ink);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.lms-navtab:hover { background: var(--color-accent); }
+.lms-navtab.active { background: var(--nav-dark); color: #fff; }
+.lms-navtab svg { transition: transform .15s; }
+.lms-navtab-dropdown.open .lms-navtab svg { transform: rotate(180deg); }
+
+.lms-navtab-dropdown { position: relative; }
+.lms-navtab-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 190px;
+  background: #ffffff;
+  border: 1px solid var(--color-info);
+  border-radius: 10px;
+  box-shadow: 0 8px 22px rgba(20, 40, 29, 0.12);
   padding: 6px;
   flex-direction: column;
   gap: 1px;
   z-index: 20;
 }
-.lms-foldernav-profile-wrapper.open .lms-foldernav-dropdown { display: flex; }
-.lms-foldernav-dropdown-item {
+.lms-navtab-dropdown.open .lms-navtab-panel { display: flex; }
+.lms-navtab-panel-link {
   display: block;
   padding: 8px 10px;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--lms-ink);
+  color: var(--nav-ink);
   text-decoration: none;
-  transition: background 0.12s;
+  transition: background 0.12s, color 0.12s;
 }
-.lms-foldernav-dropdown-item:hover { background: var(--lms-surface-soft); }
-.lms-foldernav-dropdown-logout:hover { background: #FCEEED; color: #B3261E; }
+.lms-navtab-panel-link:hover { background: var(--color-accent); }
+.lms-navtab-panel-link.active { background: var(--nav-dark); color: #fff; }
 
 @media (max-width: 860px) {
-  .lms-foldernav-toggle { display: flex; }
-  .lms-foldernav-tabs {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 2px;
-    background: var(--lms-ink);
-    padding: 10px;
-    border-top: 1px solid var(--lms-on-ink-border);
-    border-bottom: 1px solid var(--lms-on-ink-border);
-  }
-  .lms-foldernav-tabs.open { display: flex; }
-  .lms-navtab { height: 42px; border-bottom: none; border-left: 2px solid transparent; padding-left: 12px; }
-  .lms-navtab.active { border-left-color: var(--lms-on-ink); background: var(--lms-on-ink-hover-bg); }
-  .lms-navtab-panel { position: static; box-shadow: none; border: none; background: var(--lms-ink-hover); margin-top: 2px; }
-  .lms-navtab-panel-link { color: var(--lms-on-ink); }
-  .lms-navtab-panel-link:hover { background: var(--lms-on-ink-hover-bg); }
+  .lms-foldernav-inner, .lms-foldernav-tabs { padding: 0 16px; }
+  .lms-foldernav-profile-text { display: none; }
+  .lms-foldernav-profile { padding: 3px 9px 3px 3px; gap: 6px; }
+}
+@media (max-width: 640px) {
+  .lms-foldernav-logo-text { display: none; }
+  .lms-foldernav-inner { gap: 10px; }
+  .lms-search { flex: 1 1 auto; margin-left: 0; }
+  .lms-search-panel { width: calc(100vw - 32px); left: 50%; transform: translateX(-50%); position: fixed; top: 58px; }
+  .lms-foldernav-tabs { gap: 2px; }
+  .lms-navtab { padding: 0 11px; }
 }
 
-@media (max-width: 560px) {
-  .lms-foldernav-profile-text { display: none; }
-}
+/* ─── Top bar colours: student palette ─────────────────────────────────────
+   Colour-only overrides of the rules above: white rows, charcoal brand tile
+   and active tab, blue-grey search, white outlined bell and account pill
+   with a charcoal avatar. Layout is untouched. */
+.lms-foldernav { --nav-ink: var(--st-dark); --nav-dark: var(--st-dark); border-bottom-color: var(--st-line); }
+.lms-foldernav-inner { border-bottom-color: var(--st-line); }
+.lms-search-icon, .lms-search-status, .lms-search-opt .s { color: var(--st-sub); }
+.lms-search-input { background: var(--st-tint); border-color: var(--st-info); }
+.lms-search-input::placeholder { color: var(--st-sub); }
+.lms-search-input:focus { border-color: var(--st-primary); background: #fff; box-shadow: 0 0 0 3px rgba(56, 102, 65, .15); }
+.lms-search-panel { border-color: var(--st-line); }
+.lms-search-group { color: var(--st-primary); }
+.lms-search-opt.is-active { background: var(--st-page); box-shadow: inset 3px 0 0 var(--st-primary); }
+.lms-foldernav-notif { background: #fff; border-color: var(--st-info); color: var(--st-dark); }
+.lms-foldernav-notif:hover { background: var(--st-hover); }
+.lms-foldernav-profile { background: #fff; box-shadow: inset 0 0 0 1px var(--st-info); }
+.lms-foldernav-profile:hover,
+.lms-foldernav-profile-wrapper.open .lms-foldernav-profile { background: var(--st-hover); }
+.lms-foldernav-avatar { background: var(--st-dark); color: var(--st-beige); }
+.lms-foldernav-profile-name { color: var(--st-dark); }
+.lms-foldernav-profile-role { color: var(--st-sub); }
+.lms-foldernav-profile-chevron { color: var(--st-sub); }
+.lms-foldernav-dropdown-item svg { color: var(--st-primary); }
+.lms-navtab:hover { background: var(--st-page); }
+.lms-navtab.active { background: var(--st-dark); color: var(--st-beige); }
+.lms-navtab-panel { border-color: var(--st-line); }
+.lms-navtab-panel-link:hover { background: var(--st-page); }
+.lms-navtab-panel-link.active { background: var(--st-dark); color: var(--st-beige); }
 
 /* ─── My Courses cards ────────────────────────────────────────────────── */
 
@@ -596,7 +700,7 @@ body.lms-warm-bg .student-topbar-subtitle {
 }
 
 .course-card {
-  border-radius: 10px;
+  border-radius: 14px;
   overflow: hidden;
   background: #fff;
   border: 1px solid var(--lms-border);
@@ -617,12 +721,12 @@ body.lms-warm-bg .student-topbar-subtitle {
    dashboard's --lms-swatch-* ramp) instead of a flat neutral tint, so each
    course reads distinctly without introducing outside hues. Keyed by
    subject index % 6, same convention as .lms-swatch-N. */
-.course-card-banner.palette-0 { background: linear-gradient(135deg, #0F4E32 0%, #0A3925 100%); border-bottom: none; }
-.course-card-banner.palette-1 { background: linear-gradient(135deg, #1B6B45 0%, #0A3925 100%); border-bottom: none; }
-.course-card-banner.palette-2 { background: linear-gradient(135deg, #3E8259 0%, #1B6B45 100%); border-bottom: none; }
-.course-card-banner.palette-3 { background: linear-gradient(135deg, #062B1A 0%, #0A3925 100%); border-bottom: none; }
-.course-card-banner.palette-4 { background: linear-gradient(135deg, #6E8579 0%, #4B6157 100%); border-bottom: none; }
-.course-card-banner.palette-5 { background: linear-gradient(135deg, #9AB2A3 0%, #6E8579 100%); border-bottom: none; }
+.course-card-banner.palette-0 { background: #1C2628; border-bottom: none; }
+.course-card-banner.palette-1 { background: #386641; border-bottom: none; }
+.course-card-banner.palette-2 { background: #2F4447; border-bottom: none; }
+.course-card-banner.palette-3 { background: #4F6B6A; border-bottom: none; }
+.course-card-banner.palette-4 { background: #9FB8B8; border-bottom: none; }
+.course-card-banner.palette-5 { background: #CADEDE; border-bottom: none; }
 
 .course-card-banner-icon {
   position: absolute;
@@ -682,85 +786,171 @@ body.lms-warm-bg .student-topbar-subtitle {
   display: flex; align-items: center; gap: 6px;
   font-size: 11.5px; color: #1A1A2E; padding: 3px 0;
 }
-.due-kind-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.due-kind-dot.kind-assignment { background: var(--lms-ink); }
-.due-kind-dot.kind-quiz { background: var(--lms-muted); }
-.due-item-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.due-item-date { flex-shrink: 0; color: var(--lms-muted); font-size: 10.5px; font-weight: 600; }
+.course-card-due-item { position: relative; z-index: 1; margin: 0 -6px; padding: 4px 6px; border-radius: 6px; text-decoration: none; }
+a.course-card-due-item:hover { background: var(--st-hover); }
+a.course-card-due-item:hover .due-item-title { text-decoration: underline; }
+.due-item-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.due-item-date { flex-shrink: 0; color: var(--lms-muted); font-size: 10.5px; font-weight: 700; }
+.due-item-date.is-today, .due-item-date.is-overdue { padding: 1px 7px; border-radius: 999px; background: #B3261E; color: #fff; }
+.course-card .hm-kind { font-size: 8.5px; }
 .course-card-due-more { font-size: 10.5px; color: var(--lms-muted); margin-top: 2px; }
 
-/* ─── LMS Home dashboard ──────────────────────────────────────────────── */
+/* ─── LMS Home dashboard (roles/lms/lms_home.php) ───────────────────────────
+   Student palette: #EFF5F3 canvas, white cards with blue-grey borders,
+   charcoal for the stat chips / banner / next-up tile / Resume, green for
+   the notice tag and the Continue button, blue-grey icon tiles. Beige
+   (--st-beige) is the text/icon colour on every charcoal surface.
+   --st-muted only appears as text on charcoal, where it reads. */
+body.lms-home-bg,
+body.lms-home-bg .student-main,
+body.lms-home-bg .student-content { background: var(--st-page); }
 
-/* Tonal steps from --lms-ink down to the soft neutral grays — kept within
-   the trial's two-color palette instead of an arbitrary rainbow, so a
-   subject reads consistently without breaking the one-accent rule.
-   Keyed by subject_id % 6, computed once in PHP. */
-.lms-swatch-0 { --lms-accent: #0A3925; }
-.lms-swatch-1 { --lms-accent: #1B6B45; }
-.lms-swatch-2 { --lms-accent: #062B1A; }
-.lms-swatch-3 { --lms-accent: #3E8259; }
-.lms-swatch-4 { --lms-accent: #6E8579; }
-.lms-swatch-5 { --lms-accent: #9AB2A3; }
+.hm { color: var(--st-dark); }
+.hm-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* One bordered strip with hairline dividers between figures, instead of
-   three separate floating/shadowed cards — the data breathes without
-   being boxed in three times over. */
-.lms-dash-stats {
-  display: flex; flex-wrap: wrap;
-  background: #fff; border: 1px solid var(--lms-border); border-radius: 10px;
-  margin-bottom: 1rem; overflow: hidden;
-}
-.lms-dash-stat {
-  flex: 1 1 160px;
-  display: flex; align-items: center; gap: 12px;
-  padding: 16px 18px;
-  border-right: 1px solid var(--lms-border-2);
-}
-.lms-dash-stat:last-child { border-right: none; }
-.lms-dash-stat-icon {
-  width: 32px; height: 32px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--lms-muted);
-}
-.lms-dash-stat-icon.warn { color: #B3261E; }
-.lms-dash-stat-number { font-size: 21px; font-weight: 700; color: #1A1A2E; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.lms-dash-stat-label { font-size: 11.5px; color: var(--lms-muted); }
+.hm-head { display: flex; justify-content: space-between; align-items: center; gap: 16px 24px; flex-wrap: wrap; margin-bottom: 18px; }
+.hm-head h1 { margin: 0; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: clamp(1.5rem, 3vw, 1.9rem); line-height: 1.15; color: var(--st-dark); }
+.hm-head p { margin: 4px 0 0; font-size: 13.5px; color: var(--st-sub); }
 
-.lms-dash-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: start; }
+.hm-stats { display: flex; gap: 10px; flex-wrap: wrap; }
+.hm-stat { display: flex; align-items: center; gap: 10px; padding: 10px 16px 10px 10px; min-width: 118px; background: var(--st-dark); color: var(--st-beige); border-radius: 10px; }
+.hm-stat b { display: block; font-size: 18px; font-weight: 700; line-height: 1.1; color: var(--st-beige); }
+.hm-stat > div > span { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--st-muted); }
+.hm-stat .hm-tile { background: rgba(254, 250, 224, .10); color: var(--st-beige); }
 
-.lms-todo-item, .lms-lesson-item {
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 10px 4px; border-bottom: 1px solid var(--lms-border-2);
-  border-left: 2px solid var(--lms-accent, var(--lms-border));
-  padding-left: 10px;
-}
-.lms-todo-item:last-child, .lms-lesson-item:last-child { border-bottom: none; }
-.lms-todo-item-body, .lms-lesson-item-body { flex: 1; min-width: 0; }
-.lms-todo-item-title, .lms-lesson-item-title { font-size: 13.5px; font-weight: 600; color: #1A1A2E; }
-.lms-todo-item-meta, .lms-lesson-item-meta { font-size: 11.5px; color: var(--lms-muted); margin-top: 2px; }
-.lms-todo-item-meta .subject, .lms-lesson-item-meta .subject { color: #1A1A2E; font-weight: 600; }
-.lms-todo-overdue { color: #B3261E; font-weight: 700; }
-.lms-todo-kind {
-  flex-shrink: 0; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
-  padding: 3px 7px; border-radius: 4px; background: var(--lms-cream); color: var(--lms-ink);
+.hm-tile { flex: none; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--st-dark); color: var(--st-beige); }
+.hm-tile svg { width: 16px; height: 16px; }
+.hm-tile.lg { width: 34px; height: 34px; }
+.hm-tile.lg svg { width: 18px; height: 18px; }
+
+.hm-banner { display: flex; align-items: center; gap: 14px; padding: 14px 16px 14px 18px; margin-bottom: 22px; border-radius: 10px; background: var(--st-dark); color: var(--st-beige); }
+.hm-banner.is-open { align-items: flex-start; }
+.hm-banner-tag { flex: none; font-size: 10.5px; font-weight: 800; letter-spacing: .06em; padding: 3px 10px; border-radius: 6px; background: var(--st-primary); color: #fff; }
+.hm-banner-main { flex: 1; min-width: 0; font-size: 14px; }
+.hm-banner-main b { font-weight: 700; }
+.hm-banner-main .meta { color: var(--st-muted); font-size: 12.5px; }
+.hm-banner-full { margin-top: 6px; white-space: pre-wrap; word-break: break-word; color: var(--st-beige); font-size: 13.5px; line-height: 1.5; }
+.hm-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border: 0; border-radius: 8px; font-size: 12.5px; font-weight: 700; font-family: inherit; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.hm-btn-light { background: transparent; color: var(--st-beige); box-shadow: inset 0 0 0 1px rgba(254, 250, 224, .5); }
+.hm-btn-light:hover { background: rgba(254, 250, 224, .10); }
+.hm-btn-dark { background: var(--st-dark); color: var(--st-beige); height: 28px; padding: 0 14px; }
+.hm-btn-dark:hover { background: var(--st-primary); }
+
+.hm-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
+.hm-col > .hm-panel + .hm-panel { margin-top: 18px; }
+@media (max-width: 900px) { .hm-grid { grid-template-columns: 1fr; } }
+.hm-panel { background: #fff; border: 1px solid var(--st-line); border-radius: 14px; padding: 18px 20px 20px; }
+.hm-panel + .hm-panel { margin-top: 14px; }
+.hm-panel-title { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 600; color: var(--st-dark); }
+.hm-panel-title .hm-tile { background: var(--st-info); color: var(--st-dark); }
+.hm-empty { margin: 0; font-size: 13px; color: var(--st-sub); }
+
+/* Task kinds: exam = slate blue, quiz = amber, assignment = green. Red is
+   kept for Overdue/Today urgency only, so an exam never reads as an error.
+   `.k-*` sets --k (ink) and --k-bg (tint) so dots, badges, pills and the
+   calendar stripe all read from one place. */
+.k-exam       { --k: #3E5C82; --k-bg: #E3EAF3; }
+.k-quiz       { --k: #B07A2A; --k-bg: #F6EBDA; }
+.k-assignment { --k: var(--st-primary); --k-bg: #E2ECE6; }
+
+.hm-kind { flex: none; display: inline-block; padding: 1px 6px; border-radius: 4px; background: var(--k-bg); color: var(--k); font-size: 9.5px; font-weight: 800; font-style: italic; letter-spacing: .06em; text-transform: uppercase; line-height: 1.5; }
+.hm-open-btn { flex: none; display: inline-flex; align-items: center; height: 30px; padding: 0 14px; border-radius: 999px; background: var(--st-dark); color: #fff; font-size: 12.5px; font-weight: 700; text-decoration: none; }
+.hm-open-btn:hover { background: var(--st-primary); }
+
+/* This week */
+.hm-cal-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.hm-cal-head .hm-panel-title { margin: 0; }
+.hm-cal-nav { display: flex; align-items: center; gap: 6px; }
+.hm-cal-range { margin-right: 6px; font-size: 13px; font-weight: 700; color: var(--st-primary); }
+.hm-icon-btn, .hm-pill-btn { height: 28px; border: 1px solid var(--st-line); background: #fff; border-radius: 8px; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--st-dark); cursor: pointer; }
+.hm-icon-btn { width: 28px; font-size: 16px; line-height: 1; }
+.hm-pill-btn { padding: 0 12px; }
+.hm-icon-btn:hover, .hm-pill-btn:hover { background: var(--st-hover); border-color: var(--st-info); }
+
+.hm-cal-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; padding-bottom: 16px; border-bottom: 1px solid var(--st-line); }
+.hm-day { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 0 8px; border: 1px solid transparent; border-radius: 10px; background: none; font: inherit; color: var(--st-dark); cursor: pointer; }
+.hm-day:hover { background: var(--st-hover); }
+.hm-day:focus-visible { outline: 2px solid var(--st-primary); outline-offset: 1px; }
+.hm-dow { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--st-sub); }
+.hm-dnum { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-size: 15px; font-weight: 700; }
+.hm-day.is-today .hm-dnum { background: var(--st-primary); color: #fff; }
+.hm-day.is-sel { background: var(--st-tint); border-color: var(--st-dark); }
+.hm-dots { display: flex; gap: 3px; height: 5px; }
+.hm-dots i, .hm-legend i { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--k); }
+
+.hm-cal-dayhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin: 16px 0 10px; font-size: 13.5px; }
+.hm-legend { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--st-sub); }
+.hm-legend i { margin-left: 6px; width: 6px; height: 6px; }
+.hm-cal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.hm-cal-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px; border-radius: 8px; background: var(--st-tint); border-left: 3px solid var(--k); }
+.hm-cal-item-main { flex: 1; min-width: 0; }
+.hm-cal-item-main b { display: block; font-size: 14px; }
+.hm-cal-item-main span { display: block; font-size: 12.5px; color: var(--st-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-cal-item .hm-kind { font-size: 11px; font-style: normal; padding: 3px 8px; }
+.hm-cal-time { flex: none; font-size: 12.5px; font-weight: 600; color: var(--st-sub); }
+.hm-cal-empty { padding: 14px; border-radius: 8px; background: var(--st-hover); font-size: 13px; color: var(--st-sub); text-align: center; }
+@media (max-width: 560px) {
+  .hm-cal-item { flex-wrap: wrap; }
+  .hm-cal-item-main { flex-basis: 100%; }
+  .hm-dnum { width: 28px; height: 28px; font-size: 13.5px; }
 }
 
-.lms-course-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 4px; border-bottom: 1px solid var(--lms-border-2);
-}
-.lms-course-row:last-child { border-bottom: none; }
-.lms-course-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--lms-accent, var(--lms-border)); flex-shrink: 0; }
-.lms-course-row-name { font-size: 13px; font-weight: 600; color: #1A1A2E; }
-.lms-course-row-teacher { font-size: 11px; color: var(--lms-muted); }
+/* My Courses */
+.hm-courses { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.hm-course { position: relative; display: flex; align-items: center; gap: 14px; padding: 10px; border-radius: 10px; }
+.hm-course:hover, .hm-course:focus-within { background: var(--st-hover); }
+.hm-course .hm-tile { width: 34px; height: 34px; background: var(--st-info); color: var(--st-dark); }
+.hm-course .hm-tile svg { width: 17px; height: 17px; stroke-width: 8; } /* icons are drawn for large cards; thicken at tile size */
+.hm-course-main { flex: 1; min-width: 0; }
+.hm-course-name { display: block; font-size: 14px; font-weight: 700; color: inherit; text-decoration: none; }
+.hm-course-name::after { content: ''; position: absolute; inset: 0; border-radius: inherit; } /* whole row opens the course */
+.hm-course-name:focus-visible { outline: none; }
+.hm-course-name:focus-visible::after { outline: 2px solid var(--st-primary); }
+.hm-course-sub { display: block; font-size: 12.5px; color: var(--st-sub); }
+.hm-course.is-next .hm-tile { background: var(--st-dark); color: var(--st-beige); }
+.hm-due-pill { flex: none; padding: 3px 10px; border-radius: 999px; background: var(--k-bg); color: var(--k); font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.hm-due-pill.is-overdue { background: #FBE7E4; color: #B3261E; }
+/* "Open" jumps straight to the next task; it sits above the row link and
+   fades in on hover/focus (always shown on touch, where there's no hover).
+   Its space is always reserved so the pills don't shift. */
+.hm-course .hm-open-btn { position: relative; z-index: 1; opacity: 0; transform: translateX(6px); transition: opacity .18s, transform .18s; }
+.hm-course:hover .hm-open-btn, .hm-course:focus-within .hm-open-btn { opacity: 1; transform: none; }
+@media (hover: none) { .hm-course .hm-open-btn { opacity: 1; transform: none; } }
+@media (max-width: 560px) { .hm-due-pill { display: none; } }
 
-.lms-empty-mini { font-size: 12.5px; color: var(--lms-muted); padding: 10px 4px; }
+.hm-overdue { color: #B3261E; font-weight: 700; }
 
-@media (max-width: 900px) {
-  .lms-dash-grid { grid-template-columns: 1fr; }
-  .lms-dash-stat { border-right: none; border-bottom: 1px solid var(--lms-border-2); }
-  .lms-dash-stat:last-child { border-bottom: none; }
-}
+/* To-Do */
+.hm-todo-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 14px; }
+.hm-todo-head .hm-panel-title { margin: 0; }
+.hm-todo-count { font-size: 12.5px; font-weight: 700; color: var(--st-sub); }
+.hm-progress { height: 6px; border-radius: 999px; background: var(--st-tint); overflow: hidden; margin-bottom: 14px; }
+.hm-progress span { display: block; height: 100%; background: var(--st-primary); transform: scaleX(0); transform-origin: left; transition: transform .25s; }
+.hm-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.hm-chip { height: 28px; padding: 0 12px; border: 1px solid var(--st-line); border-radius: 999px; background: #fff; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--st-dark); cursor: pointer; }
+.hm-chip:hover { border-color: var(--st-info); background: var(--st-hover); }
+.hm-chip.is-on { background: var(--st-dark); border-color: var(--st-dark); color: #fff; }
+
+.hm-todo { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; max-height: 470px; overflow-y: auto; }
+.hm-todo-item { display: flex; align-items: center; gap: 12px; padding: 9px 4px; border-radius: 8px; }
+.hm-todo-item:hover { background: var(--st-hover); }
+.hm-check { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--st-primary); cursor: pointer; }
+.hm-todo-main { flex: 1; min-width: 0; }
+.hm-todo-title { display: block; font-size: 13.5px; font-weight: 700; color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-todo-title:hover { text-decoration: underline; }
+.hm-todo-meta { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 12px; color: var(--st-sub); min-width: 0; }
+.hm-todo-subj { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-todo-due { flex: none; font-size: 12px; font-weight: 700; color: var(--st-dark); }
+.hm-todo-due.is-today, .hm-todo-due.is-overdue { padding: 3px 9px; border-radius: 999px; background: #B3261E; color: #fff; }
+.hm-todo-item.is-done .hm-todo-title { text-decoration: line-through; color: var(--st-sub); }
+.hm-todo-item.is-done .hm-todo-due { background: none; color: var(--st-sub); padding: 0; }
+.hm-todo-item.is-done .hm-kind { opacity: .55; }
+.hm-todo-none { padding: 8px 4px; }
+
+.hm-lessons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.hm-lesson { padding: 12px; border-radius: 10px; background: var(--st-tint); }
+.hm-lesson-title { font-size: 13.5px; font-weight: 700; }
+.hm-lesson-meta { font-size: 12px; color: var(--st-sub); margin: 1px 0 8px; }
 
 /* ─── Subject tab strip (lms_subject_tabs.php) ─────────────────────────────
    A second bar under the main topbar, shown only when a page is reached
@@ -803,6 +993,14 @@ body.lms-warm-bg .student-topbar-subtitle {
 }
 .subj-tabstrip a:hover { color: var(--lms-ink); }
 .subj-tabstrip a.active { color: var(--lms-ink); border-bottom-color: var(--lms-ink); }
+
+/* Inside the LMS: LMS Home's pill chips on the page canvas instead of an
+   underlined white bar. */
+body.lms-layout .subj-tabstrip { height: auto; gap: 6px; padding-top: 12px; padding-bottom: 2px; background: transparent; border: 0; }
+body.lms-layout .subj-tabstrip-name { display: none; } /* the page title already names the subject */
+body.lms-layout .subj-tabstrip a { height: 32px; padding: 0 14px; border: 1px solid var(--st-line); border-radius: 999px; background: #fff; color: var(--st-dark); font-size: 12.5px; }
+body.lms-layout .subj-tabstrip a:hover { background: var(--st-hover); border-color: var(--st-info); }
+body.lms-layout .subj-tabstrip a.active { background: var(--st-dark); border-color: var(--st-dark); color: #fff; }
 
 /* ─── Attachment dropzone + file chip (student_lessons.php,
    student_assignments.php) ────────────────────────────────────────────
@@ -936,5 +1134,27 @@ body.lms-warm-bg .student-topbar-subtitle {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ─── Centered column (every Student LMS page) ────────────────────────────
+   Bars and page backgrounds stay full-bleed; their contents sit in one
+   centered --lms-col column, so the top bar, subject tabs, page title bar
+   and page body all share the same left edge on wide screens. Text inside
+   stays left-aligned. Padding (not max-width + auto margins) keeps each
+   element's own background edge-to-edge. Screen only — print keeps its
+   own zero-padding layout. */
+@media screen {
+  .lms-foldernav-inner,
+  .lms-foldernav-tabs            { padding-inline: max(28px, calc((100% - var(--lms-col)) / 2)); }
+  body.lms-layout .student-topbar,
+  body.lms-layout .subj-tabstrip,
+  body.lms-layout .student-content { padding-inline: max(2rem, calc((100% - var(--lms-col)) / 2)); }
+}
+@media screen and (max-width: 860px) {
+  .lms-foldernav-inner,
+  .lms-foldernav-tabs,
+  body.lms-layout .student-topbar,
+  body.lms-layout .subj-tabstrip,
+  body.lms-layout .student-content { padding-inline: 16px; }
 }
 

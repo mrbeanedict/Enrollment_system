@@ -16,20 +16,21 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || ($_SESS
 }
 
 $teacher_id = (int) ($_SESSION['teacher_id'] ?? 0);
-$item_id    = (int) ($_GET['item_id'] ?? 0);
-$student_id = (int) ($_GET['student_id'] ?? 0);
-if ($item_id <= 0 || $student_id <= 0) {
+$file_id    = (int) ($_GET['file_id'] ?? 0);
+if ($file_id <= 0) {
     http_response_code(404);
     exit('Not found.');
 }
 
 $stmt = $conn->prepare("
-    SELECT gsub.file_path, gsub.original_filename
-    FROM gradebook_submissions gsub
+    SELECT f.file_path, f.original_filename
+    FROM gradebook_submission_files f
+    JOIN gradebook_submissions gsub ON gsub.submission_id = f.submission_id
     JOIN gradebook_items gi ON gi.item_id = gsub.item_id
-    WHERE gsub.item_id = ? AND gsub.student_id = ? AND gi.teacher_id = ?
+    WHERE f.file_id = ? AND gi.teacher_id = ? AND gsub.status = 'turned_in'
 ");
-$stmt->bind_param('iii', $item_id, $student_id, $teacher_id);
+// Turned-in work only — a student's draft files stay private until they turn in.
+$stmt->bind_param('ii', $file_id, $teacher_id);
 $stmt->execute();
 $row = $stmt->get_result()->fetch_assoc();
 $stmt->close();

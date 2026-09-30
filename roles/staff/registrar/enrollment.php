@@ -131,6 +131,7 @@ if (!isset($_SESSION['enroll_wizard'])) {
         'enrollment_id'         => null, // claimed admission-stage row, if any
         'student_id'            => null,
         'student_number'        => null,
+        'control_number'        => null,
         'student_name'          => null,
         'is_new_student'        => null,
         'is_transferee'         => null,
@@ -282,12 +283,15 @@ function subject_schedule_text(mysqli $conn, int $sectionId, int $subjectId): st
 {
     $rows = db_fetch_all(
         $conn,
-        "SELECT ss.day, ss.start_time, ss.end_time, CONCAT(t.given_name, ' ', t.family_name) AS teacher_name,
-                COALESCE(ss.room, sec.room) AS room
+        "SELECT m.day, m.start_time, m.end_time, CONCAT(t.given_name, ' ', t.family_name) AS teacher_name,
+                COALESCE(NULLIF(m.room, ''), NULLIF(ss.room, ''), sec.room) AS room
          FROM section_subjects ss
          JOIN sections sec ON sec.section_id = ss.section_id
          LEFT JOIN teachers t ON t.teacher_id = ss.teacher_id
-         WHERE ss.section_id = ? AND ss.subject_id = ?",
+         LEFT JOIN section_subject_meetings m
+                ON m.section_id = ss.section_id AND m.subject_id = ss.subject_id AND m.semester = ss.semester
+         WHERE ss.section_id = ? AND ss.subject_id = ?
+         ORDER BY ss.semester, FIELD(m.day, 'Mon','Tue','Wed','Thu','Fri'), m.start_time",
         'ii',
         [$sectionId, $subjectId]
     );
@@ -306,9 +310,9 @@ function section_schedule_slots(mysqli $conn, int $sectionId): array
 {
     return db_fetch_all(
         $conn,
-        "SELECT ss.subject_id, ss.day, ss.start_time, ss.end_time
-         FROM section_subjects ss
-         WHERE ss.section_id = ? AND ss.day IS NOT NULL",
+        "SELECT m.subject_id, m.day, m.start_time, m.end_time
+         FROM section_subject_meetings m
+         WHERE m.section_id = ?",
         'i',
         [$sectionId]
     );
@@ -372,7 +376,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // facing request step anymore, the registrar initiates it.
                 $enrolledThisYear = db_fetch_one(
                     $conn,
-                    "SELECT e.enrollment_id, e.section_id, e.admission_grade_level AS grade_level,
+                    "SELECT e.enrollment_id, e.control_number, e.section_id, e.admission_grade_level AS grade_level,
                             e.school_year, st.strand_code AS strand, e.is_new_student, e.semester2_status
                      FROM enrollments e
                      JOIN strands st ON st.strand_id = e.admission_strand
@@ -415,6 +419,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'enrollment_id'          => (int) $enrolledThisYear['enrollment_id'],
                         'student_id'             => (int) $student['student_id'],
                         'student_number'         => $student['student_number'],
+                        'control_number'         => $enrolledThisYear['control_number'] ?? null,
                         'student_name'           => implode(' ', $nameParts),
                         'is_new_student'         => (bool) $enrolledThisYear['is_new_student'],
                         'is_transferee'          => (bool) $student['is_transferee'],
@@ -442,7 +447,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$errors) {
                     $preEnrolled = db_fetch_one(
                         $conn,
-                        "SELECT e.enrollment_id, e.admission_grade_level AS grade_level, st.strand_code AS strand,
+                        "SELECT e.enrollment_id, e.control_number, e.admission_grade_level AS grade_level, st.strand_code AS strand,
                                 e.section_id, e.is_new_student
                          FROM enrollments e
                          JOIN strands st ON st.strand_id = e.admission_strand
@@ -527,6 +532,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'enrollment_id'          => $enrollmentId,
                         'student_id'             => (int)$student['student_id'],
                         'student_number'         => $student['student_number'],
+                        'control_number'         => $preEnrolled['control_number'] ?? null,
                         'student_name'           => implode(' ', $nameParts),
                         'is_new_student'         => (bool)$preEnrolled['is_new_student'],
                         'is_transferee'          => (bool)$student['is_transferee'],
@@ -566,7 +572,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // INSERT fresh at the end, same as before.
                     $existing = db_fetch_one(
                         $conn,
-                        "SELECT e.enrollment_id, e.admission_grade_level AS grade_level, st.strand_code AS strand
+                        "SELECT e.enrollment_id, e.control_number, e.admission_grade_level AS grade_level, st.strand_code AS strand
                          FROM enrollments e
                          JOIN strands st ON st.strand_id = e.admission_strand
                          WHERE e.student_id = ? AND e.school_year = ? AND e.status = 'pending'
@@ -634,6 +640,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'enrollment_id'         => $claimedId,
                         'student_id'            => (int)$student['student_id'],
                         'student_number'        => $student['student_number'],
+                        'control_number'        => $existing['control_number'] ?? null,
                         'student_name'          => implode(' ', $nameParts),
                         'is_new_student'        => $isNew,
                         'is_transferee'         => (bool)$student['is_transferee'],
@@ -843,7 +850,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect_wizard();
 
     } elseif ($action === 'select_section') {
+        $isAjax = strtolower($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') === 'xmlhttprequest'
+        || ($_POST['ajax'] ?? '') === '1';
         $sectionId = filter_input(INPUT_POST, 'section_id', FILTER_VALIDATE_INT);
+        $backReset = false;
         if (!$sectionId) {
             $errors[] = 'Please select a section.';
         } else {
@@ -867,9 +877,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Homeroom changed — previously chosen back-subject
                     // sections may now conflict with the new schedule.
                     $wizard['back_subject_sections'] = [];
+                    $backReset = true;
                 }
                 $wizard['section_id'] = $sectionId;
             }
+        }
+
+        // The section grid posts here via fetch() to avoid a full-page
+        // reload — respond with JSON instead of the normal PRG redirect so
+        // the client can patch the DOM itself. Non-AJAX callers (JS
+        // disabled, or hitting this action directly) still get the regular
+        // redirect_wizard() flow below.
+        if ($isAjax) {
+            header('Content-Type: application/json');
+            echo json_encode([
+                'ok'              => empty($errors),
+                'error'           => $errors[0] ?? null,
+                'section_id'      => $wizard['section_id'] ?? null,
+                'back_subject_ids' => array_values($wizard['back_subject_ids'] ?? []),
+                'back_reset'      => $backReset,
+                'back_ready'      => count($wizard['back_subject_sections'] ?? []) >= count($wizard['back_subject_ids'] ?? []),
+            ]);
+            exit;
         }
         redirect_wizard();
 
@@ -1181,7 +1210,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $conn,
                             [(int) ($usidRow['user_student_id'] ?? 0)],
                             'Your Semester 2 request has been approved.',
-                            'roles/student/portal/student_enrollment'
+                            'roles/student/portal/student_enrollment',
+                            'highlight'
                         );
                     }
 
@@ -1214,13 +1244,110 @@ $steps = [
     6 => 'Success',
 ];
 
+// Shared across Steps 2–4 — the student-header card and the summary/payment
+// sidebar render the same way regardless of which step is active.
+$hasPick    = $wizard['grade_level'] && $wizard['strand'];
+$isPending  = $wizard['resumed_pre_enrollment'] ?? false;
+$isSem2     = $wizard['is_semester2_pass'] ?? false;
+$displayId  = $wizard['control_number'] ?? $wizard['student_number'] ?? '';
+
+// The student name/ID/status card at the top of the main column — identical
+// across Steps 2–4, only the wizard's current status flags change its copy.
+function render_dtl_top_card(array $wizard, bool $isPending, bool $isSem2, bool $hasPick, string $displayId): string
+{
+    ob_start();
+    ?>
+    <div class="panel">
+      <div class="dtl-student-head">
+        <div class="dtl-student-id">
+          <span class="dtl-student-name"><?= htmlspecialchars($wizard['student_name'] ?? '') ?></span>
+          <?php if ($displayId): ?><span class="dtl-student-no"><?= htmlspecialchars($displayId) ?></span><?php endif; ?>
+        </div>
+        <?php if ($isPending): ?>
+          <span class="dtl-status-pill dtl-status-pending">Payment pending</span>
+        <?php elseif ($isSem2): ?>
+          <span class="dtl-status-pill dtl-status-info">Semester 2</span>
+        <?php else: ?>
+          <span class="dtl-status-pill dtl-status-neutral">New enrollment</span>
+        <?php endif; ?>
+      </div>
+      <?php if ($isPending): ?>
+        <p class="dtl-student-desc">Pre-enrolled for <?= htmlspecialchars($wizard['school_year']) ?>, Grade <?= htmlspecialchars($wizard['grade_level']) ?> <?= htmlspecialchars($wizard['strand']) ?>. Once payment clears, this record locks — for now you can shift the strand and re-confirm.</p>
+      <?php elseif ($isSem2): ?>
+        <p class="dtl-student-desc">Continuing into Semester 2 of <?= htmlspecialchars($wizard['school_year']) ?> — Grade <?= htmlspecialchars($wizard['grade_level']) ?>, <?= htmlspecialchars($wizard['strand']) ?> strand. The homeroom section below is pre-selected to their current section — the Semester 2 fee adds on top of what's already on file.</p>
+        <div class="notice notice-error" style="margin-top:.6rem;">
+          <strong>Careful:</strong> a section applies to the student's whole school year, not just Semester 2. Picking a <em>different</em> section here also changes their already-completed Semester 1 schedule, teachers, and grades — only change it if that's genuinely intended.
+        </div>
+      <?php elseif ($hasPick): ?>
+        <p class="dtl-student-desc">Enrolling for <?= htmlspecialchars($wizard['school_year']) ?>, Grade <?= htmlspecialchars($wizard['grade_level']) ?> <?= htmlspecialchars($wizard['strand']) ?>. No payment is due yet — that applies once the student is pre-enrolled.</p>
+      <?php endif; ?>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
+// The Enrollment summary / What's next / Payment sidebar — identical across
+// Steps 2–4. $nextItems is [step_num => label] for whatever's still ahead.
+function render_dtl_aside(array $wizard, bool $isPending, bool $isSem2, bool $hasPick, array $nextItems): string
+{
+    ob_start();
+    ?>
+    <aside class="dtl-aside">
+      <div class="panel">
+        <div class="dtl-card-title" style="margin-bottom:.75rem;">Enrollment summary</div>
+        <dl style="margin:0;">
+          <div class="dtl-summary-row"><dt>School year</dt><dd><?= htmlspecialchars($wizard['school_year']) ?></dd></div>
+          <div class="dtl-summary-row"><dt>Grade level</dt><dd<?= $hasPick ? '' : ' class="is-muted"' ?>><?= $hasPick ? 'Grade ' . htmlspecialchars($wizard['grade_level']) : '—' ?></dd></div>
+          <div class="dtl-summary-row"><dt>Strand</dt><dd<?= $hasPick ? '' : ' class="is-muted"' ?>><?= $hasPick ? htmlspecialchars($wizard['strand']) : '—' ?></dd></div>
+          <div class="dtl-summary-row"><dt>Section</dt><dd class="is-muted"><?= ($wizard['section_id'] ?? null) ? 'Selected' : 'Not yet assigned' ?></dd></div>
+          <?php if ($isPending): ?>
+            <div class="dtl-summary-row"><dt>Payment</dt><dd class="is-pending">Pending</dd></div>
+          <?php elseif ($isSem2): ?>
+            <div class="dtl-summary-row"><dt>Payment</dt><dd class="is-muted">Additional fee on confirm</dd></div>
+          <?php else: ?>
+            <div class="dtl-summary-row"><dt>Payment</dt><dd class="is-muted">Not yet applicable</dd></div>
+          <?php endif; ?>
+        </dl>
+      </div>
+
+      <div class="panel">
+        <div class="dtl-card-title" style="margin-bottom:.75rem;">What's next</div>
+        <ul class="dtl-next-list">
+          <?php foreach ($nextItems as $num => $label): ?>
+            <li class="dtl-next-item"><span class="dtl-next-num"><?= $num ?></span> <?= htmlspecialchars($label) ?></li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+
+      <?php if ($isPending): ?>
+        <div class="dtl-callout">
+          <div class="dtl-callout-title">Payment pending</div>
+          <p class="dtl-callout-desc">This record stays editable until payment clears. Once it's marked paid, the strand locks and shifting requires a registrar override.</p>
+        </div>
+      <?php elseif ($isSem2): ?>
+        <div class="dtl-callout is-info">
+          <div class="dtl-callout-title">Semester 2 continuation</div>
+          <p class="dtl-callout-desc">The homeroom section is pre-selected to the student's current section. Changing it also changes their completed Semester 1 record — only do this if intended.</p>
+        </div>
+      <?php else: ?>
+        <div class="dtl-callout is-neutral">
+          <div class="dtl-callout-title">Payment</div>
+          <p class="dtl-callout-desc">No payment is due yet. Fees are calculated and applied once this student is pre-enrolled and a homeroom section is confirmed.</p>
+        </div>
+      <?php endif; ?>
+    </aside>
+    <?php
+    return ob_get_clean();
+}
+
 /* Data needed to render the current step */
 
 // Step 1 directory — every admitted student, their status for the *current*
 // cycle (cur, via correlated subquery on the latest matching enrollment_id
 // — a student can have more than one row per school_year since active_lock
 // only dedupes pre_enrolled/enrolled), and their most recent enrollment
-// from any *other* school year (prev) for the "Previous Record" column.
+// from any *other* school year (prev) — no longer shown as its own column,
+// but prev.jhs_is_public still feeds has_outstanding_accountabilities() below.
 $studentDirectory = [];
 if ($step === 1 && $cycle) {
     $studentDirectory = db_fetch_all(
@@ -1353,11 +1480,14 @@ if (in_array($step, [4, 5], true) && $wizard['grade_level'] && $wizard['strand']
             foreach ($wizard['back_subject_ids'] as $sid) {
                 $offerings = db_fetch_all(
                     $conn,
-                    "SELECT sec.section_id, sec.section_name, ss.day, ss.start_time, ss.end_time, sec.capacity,
+                    "SELECT sec.section_id, sec.section_name, m.day, m.start_time, m.end_time, sec.capacity,
                             (SELECT COUNT(*) FROM enrollments e WHERE e.section_id = sec.section_id AND e.active_lock = 1) AS enrolled_count
                      FROM section_subjects ss
                      JOIN sections sec ON sec.section_id = ss.section_id
-                     WHERE ss.subject_id = ? AND sec.is_active = 1 AND sec.school_year = ?",
+                     LEFT JOIN section_subject_meetings m
+                            ON m.section_id = ss.section_id AND m.subject_id = ss.subject_id AND m.semester = ss.semester
+                     WHERE ss.subject_id = ? AND sec.is_active = 1 AND sec.school_year = ?
+                     ORDER BY FIELD(m.day, 'Mon','Tue','Wed','Thu','Fri'), m.start_time",
                     'is',
                     [$sid, $wizard['school_year']]
                 );
@@ -1464,16 +1594,19 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
 
     $scheduleRows = db_fetch_all(
         $conn,
-        "SELECT sub.subject_name, sec.section_name, ss.day, ss.start_time, ss.end_time, CONCAT(t.given_name, ' ', t.family_name) AS teacher_name,
-                COALESCE(ss.room, sec.room) AS room,
+        "SELECT sub.subject_name, sec.section_name, m.day, m.start_time, m.end_time, CONCAT(t.given_name, ' ', t.family_name) AS teacher_name,
+                COALESCE(NULLIF(m.room, ''), NULLIF(ss.room, ''), sec.room) AS room,
                 (es.subject_type = 'back_subject') AS is_back
          FROM enrollment_subjects es
          JOIN subjects sub ON sub.subject_id = es.subject_id
          JOIN sections sec ON sec.section_id = es.section_id
          LEFT JOIN section_subjects ss ON ss.section_id = es.section_id AND ss.subject_id = es.subject_id AND ss.semester = ?
          LEFT JOIN teachers t ON t.teacher_id = ss.teacher_id
+         -- One row per weekly class meeting (a subject can meet several times).
+         LEFT JOIN section_subject_meetings m
+                ON m.section_id = ss.section_id AND m.subject_id = ss.subject_id AND m.semester = ss.semester
          WHERE es.enrollment_id = ?
-         ORDER BY is_back ASC, FIELD(ss.day,'Mon','Tue','Wed','Thu','Fri'), ss.start_time",
+         ORDER BY is_back ASC, FIELD(m.day,'Mon','Tue','Wed','Thu','Fri'), m.start_time",
         'ii',
         [$displaySemester, $eid]
     );
@@ -1547,26 +1680,122 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
   }
   .wizard-step.active .wizard-step-num { background: var(--brand-primary); color: #fff; }
   .wizard-step.complete .wizard-step-num { background: var(--brand-accent); color: #fff; }
-  .wizard-step-label { font-size: 11px; font-weight: 500; color: #8A8A9A; text-align: center; }
-  .wizard-step.active .wizard-step-label { color: var(--brand-primary); }
+  .wizard-step-label { font-size: 11px; font-weight: 500; color: #ADADBD; text-align: center; }
+  .wizard-step.complete .wizard-step-label { color: #5A5A72; }
+  .wizard-step.active .wizard-step-label { color: #1A1A2E; font-weight: 700; }
 
   .cycle-banner {
     display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #5A5A72;
-    background: var(--brand-tint); border: 0.5px solid #C9C2F0; border-radius: 8px; padding: 9px 14px;
-    max-width: 820px; margin: 0 auto 1.25rem;
+    background: var(--brand-tint); border: 0.5px solid #C9C2F0; border-radius: 8px; padding: 12px 14px;
+    max-width: 820px; margin: 0 auto 0.75rem;
   }
+  .cycle-chip {
+    display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px;
+    border-radius: 9px; border: 1px solid #D6E4DD; background: #fff; box-shadow: 0 1px 2px rgba(20,40,30,.06);
+    font-size: 12.5px; font-weight: 600; color: #1A1A2E; white-space: nowrap;
+  }
+  .cycle-chip .is-open { color: #1A7A5E; }
+  .cycle-chip .is-closed { color: #C0392B; }
   .cycle-banner strong { color: var(--brand-primary); }
 
   .student-identity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; margin-top: 10px; font-size: 12px; }
   .student-identity-grid dt { color: #8A8A9A; }
   .student-identity-grid dd { color: #1A1A2E; font-weight: 500; margin-bottom: 6px; }
 
-  .locked-context { display: flex; gap: 8px; margin-bottom: 1rem; }
-  .locked-pill { flex: 1; background: #FAFAFC; border: 0.5px solid #D4D4E0; border-radius: 8px; padding: 9px 12px; display:flex; justify-content:space-between; align-items:center; }
-  .locked-pill-label { font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: #8A8A9A; margin-bottom: 2px; }
-  .locked-pill-val { font-size: 13px; font-weight: 600; color: #1A1A2E; }
+  .locked-context { display: flex; gap: 10px; margin-bottom: .85rem; align-items: stretch; }
+  .locked-pill {
+    flex: 1; background: var(--brand-tint); border: 0.5px solid #C7D9CE; border-radius: 9px;
+    padding: 12px 14px; display:flex; flex-direction:column; justify-content:center;
+  }
+  .locked-pill-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom: 2px; }
+  .locked-pill-label { font-size: 11px; font-weight: 500; color: #5A5A72; }
+  .locked-pill-val { font-size: 15px; font-weight: 700; color: #1A1A2E; margin: 1px 0 3px; }
+  .locked-pill-desc { font-size: 11px; color: #5A5A72; line-height: 1.4; }
+  .locked-pill-lock {
+    display:inline-flex; align-items:center; gap:3px; font-size:10px; font-weight:600;
+    color: var(--brand-primary); white-space:nowrap;
+  }
+  .locked-pill-lock svg { width: 11px; height: 11px; }
+
+  /* ── Step 2 — Enrollment Details: two-column layout with a summary aside ── */
+  .dtl-layout { display: grid; grid-template-columns: 1fr 300px; gap: 1rem; align-items: start; max-width: 1040px; margin: 0 auto; }
+  @media (max-width: 860px) { .dtl-layout { grid-template-columns: 1fr; } }
+  .dtl-main { min-width: 0; }
+  .dtl-aside { display: flex; flex-direction: column; }
+  .dtl-aside .panel { width: 100%; max-width: none; margin-left: 0; margin-right: 0; box-sizing: border-box; }
+  .dtl-aside .panel:last-child { margin-bottom: 0; }
+  .dtl-aside .dtl-callout { margin-top: 0; }
+
+  .dtl-student-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 2px; }
+  .dtl-student-id { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .dtl-student-name { font-size: 17px; font-weight: 700; color: #1A1A2E; }
+  .dtl-student-no { font-size: 13px; color: #6b7280; font-weight: 400; }
+  .dtl-student-desc { font-size: 14px; color: #4b5563; margin-top: 4px; line-height: 1.5; }
+
+  .dtl-status-pill {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500;
+    border-radius: 999px; padding: 4px 12px; white-space: nowrap;
+  }
+  .dtl-status-pill::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink:0; }
+  .dtl-status-pending { background: #FBEFDD; color: #92400E; }
+  .dtl-status-pending::before { color: #D97706; }
+  .dtl-status-info { background: var(--brand-tint); color: var(--brand-primary); }
+  .dtl-status-neutral { background: #EFEFF4; color: #5A5A72; }
+  .dtl-status-neutral::before { color: #ADADBD; }
+
+  .dtl-card-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1rem; gap: 8px; }
+  .dtl-card-title { font-size: 14.5px; font-weight: 700; color: #1A1A2E; }
+  .dtl-step-note { font-size: 11.5px; color: #8A8A9A; white-space: nowrap; }
+
+  .field-box {
+    border: 0.5px solid #E0E0EC; border-radius: 9px; padding: 12px 14px; margin-bottom: 1rem;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; background:#fff;
+  }
+  .field-box-label { font-size: 11px; font-weight: 500; color: #5A5A72; margin-bottom: 3px; }
+  .field-box-val { font-size: 15px; font-weight: 700; color: #1A1A2E; }
+  .field-box-val-full { font-weight: 400; color: #5A5A72; }
+  .field-box-hint { font-size: 11px; color: #5A5A72; margin-top: 3px; line-height: 1.4; }
+
+  .chip-btn {
+    display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 13px; border-radius: 20px;
+    background: var(--brand-tint); color: var(--brand-primary); border: 0.5px solid #C7D9CE;
+    font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  .chip-btn:hover { background: #DCEBE1; }
+  .chip-btn svg { width: 12px; height: 12px; }
+
+  .dtl-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 1rem; padding-top: 1rem; border-top: 0.5px solid #EBEBF0; flex-wrap: wrap; }
+  .dtl-actions-left { display: flex; align-items: center; gap: 18px; }
+  .link-muted { font-size: 12.5px; color: #5A5A72; text-decoration: none; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; }
+  .link-muted:hover { color: #1A1A2E; text-decoration: underline; }
+  .link-caution { font-size: 12.5px; color: #C0392B; text-decoration: underline; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; }
+  .link-caution:hover { color: #7F1D1D; }
+
+  .dtl-summary-row { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 4px 20px; padding: 8px 0; border-bottom: 0.5px solid #EFEFF4; font-size: 12.5px; }
+  .dtl-summary-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .dtl-summary-row dt { color: #5A5A72; margin: 0; white-space: nowrap; }
+  .dtl-summary-row dd { margin: 0; font-weight: 700; color: #1A1A2E; text-align: right; justify-self: end; }
+  .dtl-summary-row dd.is-pending { color: #15803D; }
+  .dtl-summary-row dd.is-muted { color: #ADADBD; font-weight: 500; }
+
+  .dtl-next-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  .dtl-next-item { display: flex; align-items: flex-start; gap: 10px; font-size: 12.5px; color: #5A5A72; line-height: 1.45; }
+  .dtl-next-num {
+    flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: #F0F0F4; color: #8A8A9A;
+    font-size: 10.5px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px;
+  }
+
+  .dtl-callout { background: #FBEFDD; border-radius: 12px; padding: 16px; width: 100%; box-sizing: border-box; }
+  .dtl-callout.is-info { background: var(--brand-tint); }
+  .dtl-callout.is-neutral { background: #F0F0F4; }
+  .dtl-callout-title { font-size: 14px; font-weight: 600; color: #92400E; margin-bottom: 4px; }
+  .dtl-callout.is-info .dtl-callout-title { color: var(--brand-primary); }
+  .dtl-callout.is-neutral .dtl-callout-title { color: #5A5A72; }
+  .dtl-callout-desc { font-size: 13px; color: #78350F; line-height: 1.5; margin: 0; }
+  .dtl-callout.is-info .dtl-callout-desc { color: #3A5F4D; }
+  .dtl-callout.is-neutral .dtl-callout-desc { color: #5A5A72; }
   .eval-opt {
-    display: block; border: 0.5px solid #D4D4E0; border-radius: 8px; padding: 12px 14px; margin-bottom: 8px;
+    display: block; border: 0.5px solid #D4D4E0; border-radius: 8px; padding: 12px 14px; margin-bottom: 0.75rem;
     cursor: pointer; background: #FAFAFC; transition: border-color 0.12s, background 0.12s;
   }
   .eval-opt:hover { border-color: #ADADBD; }
@@ -1579,7 +1808,7 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
   .subj-eval-controls label { display: flex; align-items: center; gap: 4px; margin: 0; font-weight: 400; color: #5A5A72; }
   .subj-eval-controls input { accent-color: var(--brand-primary); width: 14px; height: 14px; cursor: pointer; }
 
-  .eval-status-card { border-radius: 10px; padding: 14px 16px; margin-bottom: 1.1rem; border: 0.5px solid; }
+  .eval-status-card { border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; border: 0.5px solid; }
   .eval-status-regular { background: #F0F7F2; border-color: #B9DDC4; }
   .eval-status-warn { background: #FEF6EC; border-color: #F0CE9A; }
   .eval-status-title { font-size: 13.5px; font-weight: 700; color: #1A1A2E; margin-bottom: 3px; }
@@ -1595,13 +1824,13 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
   .summary-block-title { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: #8A8A9A; margin-bottom: 0.6rem; }
   .summary-empty { font-size: 12px; color: #ADADBD; }
 
-  .back-subj-card { border: 0.5px solid #D4D4E0; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: #FAFAFC; }
+  .back-subj-card { border: 0.5px solid #D4D4E0; border-radius: 8px; padding: 12px 14px; margin-bottom: 0.75rem; background: #FAFAFC; }
   .back-subj-name { font-size: 13px; font-weight: 600; color: #1A1A2E; margin-bottom: 6px; }
   .back-subj-card select { width: 100%; height: 34px; border: 0.5px solid #D4D4E0; border-radius: 6px; padding: 0 10px; font-family: inherit; font-size: 12.5px; background: #fff; }
   .back-subj-warn { font-size: 11.5px; color: #C06A10; margin-top: 4px; }
 
   /* ── Summary / print ──────────────────────────────────────────────── */
-  .summary-print-card { border: 0.5px solid #D4D4E0; border-radius: 10px; padding: 1.25rem 1.5rem; background: #fff; }
+  .summary-print-card { border: 0.5px solid #D4D4E0; border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; background: #fff; }
   .summary-print-head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 1rem; }
   .summary-print-title { font-size: 16px; font-weight: 700; color:#1A1A2E; }
   .summary-print-sub { font-size: 12px; color:#5A5A72; }
@@ -1610,7 +1839,7 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
   .sched-table td { padding:7px 8px; border-bottom:0.5px solid #EBEBF0; }
   .bill-row { display:flex; justify-content:space-between; font-size:13px; padding:4px 0; }
   .bill-row.total { font-weight:700; border-top:1px solid #D4D4E0; margin-top:6px; padding-top:8px; }
-  .next-step-notice { background:#FEF6EC; border:0.5px solid #F0CE9A; border-radius:8px; padding:10px 14px; font-size:12.5px; color:#5A5A72; margin-top:1rem; }
+  .next-step-notice { background:#FEF6EC; border:0.5px solid #F0CE9A; border-radius:8px; padding:12px 14px; font-size:12.5px; color:#5A5A72; margin-top:1rem; }
   .next-step-notice strong { color:#1A1A2E; }
   .btn-print { height:36px; padding:0 16px; border:none; border-radius:8px; background:var(--brand-primary); color:#fff; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; }
 
@@ -1622,27 +1851,79 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
      are scoped to Step 1 only, so the directory table can use the full
      content width instead of the narrow form-column width. */
   .page-wrap.page-wrap-directory { max-width: none; }
+  .page-wrap.page-wrap-details { max-width: 1040px; }
   .panel.panel-full { max-width: none; }
-  .directory-toolbar { display:flex; gap:10px; margin-bottom:0.9rem; flex-wrap:wrap; align-items:center; }
-  .directory-search-input { flex:1; min-width:180px; height:36px; border:0.5px solid #D4D4E0; border-radius:8px; padding:0 12px; font-family:inherit; font-size:13px; background:#FAFAFC; outline:none; }
-  .directory-search-input:focus { border-color:var(--brand-accent); background:#fff; }
+  .directory-toolbar {
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    background:#fff; border:1px solid #E8E8F0; border-radius:12px;
+    padding:14px 16px; margin-bottom:0.85rem; box-shadow:0 10px 24px rgba(16,42,29,.05);
+  }
+  .directory-search-field { position:relative; flex:1 1 240px; min-width:180px; }
+  .directory-search-field svg {
+    position:absolute; left:12px; top:50%; width:15px; height:15px; margin-top:-7.5px;
+    color:#5F6B74; pointer-events:none;
+  }
+  /* input#directory-search beats css_staff.css's global
+     `input[type="text"] { padding: 0 12px }` (a tag+attribute selector,
+     which otherwise outranks a plain class and silently wins back the
+     12px padding — leaving no room for the icon and overlapping the text). */
+  input#directory-search.directory-search-input {
+    width:100%; height:38px; box-sizing:border-box; border:1px solid #D4D9D6; border-radius:9px;
+    background:#fff; padding:0 34px 0 34px; font-family:inherit; font-size:13px;
+    color:#1A1A2E; outline:none; transition:border-color .15s, box-shadow .15s;
+  }
+  .directory-search-input::placeholder { color:#8A8A9A; }
+  .directory-search-input:focus { border-color:var(--brand-accent); box-shadow:0 0 0 3px rgba(56,102,65,.14); }
+  .directory-search-clear {
+    position:absolute; right:5px; top:50%; transform:translateY(-50%);
+    width:26px; height:26px; border:none; background:transparent; color:#8A8A9A;
+    font-size:18px; line-height:1; cursor:pointer; border-radius:6px;
+    opacity:0.35; transition:opacity .15s, background-color .15s, color .15s;
+  }
+  .directory-search-clear:not(:disabled) { opacity:1; }
+  .directory-search-clear:disabled { cursor:default; }
+  .directory-toolbar-filters { display:flex; gap:10px; flex:0 0 auto; margin-left:auto; }
+  /* width:auto overrides css_staff.css's global `select { width:100% }` —
+     without it these selects stretch to fill the flex row instead of
+     sizing to their content. */
+  .directory-filter-select {
+    width:auto; flex:0 0 auto; height:38px; box-sizing:border-box; border:1px solid #D4D9D6; border-radius:9px;
+    background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%235F6B74' d='M6 8L1 3h10z'/%3E%3C/svg%3E") no-repeat right 12px center;
+    padding:0 30px 0 14px; font-size:12.5px; font-weight:500; font-family:inherit; color:#1A1A2E;
+    outline:none; cursor:pointer; appearance:none; -webkit-appearance:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  .directory-filter-select:hover { border-color:var(--brand-accent); }
+  .directory-filter-select:focus { border-color:var(--brand-accent); box-shadow:0 0 0 3px rgba(56,102,65,.14); }
+  .directory-search-clear:hover:not(:disabled) { background:#EFEFF4; color:#5A5A72; }
   .directory-table-wrap { max-height:420px; overflow-y:auto; overflow-x:hidden; margin-top:0.25rem; width:100%; }
   .directory-table { width:100%; table-layout:fixed; }
-  .directory-table thead th { position:sticky; top:0; background:#fff; }
+  .directory-table thead th { position:sticky; top:0; background:#fff; box-shadow:0 1px 0 #E5E5EC; }
   .directory-table th, .directory-table td { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .directory-table td:nth-child(1), .directory-table td:nth-child(4) { white-space:normal; word-break:break-word; }
-  .directory-select-btn { height:28px; padding:0 12px; font-size:12px; }
-  .status-pill { display:inline-block; font-size:11px; font-weight:600; border-radius:20px; padding:3px 10px; white-space:nowrap; }
+  .directory-table td:nth-child(1) { white-space:normal; word-break:break-word; }
+  .directory-table tbody tr:hover { background:#FAFAFC; }
+  .directory-applicant-name { font-weight:500; color:#1A1A2E; }
+  .directory-applicant-id { font-family:'Courier New', monospace; font-size:11px; color:#8A8A9A; margin-top:1px; }
+  .directory-select-btn { height:28px; padding:0 14px; font-size:12px; font-weight:600; border-radius:7px; }
+  .directory-select-btn:disabled { opacity:0.5; cursor:not-allowed; }
+  .status-pill { display:inline-block; font-size:10px; font-weight:600; border-radius:20px; padding:2px 9px; white-space:nowrap; }
   .status-pending { background:#FEF6EC; color:#B5650F; }
-  .status-pre_enrolled { background:#EAF3EE; color:#1E7A46; }
+  .status-pre_enrolled { background:#EAF0FB; color:#2A5DAD; }
   .status-enrolled { background:#EBF7F2; color:#1A6B4A; }
   .status-cancelled { background:#FDF0EF; color:#C0392B; }
   .mono { font-family:'Courier New', monospace; font-size:12.5px; }
   .directory-row.hidden-row { display:none; }
-  .directory-count { font-size:11px; color:#8A8A9A; margin-bottom:0.6rem; }
+  .directory-count { font-size:12.5px; font-weight:500; color:#5A5A72; margin:0 0 0.85rem; padding:0 2px; }
+  .directory-empty { border:0.5px solid #D4D4E0; border-radius:8px; padding:12px 14px; background:#FAFAFC; }
+  .directory-empty .summary-empty { margin:0; }
+  .wizard-step:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; border-radius: 6px; }
+  @media (max-width: 900px) {
+    .directory-table-wrap { overflow-x:auto; }
+    .directory-table { min-width:760px; }
+  }
   @media print {
     .staff-sidebar, .staff-topbar, .wizard-progress, .cycle-banner, .btn-print, .btn-secondary, .no-print { display:none !important; }
-    .summary-print-card { border:none; padding:0; }
+    .summary-print-card { border:none; padding:0; margin-bottom:0; }
   }
 </style>
 </head>
@@ -1653,22 +1934,30 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
   <div class="main"><div class="content">
     <p class="page-eyebrow">Admin Portal</p>
     <h1 class="page-title">Enrollment</h1>
-    <p class="page-sub">Step <?= $step ?> of 5 — <?= htmlspecialchars($steps[$step] ?? '') ?></p>
+    <p class="page-sub">Search, evaluate, and confirm subject loads for admitted applicants.</p>
 <?php else: ?>
   <?php include_once BASE_PATH . '/shared/includes/staff_sidebar.php'; ?>
   <div class="staff-main">
     <div class="staff-topbar">
-      <div class="staff-topbar-left">
-        <div class="staff-topbar-title">
-          Enrollment
-          <span class="staff-topbar-subtitle">Step <?= $step ?> of 5 — <?= htmlspecialchars($steps[$step] ?? '') ?></span>
-        </div>
+      <div class="staff-topbar-left"></div>
+      <div style="display:flex; align-items:center; gap:14px;">
+        <?php if ($cycle): ?>
+          <span class="cycle-chip no-print">
+            <?= htmlspecialchars($cycle['school_year']) ?> ·
+            <span class="<?= $enrollOpen ? 'is-open' : 'is-closed' ?>"><?= $enrollOpen ? 'Open' : 'Closed' ?></span>
+          </span>
+        <?php endif; ?>
+        <?php include_once BASE_PATH . '/shared/includes/staff_notifications.php'; ?>
+        <span class="staff-topbar-date"><?= date('F j, Y') ?></span>
       </div>
     </div>
     <div class="staff-content">
+      <p class="page-eyebrow">Registrar Portal</p>
+      <h1 class="page-title">Enrollment</h1>
+      <p class="page-sub">Search, evaluate, and confirm subject loads for admitted applicants.</p>
 <?php endif; ?>
 
-    <div class="page-wrap<?= $step === 1 ? ' page-wrap-directory' : '' ?>" style="padding-top:0;">
+    <div class="page-wrap<?= $step === 1 ? ' page-wrap-directory' : (in_array($step, [2, 3, 4], true) ? ' page-wrap-details' : '') ?>" style="padding-top:0;">
 
       <div class="wizard-progress no-print">
         <?php foreach ($steps as $num => $label): ?>
@@ -1687,10 +1976,12 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
       </div>
 
       <?php if ($cycle): ?>
-        <div class="cycle-banner no-print">
-          <span>Current cycle: <strong><?= htmlspecialchars($cycle['school_year']) ?></strong></span>
-          <span><?= $enrollOpen ? 'Enrollment open' : 'Enrollment closed' ?></span>
-        </div>
+        <?php if ($is_admin): ?>
+          <div class="cycle-banner no-print">
+            <span>Current cycle: <strong><?= htmlspecialchars($cycle['school_year']) ?></strong></span>
+            <span><?= $enrollOpen ? 'Enrollment open' : 'Enrollment closed' ?></span>
+          </div>
+        <?php endif; ?>
       <?php else: ?>
         <div class="notice notice-error">No school year is configured yet. Ask an admin to set one up in School Year Settings.</div>
       <?php endif; ?>
@@ -1705,64 +1996,62 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
         </div>
 
       <?php elseif ($step === 1): ?>
-        <div class="panel">
-          <div class="panel-sub">Step 1 — Student Lookup</div>
-          <p class="field-hint" style="margin-bottom:0.75rem; display:block;">Search by Student Number (returning students) or Control Number (new students &amp; transferees). Only students who have completed admission requirements will be found.</p>
-          <div class="student-number-search-wrap">
-            <div class="student-number-row">
-              <input type="text" id="student-number-input" maxlength="20"
-                     placeholder="Enter Student Number or Control Number" autocomplete="off">
-              <button type="button" class="btn-search" id="student-number-search-btn">Search</button>
-            </div>
-            <div class="student-number-suggestions hidden" id="student-number-suggestions"></div>
+        <?php if (!$studentDirectory): ?>
+          <div class="panel panel-full">
+            <div class="panel-sub">Student Directory — <?= htmlspecialchars($cycle['school_year']) ?></div>
+            <div class="directory-empty"><p class="summary-empty">No admitted students found yet.</p></div>
           </div>
-          <div id="student-number-result"></div>
-          <form method="post" id="select-student-form" class="hidden">
-            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-            <input type="hidden" name="action" value="select_student">
-            <input type="hidden" name="student_id" id="selected-student-id">
-          </form>
-        </div>
-
-        <div class="panel panel-full">
-          <div class="panel-sub">Student Directory — <?= htmlspecialchars($cycle['school_year']) ?></div>
-
-          <?php if (!$studentDirectory): ?>
-            <p class="summary-empty">No admitted students found yet.</p>
-          <?php else: ?>
-            <div class="directory-toolbar">
-              <input type="text" id="directory-search" class="directory-search-input" placeholder="Filter by name or Student Number / Control No…">
-              <button type="button" class="btn-search" id="directory-filter-btn">Filter</button>
-              <button type="button" class="btn-secondary" id="directory-clear-btn">Clear</button>
+        <?php else: ?>
+          <?php
+            $statusLabels = ['pending' => 'Pending', 'pre_enrolled' => 'Pre-enrolled', 'enrolled' => 'Enrolled', 'cancelled' => 'Cancelled'];
+            $typeLabels   = ['new' => 'New', 'returning' => 'Returning', 'transferee' => 'Transferee'];
+          ?>
+          <div class="directory-toolbar">
+            <div class="directory-search-field">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="text" id="directory-search" class="directory-search-input" placeholder="Search by name or Student Number / Control No…">
+              <button type="button" class="directory-search-clear" id="directory-clear-btn" disabled aria-label="Clear filter" title="Clear filter">&times;</button>
             </div>
+            <div class="directory-toolbar-filters">
+              <select class="directory-filter-select" id="directory-status-filter" aria-label="Filter by status">
+                <option value="">All statuses</option>
+                <?php foreach ($statusLabels as $val => $label): ?>
+                  <option value="<?= htmlspecialchars($val) ?>"><?= htmlspecialchars($label) ?></option>
+                <?php endforeach; ?>
+              </select>
+              <select class="directory-filter-select" id="directory-type-filter" aria-label="Filter by student type">
+                <option value="">All types</option>
+                <?php foreach ($typeLabels as $val => $label): ?>
+                  <option value="<?= htmlspecialchars($val) ?>"><?= htmlspecialchars($label) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+          </div>
 
+          <?php $dirTotal = count($studentDirectory); ?>
+          <p class="directory-count" id="directory-count">Showing 1&ndash;<?= $dirTotal ?> of <?= $dirTotal ?> student<?= $dirTotal === 1 ? '' : 's' ?></p>
+
+          <div class="panel panel-full">
+            <div class="panel-sub">Student Directory — <?= htmlspecialchars($cycle['school_year']) ?></div>
             <div class="directory-table-wrap">
               <table class="subj-table directory-table" id="directory-table">
                 <colgroup>
-                  <col style="width:22%;">
+                  <col style="width:40%;">
                   <col style="width:12%;">
-                  <col style="width:10%;">
-                  <col style="width:20%;">
-                  <col style="width:12%;">
-                  <col style="width:12%;">
-                  <col style="width:12%;">
+                  <col style="width:16%;">
+                  <col style="width:16%;">
+                  <col style="width:16%;">
                 </colgroup>
                 <thead>
                   <tr>
                     <th>Applicant</th>
-                    <th>ID</th>
-                    <th>Student Type</th>
-                    <th>Previous Record</th>
+                    <th>Type</th>
                     <th>Status</th>
                     <th>Semester</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  <?php
-                    $statusLabels = ['pending' => 'Pending', 'pre_enrolled' => 'Pre-enrolled', 'enrolled' => 'Enrolled', 'cancelled' => 'Cancelled'];
-                    $typeLabels   = ['new' => 'New', 'returning' => 'Returning', 'transferee' => 'Transferee'];
-                  ?>
                   <?php foreach ($studentDirectory as $row): ?>
                     <?php
                       $bucket = directory_status_bucket($row['cur_status']);
@@ -1775,21 +2064,14 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
                       $fullName = implode(' ', $nameParts);
                       $idLabel  = $row['student_number'] ?: ($row['control_number'] ?: '—');
 
-                      if ($row['prev_grade']) {
-                          $prevLabel = 'Grade ' . $row['prev_grade'] . ' — ' . $row['prev_strand'] . ' · ' . $row['prev_year'];
-                      } elseif ($row['is_transferee']) {
-                          $prevLabel = 'External' . ($row['jhs_school'] ? ' — ' . $row['jhs_school'] : '');
-                      } else {
-                          $prevLabel = 'New — Admission';
-                      }
-
                       $searchBlob = mb_strtolower($fullName . ' ' . $idLabel);
                     ?>
                     <tr class="directory-row" data-status="<?= $bucket ?>" data-type="<?= htmlspecialchars($row['student_type']) ?>" data-id="<?= (int)$row['student_id'] ?>" data-search="<?= htmlspecialchars($searchBlob) ?>">
-                      <td><?= htmlspecialchars($fullName) ?></td>
-                      <td class="mono"><?= htmlspecialchars($idLabel) ?></td>
+                      <td>
+                        <div class="directory-applicant-name"><?= htmlspecialchars($fullName) ?></div>
+                        <div class="directory-applicant-id"><?= htmlspecialchars($idLabel) ?></div>
+                      </td>
                       <td><?= htmlspecialchars($typeLabels[$row['student_type']] ?? $row['student_type']) ?></td>
-                      <td><?= htmlspecialchars($prevLabel) ?></td>
                       <td>
                         <span class="status-pill status-<?= $bucket ?>"><?= $statusLabels[$bucket] ?></span>
                       </td>
@@ -1808,13 +2090,13 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
                       </td>
                       <td>
                         <?php if ($bucket === 'enrolled' && $sem2Status === 'approved'): ?>
-                          <span class="td-meta">Enrolled</span>
+                          <button type="button" class="btn-secondary directory-select-btn" disabled title="Already enrolled for this cycle">Enrolled</button>
                         <?php else: ?>
                           <form method="post" style="display:inline;">
                             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                             <input type="hidden" name="action" value="select_student">
                             <input type="hidden" name="student_id" value="<?= (int)$row['student_id'] ?>">
-                            <button type="submit" class="btn-secondary directory-select-btn">Select</button>
+                            <button type="submit" class="btn-primary directory-select-btn">Select</button>
                           </form>
                         <?php endif; ?>
                       </td>
@@ -1824,10 +2106,241 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
               </table>
               <p class="summary-empty hidden" id="directory-no-results" style="padding:1rem 0 0.25rem;">No students match this filter.</p>
             </div>
-          <?php endif; ?>
+          </div>
+        <?php endif; ?>
+
+      <?php elseif ($step === 2): ?>
+        <?php
+          $canEditStrand = ($wizard['max_step_reached'] ?? 1) < 3;
+          $strandFullNames = [
+              'STEM'    => 'Science, Technology, Engineering and Mathematics',
+              'ABM'     => 'Accountancy, Business and Management',
+              'HUMSS'   => 'Humanities and Social Sciences',
+              'GAS'     => 'General Academic Strand',
+              'TVL-ICT' => 'Information and Communications Technology',
+          ];
+          // Only worth a caption when it's telling the registrar something
+          // they'd otherwise miss — an actual shift in progress, or why the
+          // field is locked. "No change vs. previous strand" isn't news.
+          $strandHint = '';
+          if ($hasPick && $wizard['prev_strand'] && wizard_is_strand_change($wizard)) {
+              $strandHint = 'Shifting from previous strand ' . htmlspecialchars($wizard['prev_strand']) . '.';
+              if (!$canEditStrand) $strandHint .= ' Locked past Step 2 — use "Start Over" to change.';
+          } elseif ($hasPick && !$canEditStrand) {
+              $strandHint = 'Locked past Step 2 — use "Start Over" to change.';
+          }
+          $lockIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+          $editIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+        ?>
+        <div class="dtl-layout">
+          <div class="dtl-main">
+            <div class="panel">
+              <div class="dtl-student-head">
+                <div class="dtl-student-id">
+                  <span class="dtl-student-name"><?= htmlspecialchars($wizard['student_name'] ?? '') ?></span>
+                  <?php if ($displayId): ?><span class="dtl-student-no"><?= htmlspecialchars($displayId) ?></span><?php endif; ?>
+                </div>
+                <?php if ($isPending): ?>
+                  <span class="dtl-status-pill dtl-status-pending">Payment pending</span>
+                <?php elseif ($isSem2): ?>
+                  <span class="dtl-status-pill dtl-status-info">Semester 2</span>
+                <?php else: ?>
+                  <span class="dtl-status-pill dtl-status-neutral">New enrollment</span>
+                <?php endif; ?>
+              </div>
+              <?php if ($isPending): ?>
+                <p class="dtl-student-desc">Pre-enrolled for <?= htmlspecialchars($wizard['school_year']) ?>, Grade <?= htmlspecialchars($wizard['grade_level']) ?> <?= htmlspecialchars($wizard['strand']) ?>. Once payment clears, this record locks — for now you can shift the strand and re-confirm.</p>
+              <?php elseif ($isSem2): ?>
+                <p class="dtl-student-desc">Continuing into Semester 2 of <?= htmlspecialchars($wizard['school_year']) ?> — Grade <?= htmlspecialchars($wizard['grade_level']) ?>, <?= htmlspecialchars($wizard['strand']) ?> strand. The homeroom section below is pre-selected to their current section — the Semester 2 fee adds on top of what's already on file.</p>
+                <div class="notice notice-error" style="margin-top:.6rem;">
+                  <strong>Careful:</strong> a section applies to the student's whole school year, not just Semester 2. Picking a <em>different</em> section here also changes their already-completed Semester 1 schedule, teachers, and grades — only change it if that's genuinely intended.
+                </div>
+              <?php elseif ($hasPick): ?>
+                <p class="dtl-student-desc">Enrolling for <?= htmlspecialchars($wizard['school_year']) ?>, Grade <?= htmlspecialchars($wizard['grade_level']) ?> <?= htmlspecialchars($wizard['strand']) ?>. No payment is due yet — that applies once the student is pre-enrolled.</p>
+              <?php endif; ?>
+            </div>
+
+            <div class="panel">
+              <div class="dtl-card-head">
+                <div class="dtl-card-title">Enrollment details</div>
+                <div class="dtl-step-note">Step <?= $step ?> of <?= count($steps) ?></div>
+              </div>
+
+              <div class="locked-context">
+                <div class="locked-pill">
+                  <div class="locked-pill-top">
+                    <span class="locked-pill-label">School year</span>
+                  </div>
+                  <div class="locked-pill-val"><?= htmlspecialchars($wizard['school_year']) ?></div>
+                  <div class="locked-pill-desc">Set by the active cycle. Change it from School Year Settings.</div>
+                </div>
+                <?php if ($hasPick): ?>
+                  <div class="locked-pill">
+                    <div class="locked-pill-top">
+                      <span class="locked-pill-label">Grade level</span>
+                    </div>
+                    <div class="locked-pill-val">Grade <?= htmlspecialchars($wizard['grade_level']) ?></div>
+                    <div class="locked-pill-desc">Follows the applicant's admitted grade level.</div>
+                  </div>
+                <?php endif; ?>
+              </div>
+
+              <?php if ($hasPick): ?>
+                <!-- Already picked once — show the locked value + inline Strand Shift edit. -->
+                <div class="field-box">
+                  <div>
+                    <div class="field-box-label">Strand</div>
+                    <div class="field-box-val"><?= htmlspecialchars($wizard['strand']) ?><?php if ($strandFullNames[$wizard['strand']] ?? null): ?><span class="field-box-val-full"> — <?= htmlspecialchars($strandFullNames[$wizard['strand']]) ?></span><?php endif; ?></div>
+                    <?php if ($strandHint): ?><div class="field-box-hint"><?= $strandHint ?></div><?php endif; ?>
+                  </div>
+                  <?php if ($canEditStrand): ?>
+                    <button type="button" class="chip-btn" onclick="toggleStrandShift()"><?= $editIcon ?> Shift strand</button>
+                  <?php else: ?>
+                    <span class="locked-pill-lock"><?= $lockIcon ?> Locked</span>
+                  <?php endif; ?>
+                </div>
+
+                <?php if ($canEditStrand): ?>
+                <div id="strand-shift-row" style="display:none; margin-bottom:1.25rem; border:0.5px solid #D4D4E0; border-radius:8px; padding:12px 14px; background:#FAFAFC;">
+                  <form method="post">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                    <input type="hidden" name="action" value="edit_context">
+                    <input type="hidden" name="new_grade_level" value="<?= htmlspecialchars($wizard['grade_level']) ?>">
+
+                    <label style="display:block; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.05em; color:#5A5A72; margin-bottom:.3rem;">New Strand <span class="req">*</span></label>
+                    <select name="new_strand" required style="width:100%; height:36px; border:0.5px solid #D4D4E0; border-radius:6px; padding:0 10px; font-family:inherit; font-size:12.5px; background:#fff; margin-bottom:.75rem;">
+                      <option value="">Select strand…</option>
+                      <?php foreach (ENROLL_STRANDS as $s): ?>
+                        <?php if ($s === $wizard['strand']) continue; ?>
+                        <option value="<?= $s ?>"><?= htmlspecialchars($s) ?></option>
+                      <?php endforeach; ?>
+                    </select>
+
+                    <label style="display:block; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.05em; color:#5A5A72; margin-bottom:.3rem;">Reason for Shift <span class="req">*</span></label>
+                    <textarea name="edit_reason" rows="2" required
+                      style="width:100%; border:0.5px solid #D4D4E0; border-radius:8px; padding:8px 10px; font-family:inherit; font-size:12.5px; resize:vertical;"
+                      placeholder="e.g. Student requested strand shift after re-evaluation"></textarea>
+
+                    <div class="proceed-row" style="border-top:none; padding-top:0; margin-top:.75rem;">
+                      <button type="button" class="btn-secondary" onclick="toggleStrandShift()">Cancel</button>
+                      <button type="submit" class="btn-primary">Confirm Strand Shift</button>
+                    </div>
+                  </form>
+                </div>
+                <?php endif; ?>
+
+                <form method="post">
+                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                  <input type="hidden" name="action" value="set_details">
+                  <input type="hidden" name="grade_level" value="<?= htmlspecialchars($wizard['grade_level']) ?>">
+                  <input type="hidden" name="strand" value="<?= htmlspecialchars($wizard['strand']) ?>">
+                  <div class="dtl-actions">
+                    <div class="dtl-actions-left">
+                      <button type="submit" form="back-to-step-form" class="link-muted">&larr; Back to search</button>
+                      <button type="submit" form="start-over-form" class="link-caution">Start over</button>
+                    </div>
+                    <button type="submit" class="btn-primary">Continue to evaluation &rarr;</button>
+                  </div>
+                </form>
+
+              <?php else: ?>
+                <!-- First-time pick — plain radios, no reason needed yet. -->
+                <form method="post">
+                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+                  <input type="hidden" name="action" value="set_details">
+
+                  <label>Grade Level <span class="req">*</span></label>
+                  <div class="radio-row">
+                    <?php foreach (['11' => 'Grade 11', '12' => 'Grade 12'] as $val => $label): ?>
+                      <div class="radio-opt">
+                        <input type="radio" name="grade_level" id="grade-<?= $val ?>" value="<?= $val ?>"
+                               <?= (string)$wizard['grade_level'] === $val ? 'checked' : '' ?>>
+                        <label for="grade-<?= $val ?>"><?= $label ?></label>
+                      </div>
+                    <?php endforeach; ?>
+                  </div>
+
+                  <label>Strand <span class="req">*</span></label>
+                  <div class="strand-row">
+                    <?php foreach (ENROLL_STRANDS as $s): ?>
+                      <div class="strand-opt">
+                        <input type="radio" name="strand" id="strand-<?= $s ?>" value="<?= $s ?>"
+                               <?= $wizard['strand'] === $s ? 'checked' : '' ?>>
+                        <label for="strand-<?= $s ?>"><span class="strand-name"><?= htmlspecialchars($s) ?></span></label>
+                      </div>
+                    <?php endforeach; ?>
+                  </div>
+
+                  <div class="dtl-actions">
+                    <div class="dtl-actions-left">
+                      <button type="submit" form="back-to-step-form" class="link-muted">&larr; Back to search</button>
+                      <button type="submit" form="start-over-form" class="link-caution">Start over</button>
+                    </div>
+                    <button type="submit" class="btn-primary">Continue to evaluation &rarr;</button>
+                  </div>
+                </form>
+              <?php endif; ?>
+            </div>
+          </div>
+
+          <aside class="dtl-aside">
+            <div class="panel">
+              <div class="dtl-card-title" style="margin-bottom:.75rem;">Enrollment summary</div>
+              <dl style="margin:0;">
+                <div class="dtl-summary-row"><dt>School year</dt><dd><?= htmlspecialchars($wizard['school_year']) ?></dd></div>
+                <div class="dtl-summary-row"><dt>Grade level</dt><dd<?= $hasPick ? '' : ' class="is-muted"' ?>><?= $hasPick ? 'Grade ' . htmlspecialchars($wizard['grade_level']) : '—' ?></dd></div>
+                <div class="dtl-summary-row"><dt>Strand</dt><dd<?= $hasPick ? '' : ' class="is-muted"' ?>><?= $hasPick ? htmlspecialchars($wizard['strand']) : '—' ?></dd></div>
+                <div class="dtl-summary-row"><dt>Section</dt><dd class="is-muted"><?= ($wizard['section_id'] ?? null) ? 'Selected' : 'Not yet assigned' ?></dd></div>
+                <?php if ($isPending): ?>
+                  <div class="dtl-summary-row"><dt>Payment</dt><dd class="is-pending">Pending</dd></div>
+                <?php elseif ($isSem2): ?>
+                  <div class="dtl-summary-row"><dt>Payment</dt><dd class="is-muted">Additional fee on confirm</dd></div>
+                <?php else: ?>
+                  <div class="dtl-summary-row"><dt>Payment</dt><dd class="is-muted">Not yet applicable</dd></div>
+                <?php endif; ?>
+              </dl>
+            </div>
+
+            <div class="panel">
+              <div class="dtl-card-title" style="margin-bottom:.75rem;">What's next</div>
+              <ul class="dtl-next-list">
+                <li class="dtl-next-item"><span class="dtl-next-num">3</span> Evaluate prior records and confirm the subject load.</li>
+                <li class="dtl-next-item"><span class="dtl-next-num">4</span> Assign a homeroom section.</li>
+                <li class="dtl-next-item"><span class="dtl-next-num">5</span> Review everything before confirming.</li>
+              </ul>
+            </div>
+
+            <?php if ($isPending): ?>
+              <div class="dtl-callout">
+                <div class="dtl-callout-title">Payment pending</div>
+                <p class="dtl-callout-desc">This record stays editable until payment clears. Once it's marked paid, the strand locks and shifting requires a registrar override.</p>
+              </div>
+            <?php elseif ($isSem2): ?>
+              <div class="dtl-callout is-info">
+                <div class="dtl-callout-title">Semester 2 continuation</div>
+                <p class="dtl-callout-desc">The homeroom section is pre-selected to the student's current section. Changing it also changes their completed Semester 1 record — only do this if intended.</p>
+              </div>
+            <?php else: ?>
+              <div class="dtl-callout is-neutral">
+                <div class="dtl-callout-title">Payment</div>
+                <p class="dtl-callout-desc">No payment is due yet. Fees are calculated and applied once this student is pre-enrolled and a homeroom section is confirmed.</p>
+              </div>
+            <?php endif; ?>
+          </aside>
         </div>
 
+        <form method="post" id="back-to-step-form" class="hidden no-print">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+          <input type="hidden" name="action" value="go_to_step">
+          <input type="hidden" name="target_step" value="1">
+        </form>
+        <form method="post" id="start-over-form" class="hidden no-print" data-confirm="Start over? This clears all progress for this enrollment — student selection, evaluation, and section — and can't be undone." data-icon="warning">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+          <input type="hidden" name="action" value="reset_wizard">
+        </form>
+
       <?php else: ?>
+        <?php if (!in_array($step, [3, 4], true)): ?>
         <div class="panel">
           <div class="panel-sub">Student</div>
           <p style="font-size:13px;"><strong><?= htmlspecialchars($wizard['student_name'] ?? '') ?></strong> — Student Number <?= htmlspecialchars($wizard['student_number'] ?? '') ?></p>
@@ -1845,128 +2358,18 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
             </div>
           <?php endif; ?>
         </div>
+        <?php endif; ?>
 
-        <?php if ($step === 2): ?>
+        <?php if ($step === 3): ?>
+        <div class="dtl-layout">
+          <div class="dtl-main">
+            <?= render_dtl_top_card($wizard, $isPending, $isSem2, $hasPick, $displayId) ?>
           <div class="panel">
-            <div class="panel-sub">Step 2 — Enrollment Details</div>
-
-            <div class="locked-context">
-              <div class="locked-pill">
-                <div>
-                  <div class="locked-pill-label">School Year</div>
-                  <div class="locked-pill-val"><?= htmlspecialchars($wizard['school_year']) ?></div>
-                </div>
-              </div>
+            <div class="dtl-card-head">
+              <div class="dtl-card-title">Academic Evaluation</div>
+              <div class="dtl-step-note">Step <?= $step ?> of <?= count($steps) ?></div>
             </div>
-            <p class="field-hint" style="margin-bottom:1rem; display:block;">School year follows the active cycle and can't be changed here — update School Year Settings instead.</p>
-
-            <?php if ($wizard['grade_level'] && $wizard['strand']): ?>
-              <!-- Already picked once — show locked values + inline Strand Shift edit. -->
-              <?php $canEditStrand = ($wizard['max_step_reached'] ?? 1) < 3; ?>
-              <div class="locked-context">
-                <div class="locked-pill">
-                  <div>
-                    <div class="locked-pill-label">Grade Level</div>
-                    <div class="locked-pill-val">Grade <?= htmlspecialchars($wizard['grade_level']) ?></div>
-                  </div>
-                </div>
-                <div class="locked-pill">
-                  <div>
-                    <div class="locked-pill-label">Strand</div>
-                    <div class="locked-pill-val"><?= htmlspecialchars($wizard['strand']) ?></div>
-                  </div>
-                  <?php if ($canEditStrand): ?>
-                    <button type="button" class="btn-link-change" onclick="toggleStrandShift()">Strand Shift</button>
-                  <?php endif; ?>
-                </div>
-              </div>
-
-              <?php if ($wizard['prev_strand']): $willChangeStrand = wizard_is_strand_change($wizard); ?>
-                <p class="field-hint" style="margin:-.5rem 0 1rem;">Strand shift: <strong><?= $willChangeStrand ? 'Yes' : 'No' ?></strong> (vs. previous strand <?= htmlspecialchars($wizard['prev_strand']) ?>)<?= !$canEditStrand ? ' — locked past Step 2, use "Start Over" to change it now.' : '' ?></p>
-              <?php elseif (!$canEditStrand): ?>
-                <p class="field-hint" style="margin:-.5rem 0 1rem;">Strand is locked past Step 2 — use "Start Over" to change it now.</p>
-              <?php endif; ?>
-
-              <?php if ($canEditStrand): ?>
-              <div id="strand-shift-row" style="display:none; margin-bottom:1.25rem; border:0.5px solid #D4D4E0; border-radius:8px; padding:12px 14px; background:#FAFAFC;">
-                <form method="post">
-                  <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-                  <input type="hidden" name="action" value="edit_context">
-                  <input type="hidden" name="new_grade_level" value="<?= htmlspecialchars($wizard['grade_level']) ?>">
-
-                  <label style="display:block; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.05em; color:#5A5A72; margin-bottom:.3rem;">New Strand <span class="req">*</span></label>
-                  <select name="new_strand" required style="width:100%; height:36px; border:0.5px solid #D4D4E0; border-radius:6px; padding:0 10px; font-family:inherit; font-size:12.5px; background:#fff; margin-bottom:.75rem;">
-                    <option value="">Select strand…</option>
-                    <?php foreach (ENROLL_STRANDS as $s): ?>
-                      <?php if ($s === $wizard['strand']) continue; ?>
-                      <option value="<?= $s ?>"><?= htmlspecialchars($s) ?></option>
-                    <?php endforeach; ?>
-                  </select>
-
-                  <label style="display:block; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.05em; color:#5A5A72; margin-bottom:.3rem;">Reason for Shift <span class="req">*</span></label>
-                  <textarea name="edit_reason" rows="2" required
-                    style="width:100%; border:0.5px solid #D4D4E0; border-radius:8px; padding:8px 10px; font-family:inherit; font-size:12.5px; resize:vertical;"
-                    placeholder="e.g. Student requested strand shift after re-evaluation"></textarea>
-
-                  <div class="proceed-row" style="border-top:none; padding-top:0; margin-top:.75rem;">
-                    <button type="button" class="btn-secondary" onclick="toggleStrandShift()">Cancel</button>
-                    <button type="submit" class="btn-primary">Confirm Strand Shift</button>
-                  </div>
-                </form>
-              </div>
-              <?php endif; ?>
-
-              <form method="post">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-                <input type="hidden" name="action" value="set_details">
-                <input type="hidden" name="grade_level" value="<?= htmlspecialchars($wizard['grade_level']) ?>">
-                <input type="hidden" name="strand" value="<?= htmlspecialchars($wizard['strand']) ?>">
-                <div class="proceed-row" style="border-top:none; padding-top:0; margin-top:1rem;">
-                  <span></span>
-                  <button type="submit" class="btn-primary">Continue to Evaluation</button>
-                </div>
-              </form>
-
-            <?php else: ?>
-              <!-- First-time pick — plain radios, no reason needed yet. -->
-              <form method="post">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
-                <input type="hidden" name="action" value="set_details">
-
-                <label>Grade Level <span class="req">*</span></label>
-                <div class="radio-row">
-                  <?php foreach (['11' => 'Grade 11', '12' => 'Grade 12'] as $val => $label): ?>
-                    <div class="radio-opt">
-                      <input type="radio" name="grade_level" id="grade-<?= $val ?>" value="<?= $val ?>"
-                             <?= (string)$wizard['grade_level'] === $val ? 'checked' : '' ?>>
-                      <label for="grade-<?= $val ?>"><?= $label ?></label>
-                    </div>
-                  <?php endforeach; ?>
-                </div>
-
-                <label>Strand <span class="req">*</span></label>
-                <div class="strand-row">
-                  <?php foreach (ENROLL_STRANDS as $s): ?>
-                    <div class="strand-opt">
-                      <input type="radio" name="strand" id="strand-<?= $s ?>" value="<?= $s ?>"
-                             <?= $wizard['strand'] === $s ? 'checked' : '' ?>>
-                      <label for="strand-<?= $s ?>"><span class="strand-name"><?= htmlspecialchars($s) ?></span></label>
-                    </div>
-                  <?php endforeach; ?>
-                </div>
-
-                <div class="proceed-row" style="border-top:none; padding-top:0; margin-top:1.25rem;">
-                  <span></span>
-                  <button type="submit" class="btn-primary">Continue to Evaluation</button>
-                </div>
-              </form>
-            <?php endif; ?>
-          </div>
-
-        <?php elseif ($step === 3): ?>
-          <div class="panel">
-            <div class="panel-sub">Step 3 — Academic Evaluation</div>
-            <p class="page-sub">For <?= htmlspecialchars('Grade ' . $wizard['grade_level'] . ' — ' . $wizard['strand']) ?></p>
+            <p class="page-sub" style="margin-bottom:1rem;">For <?= htmlspecialchars('Grade ' . $wizard['grade_level'] . ' — ' . $wizard['strand']) ?></p>
             <?php if ($wizard['jhs_school']): ?>
               <p class="field-hint" style="margin-bottom:.75rem;">Prev. School: <?= htmlspecialchars($wizard['jhs_school']) ?></p>
             <?php endif; ?>
@@ -2109,18 +2512,42 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
                 <?php endif; ?>
               <?php endif; ?>
 
-              <div class="proceed-row" style="margin-top:1.25rem;">
-                <span></span>
+              <div class="dtl-actions" style="margin-top:1.25rem;">
+                <div class="dtl-actions-left">
+                  <button type="submit" form="step3-back-form" class="link-muted">&larr; Back</button>
+                  <button type="submit" form="step3-start-over-form" class="link-caution">Start over</button>
+                </div>
                 <button type="submit" class="btn-primary" id="eval-continue-btn">Continue<?= $needsValidation ? ' to Section Selection' : ' →' ?></button>
               </div>
             </form>
           </div>
+          </div>
+          <?= render_dtl_aside($wizard, $isPending, $isSem2, $hasPick, [
+              4 => 'Assign a homeroom section.',
+              5 => 'Review everything before confirming.',
+          ]) ?>
+        </div>
+        <form method="post" id="step3-back-form" class="hidden no-print">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+          <input type="hidden" name="action" value="go_to_step">
+          <input type="hidden" name="target_step" value="<?= $step - 1 ?>">
+        </form>
+        <form method="post" id="step3-start-over-form" class="hidden no-print" data-confirm="Start over? This clears all progress for this enrollment — student selection, evaluation, and section — and can't be undone." data-icon="warning">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+          <input type="hidden" name="action" value="reset_wizard">
+        </form>
 
         <?php elseif ($step === 4): ?>
+        <div class="dtl-layout">
+          <div class="dtl-main">
+            <?= render_dtl_top_card($wizard, $isPending, $isSem2, $hasPick, $displayId) ?>
           <div class="sections-card">
-            <div class="sections-head">
-              <div class="sections-title">Step 4 — Select Homeroom Section</div>
-              <?php if ($wizard['section_id']): ?><span class="open-badge">Selected</span><?php endif; ?>
+            <div class="dtl-card-head">
+              <div class="dtl-card-title">Select Homeroom Section</div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <?php if ($wizard['section_id']): ?><span class="open-badge">Selected</span><?php endif; ?>
+                <span class="dtl-step-note">Step <?= $step ?> of <?= count($steps) ?></span>
+              </div>
             </div>
 
             <?php if (!$availableSections): ?>
@@ -2139,10 +2566,14 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
                     <input type="hidden" name="action" value="select_section">
                     <input type="hidden" name="section_id" value="<?= (int)$sec['section_id'] ?>">
                     <button type="submit" class="sec-card <?= $selected ? 'sec-selected' : '' ?> <?= $full && !$selected ? 'sec-full' : '' ?>"
-                            style="width:100%; text-align:left; border:none; font-family:inherit;" <?= $full && !$selected ? 'disabled' : '' ?>>
+                            style="width:100%; text-align:left; border:none; font-family:inherit; cursor:pointer;" <?= $full && !$selected ? 'disabled' : '' ?>>
+                      <?php if ($selected): ?>
+                        <span class="sec-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg></span>
+                      <?php endif; ?>
                       <div class="sec-name"><?= htmlspecialchars($sec['section_name']) ?></div>
                       <div class="sec-room"><?= htmlspecialchars($sec['room'] ?? '') ?></div>
                       <div class="slots-txt <?= $slotClass ?>"><?= (int)$sec['enrolled_count'] ?>/<?= (int)$sec['capacity'] ?> slots</div>
+                      <div class="slots-bar"><div class="slots-fill slots-fill-<?= $full ? 'full' : ($ratio >= 0.8 ? 'low' : 'ok') ?>" style="width:<?= min(100, round($ratio * 100)) ?>%;"></div></div>
                     </button>
                   </form>
                 <?php endforeach; ?>
@@ -2203,14 +2634,32 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
             <form method="post">
               <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
               <input type="hidden" name="action" value="go_to_review">
-              <div class="proceed-row" style="border-top:none; padding-top:0;">
-                <span class="proceed-info">
-                  <?= !$wizard['section_id'] ? 'Select a homeroom section above first.' : (!$backReady ? 'Pick a class for every back subject above.' : 'Ready to review.') ?>
-                </span>
+              <p class="proceed-info" style="margin:0 0 .75rem;">
+                <?= !$wizard['section_id'] ? 'Select a homeroom section above first.' : (!$backReady ? 'Pick a class for every back subject above.' : 'Ready to review.') ?>
+              </p>
+              <div class="dtl-actions" style="border-top:none; padding-top:0; margin-top:0;">
+                <div class="dtl-actions-left">
+                  <button type="submit" form="step4-back-form" class="link-muted">&larr; Back</button>
+                  <button type="submit" form="step4-start-over-form" class="link-caution">Start over</button>
+                </div>
                 <button type="submit" class="btn-primary" <?= $readyToConfirm ? '' : 'disabled' ?>>Continue to Review</button>
               </div>
             </form>
           </div>
+          </div>
+          <?= render_dtl_aside($wizard, $isPending, $isSem2, $hasPick, [
+              5 => 'Review everything before confirming.',
+          ]) ?>
+        </div>
+        <form method="post" id="step4-back-form" class="hidden no-print">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+          <input type="hidden" name="action" value="go_to_step">
+          <input type="hidden" name="target_step" value="<?= $step - 1 ?>">
+        </form>
+        <form method="post" id="step4-start-over-form" class="hidden no-print" data-confirm="Start over? This clears all progress for this enrollment — student selection, evaluation, and section — and can't be undone." data-icon="warning">
+          <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+          <input type="hidden" name="action" value="reset_wizard">
+        </form>
 
         <?php elseif ($step === 5): ?>
           <div class="panel">
@@ -2371,6 +2820,7 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
           <?php endif; ?>
         <?php endif; ?>
 
+        <?php if (!in_array($step, [3, 4], true)): ?>
         <div style="display:flex; gap:8px; margin-top:0.5rem;" class="no-print">
           <?php if ($step > 1 && !$wizard['finalized']): ?>
             <form method="post">
@@ -2386,6 +2836,7 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
             <button type="submit" class="btn-secondary">Start Over</button>
           </form>
         </div>
+        <?php endif; ?>
       <?php endif; ?>
 
     </div>
@@ -2424,170 +2875,131 @@ document.querySelectorAll('.load-input').forEach(el => el.addEventListener('chan
 updateLoadMeter();
 
 <?php if ($step === 1 && $enrollOpen): ?>
-const studentNumberInput = document.getElementById('student-number-input');
-const suggestionsBox = document.getElementById('student-number-suggestions');
-const resultBox      = document.getElementById('student-number-result');
-const searchBtn      = document.getElementById('student-number-search-btn');
-const selectForm     = document.getElementById('select-student-form');
-const selectedIdInput = document.getElementById('selected-student-id');
-
-let debounceTimer = null;
-
-studentNumberInput.addEventListener('input', () => {
-  clearTimeout(debounceTimer);
-  const q = studentNumberInput.value.trim();
-  if (q.length < 3) {
-    suggestionsBox.classList.add('hidden');
-    suggestionsBox.innerHTML = '';
-    return;
-  }
-  debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
-});
-
-document.addEventListener('click', (e) => {
-  if (!suggestionsBox.contains(e.target) && e.target !== studentNumberInput) {
-    suggestionsBox.classList.add('hidden');
-  }
-});
-
-async function fetchSuggestions(q) {
-  try {
-    const res = await fetch('<?= APP_URL ?>/ajax/student_number_autocomplete?q=' + encodeURIComponent(q));
-    const data = await res.json();
-    renderSuggestions(data.results || []);
-  } catch (e) {
-    suggestionsBox.classList.add('hidden');
-  }
-}
-
-function renderSuggestions(results) {
-  if (!results.length) {
-    suggestionsBox.classList.add('hidden');
-    suggestionsBox.innerHTML = '';
-    return;
-  }
-  suggestionsBox.innerHTML = results.map(r => `
-    <div class="suggestion-item" data-value="${r.match_value}">
-      <span class="suggestion-student-number">${r.match_label}</span>
-      <span class="suggestion-name">${r.name}</span>
-      <span class="suggestion-meta">Admitted</span>
-    </div>
-  `).join('');
-  suggestionsBox.classList.remove('hidden');
-
-  suggestionsBox.querySelectorAll('.suggestion-item').forEach(el => {
-    el.addEventListener('click', () => {
-      studentNumberInput.value = el.dataset.value;
-      suggestionsBox.classList.add('hidden');
-      runSearch(el.dataset.value);
-    });
-  });
-}
-
-searchBtn.addEventListener('click', () => runSearch(studentNumberInput.value.trim()));
-studentNumberInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); runSearch(studentNumberInput.value.trim()); }
-});
-
-async function runSearch(query) {
-  if (!query) return;
-  suggestionsBox.classList.add('hidden');
-  resultBox.innerHTML = '<p class="page-sub">Searching…</p>';
-  selectForm.classList.add('hidden');
-
-  try {
-    const res = await fetch('<?= APP_URL ?>/ajax/student_number_search?q=' + encodeURIComponent(query));
-    const data = await res.json();
-    renderResult(data);
-  } catch (e) {
-    resultBox.innerHTML = '<div class="notice notice-error">Something went wrong. Please try again.</div>';
-  }
-}
-
-function renderResult(data) {
-  if (!data.found) {
-    resultBox.innerHTML = `
-      <div class="student-number-not-found">
-        <span>No admitted student found for this Student Number or Control Number.</span>
-        <a href="../records/document_review" class="btn-admit-link">Go to Admission</a>
-      </div>`;
-    return;
-  }
-
-  if (data.admission_status !== 'admitted') {
-    resultBox.innerHTML = `
-      <div class="student-number-not-found">
-        <span>${data.name} has pending admission requirements and cannot be enrolled yet.</span>
-        <a href="../records/document_review" class="btn-admit-link">Review Requirements</a>
-      </div>`;
-    return;
-  }
-
-  // NOTE: has_active_enrollment here reflects whatever
-  // ajax/student_number_search.php considers "active" — that endpoint is
-  // outside this file, so we can't be sure it already distinguishes paid
-  // ('enrolled') from unpaid ('pre_enrolled'). Rather than hard-dead-end
-  // on a flag we don't fully control (which was blocking legitimate
-  // pre_enrolled/unpaid students from coming back to change their
-  // section), show a non-blocking notice and let the actual gating happen
-  // server-side in the select_student handler below, which correctly only
-  // blocks a truly 'enrolled' (paid) record and resumes a 'pre_enrolled'
-  // one straight into Section Selection.
-  const activeNotice = data.has_active_enrollment
-    ? `<div class="notice" style="margin:8px 0 0;">This student may already have an enrollment record for this cycle. Continuing will resume/update it if unpaid, or block with an explanation if already paid.</div>`
-    : '';
-
-  const studentTypeLabel = { new: 'New', returning: 'Returning', transferee: 'Transferee' }[data.student_type] || data.student_type;
-
-  resultBox.innerHTML = `
-    <div class="student-number-found" style="align-items:flex-start; flex-direction:column;">
-      <div class="student-number-found-name">${data.name}</div>
-      <div class="student-number-found-meta">${data.matched_by === 'control_number' ? 'Control No. ' + data.matched_value : 'Student Number ' + data.matched_value}</div>
-      <dl class="student-identity-grid">
-        <dt>Student Type</dt><dd>${studentTypeLabel}</dd>
-        <dt>Grade</dt><dd>${data.grade_level ? 'Grade ' + data.grade_level : '—'}</dd>
-        <dt>Current Strand</dt><dd>${data.strand ?? '—'}</dd>
-        <dt>Status</dt><dd>${data.academic_status ?? '—'}</dd>
-      </dl>
-      ${activeNotice}
-      <button type="button" class="btn-primary" style="margin-top:12px;" id="continue-btn">Continue to Enrollment Details</button>
-    </div>`;
-
-  document.getElementById('continue-btn').addEventListener('click', () => {
-    selectedIdInput.value = data.student_id;
-    selectForm.classList.remove('hidden');
-    selectForm.submit();
-  });
-}
-
-const dirSearchInput = document.getElementById('directory-search');
-const dirFilterBtn   = document.getElementById('directory-filter-btn');
-const dirClearBtn    = document.getElementById('directory-clear-btn');
-const dirTableBody   = document.querySelector('#directory-table tbody');
-const dirNoResults   = document.getElementById('directory-no-results');
+const dirSearchInput  = document.getElementById('directory-search');
+const dirClearBtn     = document.getElementById('directory-clear-btn');
+const dirStatusFilter = document.getElementById('directory-status-filter');
+const dirTypeFilter   = document.getElementById('directory-type-filter');
+const dirTableBody    = document.querySelector('#directory-table tbody');
+const dirNoResults    = document.getElementById('directory-no-results');
+const dirCount        = document.getElementById('directory-count');
 
 // Server's default (alphabetical) DOM order — the only ordering now
 // that the New/Transferee-Returning type pills are gone.
 const dirAlphabeticalOrder = Array.from(document.querySelectorAll('#directory-table .directory-row'));
+const dirTotalCount = dirAlphabeticalOrder.length;
 
 function applyDirectoryFilter() {
-  const q = (dirSearchInput?.value || '').trim().toLowerCase();
+  const q      = (dirSearchInput?.value || '').trim().toLowerCase();
+  const status = dirStatusFilter?.value || '';
+  const type   = dirTypeFilter?.value || '';
 
   let visibleCount = 0;
   dirAlphabeticalOrder.forEach(row => {
-    const show = !q || row.dataset.search.includes(q);
+    const show = (!q || row.dataset.search.includes(q))
+      && (!status || row.dataset.status === status)
+      && (!type || row.dataset.type === type);
     row.classList.toggle('hidden-row', !show);
     if (show) visibleCount++;
   });
   dirNoResults?.classList.toggle('hidden', visibleCount !== 0);
+  if (dirClearBtn) dirClearBtn.disabled = !q;
+  if (dirCount) {
+    dirCount.textContent = 'Showing ' + (visibleCount ? '1–' + visibleCount : '0') +
+      ' of ' + dirTotalCount + ' student' + (dirTotalCount === 1 ? '' : 's');
+  }
 }
 
 dirSearchInput?.addEventListener('input', applyDirectoryFilter);
-dirSearchInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyDirectoryFilter(); } });
-dirFilterBtn?.addEventListener('click', applyDirectoryFilter);
+dirSearchInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') e.preventDefault(); });
+dirStatusFilter?.addEventListener('change', applyDirectoryFilter);
+dirTypeFilter?.addEventListener('change', applyDirectoryFilter);
 dirClearBtn?.addEventListener('click', () => {
   if (dirSearchInput) dirSearchInput.value = '';
   applyDirectoryFilter();
+  dirSearchInput?.focus();
+});
+<?php endif; ?>
+
+<?php if ($step === 4): ?>
+// ── Step 4: select a homeroom section without a full page reload ────────
+document.querySelectorAll('.sections-grid form').forEach(form => {
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const btn = form.querySelector('button[type="submit"]');
+    if (!btn || btn.disabled) return;
+    const sectionId = form.querySelector('input[name="section_id"]').value;
+    const prevLabel = btn.style.cursor;
+    btn.style.cursor = 'wait';
+
+    let data;
+    try {
+      const fd = new FormData(form);
+      fd.set('ajax', '1');
+      const res = await fetch(location.pathname + location.search, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: fd,
+      });
+      const ct = res.headers.get('content-type') || '';
+      if (!res.ok || !ct.includes('application/json')) {
+        throw new Error('non-JSON response (status ' + res.status + ')');
+      }
+      data = await res.json();
+    } catch (err) {
+      // Something upstream of our JSON (proxy, redirect, session hiccup)
+      // broke the AJAX path — fall back to a real submit so the click
+      // still actually registers instead of silently doing nothing.
+      form.submit();
+      return;
+    } finally {
+      btn.style.cursor = prevLabel;
+    }
+
+    if (!data.ok) {
+      alert(data.error || 'Could not select that section.');
+      return;
+    }
+
+    if (data.back_reset && data.back_subject_ids && data.back_subject_ids.length > 0) {
+      // Back-subject class options are filtered against the homeroom's
+      // schedule server-side — a genuine section change needs a fresh
+      // render to recompute which classes now conflict.
+      location.reload();
+      return;
+    }
+
+    document.querySelectorAll('.sections-grid .sec-card').forEach(card => {
+      const cardForm = card.closest('form');
+      const cardSectionId = cardForm.querySelector('input[name="section_id"]').value;
+      const isSelected = cardSectionId === sectionId;
+      card.classList.toggle('sec-selected', isSelected);
+      let check = card.querySelector('.sec-check');
+      if (isSelected && !check) {
+        check = document.createElement('span');
+        check.className = 'sec-check';
+        check.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>';
+        card.prepend(check);
+      } else if (!isSelected && check) {
+        check.remove();
+      }
+    });
+
+    const badgeSlot = document.querySelector('.sections-card .dtl-card-head > div:last-child');
+    if (badgeSlot && !badgeSlot.querySelector('.open-badge')) {
+      const badge = document.createElement('span');
+      badge.className = 'open-badge';
+      badge.textContent = 'Selected';
+      badgeSlot.prepend(badge);
+    }
+
+    const proceedInfo = document.querySelector('.proceed-info');
+    const continueBtn = document.querySelector('.dtl-actions .btn-primary');
+    if (continueBtn) continueBtn.disabled = !data.back_ready;
+    if (proceedInfo) {
+      proceedInfo.textContent = data.back_ready ? 'Ready to review.' : 'Pick a class for every back subject above.';
+    }
+  });
 });
 <?php endif; ?>
 </script>

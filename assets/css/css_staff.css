@@ -45,6 +45,15 @@ body.staff-layout {
    rail (see the collapsed-state block further down), it no longer shows or
    hides the sidebar outright. */
 .staff-sidebar {
+  /* Re-pin the staff palette on the sidebar itself: pages that also load
+     css_admin.css after this file (e.g. coordinator/teacher_manage.php)
+     get its :root --brand-tint (#CADEDE), which would otherwise bleed into
+     the active nav link. Mirrors css_admin.css's scoped .sidebar block. */
+  --brand-primary: #1E4D3B;
+  --brand-accent: #2F6B4F;
+  --brand-gradient: #4C8A6C;
+  --brand-tint: #EAF3EE;
+
   width: 232px;
   background: var(--staff-sidebar-bg);
   border-right: 0.5px solid #E8E8E2;
@@ -1726,59 +1735,83 @@ p.field-hint.adm-hint-card {
 .sections-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  gap: 12px;
 }
+@media (max-width: 700px) { .sections-grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* ─── Section card ────────────────────────────────────────────────────────── */
 
 .sec-card {
-  background: #FAFAFC;
-  border: 0.5px solid #D4D4E0;
-  border-radius: 8px;
-  padding: 0.7rem 0.85rem;
-  cursor: pointer;
-  transition: border-color 0.12s, background 0.12s;
+  position: relative;
+  background: #ffffff;
+  border: 1px solid #E0E0EC;
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 2px rgba(20, 20, 40, 0.04);
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, transform 0.12s;
 }
 
-.sec-card:hover:not(.sec-full) { border-color: var(--brand-accent); }
+.sec-card:hover:not(.sec-full):not(.sec-selected) {
+  border-color: var(--brand-accent);
+  box-shadow: 0 3px 10px rgba(20, 20, 40, 0.08);
+  transform: translateY(-1px);
+}
 
 .sec-card.sec-selected {
   border: 1.5px solid var(--brand-accent);
   background: var(--brand-tint);
+  box-shadow: 0 3px 10px rgba(30, 120, 80, 0.14);
 }
 
 .sec-card.sec-full {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
+.sec-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--brand-accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sec-check svg { width: 11px; height: 11px; }
+
 .sec-name {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   color: #1A1A2E;
   margin-bottom: 2px;
+  padding-right: 20px;
 }
 
 .sec-room {
-  font-size: 11px;
+  font-size: 11.5px;
   color: #8A8A9A;
-  margin-bottom: 7px;
+  margin-bottom: 9px;
 }
 
-.slots-txt { font-size: 11px; font-weight: 500; }
+.slots-txt { font-size: 11.5px; font-weight: 600; }
 .slots-ok   { color: #1A7A5E; }
 .slots-low  { color: #A05C10; }
 .slots-full { color: #C0392B; }
 
 .slots-bar {
-  height: 3px;
+  height: 4px;
   border-radius: 2px;
   background: #EBEBF0;
-  margin-top: 5px;
+  margin-top: 7px;
   overflow: hidden;
 }
 
-.slots-fill          { height: 100%; border-radius: 2px; }
+.slots-fill          { height: 100%; border-radius: 2px; transition: width 0.2s; }
 .slots-fill-ok       { background: #2ECC71; }
 .slots-fill-low      { background: #E67E22; }
 .slots-fill-full     { background: #C0392B; }
@@ -2324,3 +2357,75 @@ body.auth-page.auth-landing-page {
   padding: 0.9rem 1rem;
   text-align: center;
 }
+/* ── Scheduler pages: "add" form modals (sections.php, curriculum.php) ───────
+   Same idea as admin/staff_manage.php's Add staff modal: the form stays
+   hidden behind a button in the page header and opens as a centered
+   overlay. A plain div overlay (not <dialog>) so SweetAlert confirms raised
+   from the form's data-confirm still render above it. */
+.sch-page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 1rem; }
+.sch-page-head .page-sub { margin-bottom: 0; }
+.sch-page-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.sch-btn-add {
+  display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0;
+  height: 36px; padding: 0 16px; border: none; border-radius: 8px;
+  background: var(--brand-primary); color: #fff; font-size: 13px; font-weight: 600;
+  font-family: inherit; cursor: pointer; transition: background .15s, transform .12s;
+}
+.sch-btn-add svg { width: 14px; height: 14px; }
+.sch-btn-add:hover { background: var(--brand-primary-hover); }
+.sch-btn-add:active { transform: translateY(1px) scale(.98); }
+.sch-btn-add--ghost { background: #fff; color: var(--brand-primary); border: 1px solid #D4D9D6; }
+.sch-btn-add--ghost:hover { background: var(--brand-tint); border-color: var(--brand-accent); }
+
+.sch-overlay {
+  position: fixed; inset: 0; z-index: 1000; padding: 20px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(18,32,26,.45); backdrop-filter: blur(2px);
+}
+.sch-modal {
+  width: 100%; max-width: 520px; max-height: calc(100vh - 40px); overflow-y: auto;
+  background: #fff; border-radius: 16px; box-shadow: 0 24px 60px rgba(18,32,26,.20);
+  padding: 1.4rem 1.5rem 1.25rem;
+}
+.sch-modal--wide { max-width: 760px; }
+.sch-modal-header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  margin-bottom: 1.1rem; padding-bottom: .9rem; border-bottom: 1px solid #E8EEEA;
+}
+.sch-modal-header h2 { font-size: 1.05rem; font-weight: 650; color: #141C17; margin: 0 0 .2rem; }
+.sch-modal-sub { font-size: 12.5px; line-height: 1.45; color: #5A5A72; margin: 0; }
+.sch-modal-close {
+  width: 30px; height: 30px; flex-shrink: 0; border: none; background: none; border-radius: 8px;
+  color: #5A5A72; font-size: 20px; line-height: 1; cursor: pointer;
+}
+.sch-modal-close:hover { background: #E9EFEB; color: #1A1A2E; }
+.sch-modal .notice { margin-bottom: 1rem; }
+
+.sch-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .85rem .9rem; }
+@media (max-width: 480px) { .sch-form-grid { grid-template-columns: 1fr; } }
+.sch-modal .form-group { margin: 0; min-width: 0; }
+.sch-modal .form-group--wide { grid-column: 1 / -1; }
+.sch-modal .form-group label {
+  font-size: 12.5px; font-weight: 600; text-transform: none; letter-spacing: 0; color: #1A1A2E;
+}
+.sch-modal .form-group .req { color: #B3261E; }
+.sch-modal .form-group .opt { color: #8A8A9A; font-weight: 400; }
+.sch-modal .form-group input, .sch-modal .form-group select { border: 1px solid #D4D9D6; background: #fff; }
+.sch-modal .form-group input.is-invalid { border-color: #B3261E; background: #FFFAF9; }
+.sch-modal .form-group input.is-invalid:focus { box-shadow: 0 0 0 3px rgba(179,38,30,.14); }
+
+.sch-modal-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #E8EEEA;
+}
+.sch-btn {
+  height: 36px; padding: 0 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  font-family: inherit; cursor: pointer; border: 1px solid transparent;
+  transition: background .12s, border-color .12s;
+}
+.sch-btn--ghost { background: #fff; border-color: #D4D9D6; color: #3A4A42; }
+.sch-btn--ghost:hover { border-color: var(--brand-accent); background: var(--brand-tint); }
+.sch-btn--primary { background: var(--brand-primary); color: #fff; }
+.sch-btn--primary:hover { background: var(--brand-primary-hover); }
+.sch-btn:disabled { opacity: .5; cursor: not-allowed; }
+.sch-btn:focus-visible, .sch-btn-add:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }

@@ -568,7 +568,26 @@
     border:1px dashed var(--border);
     border-radius:20px;
   }
-  .empty-state .icon-wrap{ margin:0 auto 18px; }
+  .empty-state .icon-wrap{
+    margin:0 auto 18px;
+    animation:emptyFloat 3.6s ease-in-out infinite;
+  }
+  .empty-state .icon-wrap svg{
+    transform-origin:50% 60%;
+    animation:emptyTilt 3.6s ease-in-out infinite;
+  }
+  @keyframes emptyFloat{
+    0%, 100%{ transform:translateY(0); }
+    50%{ transform:translateY(-6px); }
+  }
+  @keyframes emptyTilt{
+    0%, 100%{ transform:rotate(-4deg); }
+    50%{ transform:rotate(4deg); }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .empty-state .icon-wrap,
+    .empty-state .icon-wrap svg{ animation:none; }
+  }
   .empty-state h3{
     font-family:'Fraunces', serif;
     font-weight:600;

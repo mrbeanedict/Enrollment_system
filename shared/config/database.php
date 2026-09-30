@@ -2,19 +2,19 @@
 require_once __DIR__ . '/../helpers/env.php';
 load_env();
 
-// Site-root URL prefix — lets shared includes and cross-folder redirects
-// (e.g. shared/includes/*_sidebar.php, login/logout links) use an
-// absolute path that works regardless of how deep the requesting page
-// sits under roles/, instead of a relative '../../' chain that breaks
-// every time a page moves during the directory reorganization.
-if (!defined('APP_URL')) {
-    define('APP_URL', '/Enrollment_system');
-}
+// Defines APP_URL (site-root URL prefix) — see that file.
+require_once __DIR__ . '/../helpers/app_url.php';
+
+// One clock for PHP and MySQL. XAMPP's PHP defaults to Europe/Berlin while
+// MySQL follows the machine (UTC+8 here), so date()/time() ran 6 hours
+// behind NOW() — every "is it late / overdue / time's up" comparison of a
+// PHP time against a stored DATETIME was off. APP_TIMEZONE in .env overrides.
+date_default_timezone_set($_ENV['APP_TIMEZONE'] ?? 'Asia/Manila');
 
 $servername = $_ENV['DB_HOST'] ?? 'localhost';
 $username   = $_ENV['DB_USER'] ?? 'root';
 $password   = $_ENV['DB_PASSWORD'] ?? '';
-$database   = $_ENV['DB_NAME'] ?? 'enroll6_db';
+$database   = $_ENV['DB_NAME'] ?? 'enroll_db';
 
 $conn = mysqli_connect($servername, $username, $password, $database);
 
@@ -24,6 +24,9 @@ if (!$conn) {
 }
 
 mysqli_set_charset($conn, 'utf8mb4');
+// MySQL's NOW()/TIMESTAMP columns in the same zone as PHP, even on a host
+// whose system clock is UTC.
+mysqli_query($conn, "SET time_zone = '" . date('P') . "'");
 
 // Auto-expire enrollments left unpaid for 3+ days — frees the section seat
 // (every capacity/occupancy query already excludes non pending/enrolled rows).

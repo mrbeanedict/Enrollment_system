@@ -43,8 +43,17 @@ body {
    the sidebar outright. Mirrors shared/includes/staff_sidebar.php's
    .staff-sidebar exactly. */
 .sidebar {
+  /* Staff-sidebar palette, scoped to the sidebar only (custom properties
+     inherit down, so the rest of the admin portal keeps the global
+     --brand-* ramp above). Values mirror css_staff.css's :root. */
+  --brand-primary: #1E4D3B;
+  --brand-accent: #2F6B4F;
+  --brand-gradient: #4C8A6C;
+  --brand-tint: #EAF3EE;
+  --sidebar-bg: #FFFFFF;
+
   width: 232px;
-  background: #FAFAF8;
+  background: var(--sidebar-bg);
   border-right: 0.5px solid #E8E8E2;
   display: flex;
   flex-direction: column;
@@ -252,8 +261,8 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(0deg, rgba(250,250,248,0) 0%, rgba(250,250,248,0) 58%, #FAFAF8 100%),
-              linear-gradient(0deg, rgba(56,102,65,0.05), rgba(56,102,65,0.05));
+  background: linear-gradient(0deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0) 58%, var(--sidebar-bg) 100%),
+              linear-gradient(0deg, rgba(30,77,59,0.05), rgba(30,77,59,0.05));
   pointer-events: none;
 }
 
@@ -413,6 +422,10 @@ body {
   justify-content: flex-start;
   gap: 0.75rem;
   flex-shrink: 0;
+  /* Chrome, not content: a stray double/triple-click here selects the date
+     chip's text and the browser's selection highlight over this pale bg
+     reads as a flash to white until the admin clicks elsewhere to deselect. */
+  user-select: none;
 }
 
 .topbar-left {
@@ -480,7 +493,7 @@ body {
 
 /* A.Y. + term pill, injected by sidebar.php's shared topbar script right
    after this page's own .topbar-date — same boxed-chip language as
-   .topbar-date above, tinted with the brand accent instead of plain white. */
+   .topbar-date above, a translucent white with muted text so it stays quieter than the date. */
 .topbar-term-badge {
   display: inline-flex;
   align-items: center;
@@ -488,8 +501,8 @@ body {
   padding: 0 14px;
   border-radius: 9px;
   border: 1px solid #D6E4DD;
-  background: var(--brand-tint);
-  color: var(--brand-primary);
+  background: rgba(255, 255, 255, 0.5);
+  color: #4A5560;
   font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
@@ -716,8 +729,8 @@ body {
 
 .fee-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 0.9rem;
   align-items: start;
 }
 
@@ -727,7 +740,7 @@ body {
   background: #FAFAFC;
   border: 0.5px solid #EBEBF0;
   border-radius: 12px;
-  padding: 1.25rem 1.5rem 1.5rem;
+  padding: 0.85rem 1.1rem 1rem;
 }
 
 .fee-card-header {
@@ -735,8 +748,13 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 1.1rem;
+  margin-bottom: 0.65rem;
 }
+
+/* Tuition + Misc side by side; the voucher row spans the full width. */
+.fee-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0 0.75rem; }
+.fee-field--wide { grid-column: 1 / -1; }
+@media (max-width: 480px) { .fee-fields { grid-template-columns: 1fr; } }
 
 .fee-card-heading {
   display: flex;
@@ -826,9 +844,18 @@ body {
 
 /* ─── Fee fields ──────────────────────────────────────────────────────────── */
 
-.fee-field { margin-bottom: 0.9rem; }
+.fee-field { margin-bottom: 0.6rem; }
 
-.fee-field label {
+.fee-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+  margin-bottom: 0.25rem;
+}
+
+.fee-field-head > label:not(.fee-toggle) {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -837,7 +864,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #5A5A72;
-  margin-bottom: 0.35rem;
+  margin: 0;
 }
 
 .fee-info {
@@ -859,7 +886,7 @@ body {
 .fee-input-wrap {
   display: flex;
   align-items: stretch;
-  height: 38px;
+  height: 34px;
   border: 0.5px solid #D4D4E0;
   border-radius: 8px;
   background: #fff;
@@ -902,73 +929,48 @@ body {
 .fee-input::-webkit-inner-spin-button,
 .fee-input::-webkit-outer-spin-button {
   opacity: 1;
-  height: 36px;
+  height: 32px;
 }
 
-.fee-hint {
-  font-size: 11.5px;
-  color: #8A8A9A;
-  margin: 0.35rem 0 0;
-}
-
-/* ─── Balance summary bar ─────────────────────────────────────────────────── */
+/* ─── Balance summary bar (single compact row — no progress bar) ─────────────── */
 
 .fee-summary {
-  margin-top: 1rem;
-  background: #FBF3DC;
-  border-radius: 9px;
-  padding: 0.75rem 0.9rem 0.85rem;
-}
-
-.fee-summary-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.55rem;
+  margin-top: 0.4rem;
+  background: #FBF3DC;
+  border-radius: 9px;
+  padding: 0.5rem 0.85rem;
 }
 
 .fee-summary-formula {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
-  color: #8A7A2E;
-  line-height: 1.4;
+  color: #6F5F1A;
+  line-height: 1.35;
 }
 
 .fee-summary-balance {
-  text-align: right;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   flex-shrink: 0;
 }
 
 .fee-summary-label {
-  display: block;
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: #A6923D;
-  margin-bottom: 2px;
+  color: #7E6B1F;
 }
 
 .fee-summary-amount {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   color: #1A1A2E;
-}
-
-.fee-progress-track {
-  width: 100%;
-  height: 5px;
-  border-radius: 4px;
-  background: #EFE1B0;
-  overflow: hidden;
-}
-
-.fee-progress-fill {
-  height: 100%;
-  background: var(--brand-accent);
-  border-radius: 4px;
-  transition: width 0.15s ease;
 }
 
 .btn-save {
@@ -1045,6 +1047,10 @@ body {
   padding: 1.5rem 2rem 2rem;
   position: relative;
   overflow: hidden;
+  /* Same reasoning as .topbar above: this is a page-header band, not
+     copy — an accidental double/triple-click shouldn't select the
+     breadcrumb/title text and flash the selection highlight over it. */
+  user-select: none;
 }
 .staff-hero .page-title { color: #1A1A2E; margin-bottom: 0.5rem; }
 .staff-hero .page-sub { color: #5A5A72; }
@@ -1068,26 +1074,32 @@ body {
   overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
 }
 
-/* ── Toolbar: search + filters + view toggle + Export/Add — same
-   split-strip pattern as admin/enrollments.php's .filter-bar row. ── */
-.staff-list-controls {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
-}
-.staff-toolbar-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.staff-toolbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* ── Staff panel: one card holding the toolbar, status pills and both views
+   (staff_manage.php). ── */
+.staff-overlap > .card.staff-panel { padding: 0; }
 
-#staffSearchInput {
-  height: 36px; min-width: 220px; border: 0.5px solid #D4D4E0; border-radius: 8px;
-  background: #ffffff; padding: 0 13px; font-size: 13px; font-family: inherit;
+.staff-toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 1rem 1.25rem 0.75rem;
+}
+
+.staff-search { position: relative; flex: 1 1 260px; min-width: 200px; }
+.staff-search svg {
+  position: absolute; left: 12px; top: 50%; width: 15px; height: 15px; margin-top: -7.5px;
+  color: #5F6B74; pointer-events: none;
+}
+#staffSearchInput, #tblSearch {
+  width: 100%; height: 36px; border: 1px solid #D4D9D6; border-radius: 8px;
+  background: #ffffff; padding: 0 13px 0 34px; font-size: 13px; font-family: inherit;
   color: #1A1A2E; outline: none;
 }
-#staffSearchInput:focus { border-color: #386641; box-shadow: 0 0 0 3px rgba(56, 102, 65, 0.14); }
+#staffSearchInput::placeholder, #tblSearch::placeholder { color: #5F6B74; }
+#staffSearchInput:focus, #tblSearch:focus { border-color: #386641; box-shadow: 0 0 0 3px rgba(56, 102, 65, 0.14); }
 
 .staff-filter-select {
-  height: 36px; border: 0.5px solid #D4D4E0; border-radius: 8px;
-  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238A8A9A' d='M6 8L1 3h10z'/%3E%3C/svg%3E") no-repeat right 12px center;
-  padding: 0 30px 0 13px; font-size: 13px; font-weight: 500; font-family: inherit; color: #1A1A2E;
+  height: 36px; border: 1px solid #D4D9D6; border-radius: 8px;
+  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%235F6B74' d='M6 8L1 3h10z'/%3E%3C/svg%3E") no-repeat right 12px center;
+  padding: 0 32px 0 13px; font-size: 13px; font-weight: 500; font-family: inherit; color: #1A1A2E;
   outline: none; cursor: pointer; appearance: none; -webkit-appearance: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -1097,166 +1109,83 @@ body {
   box-shadow: 0 0 0 3px rgba(56, 102, 65, 0.14);
 }
 
+/* List / Cards toggle — colours unchanged (dark green active state); it now
+   carries text labels and sits in the toolbar. */
 .view-toggle {
-  display: flex; border: 0.5px solid #D4D4E0; border-radius: 8px; overflow: hidden;
+  display: flex; border: 1px solid #D4D9D6; border-radius: 8px; overflow: hidden; background: #ffffff;
 }
 .view-toggle-btn {
-  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
-  background: #ffffff; border: none; color: #8A8A9A; cursor: pointer;
+  height: 34px; padding: 0 12px; display: flex; align-items: center; justify-content: center; gap: 6px;
+  background: #ffffff; border: none; color: #4A5560; cursor: pointer;
+  font-size: 13px; font-weight: 600; font-family: inherit;
   transition: background 0.15s, color 0.15s;
 }
-.view-toggle-btn + .view-toggle-btn { border-left: 0.5px solid #D4D4E0; }
-.view-toggle-btn svg { width: 16px; height: 16px; }
+.view-toggle-btn + .view-toggle-btn { border-left: 1px solid #D4D9D6; }
+.view-toggle-btn svg { width: 15px; height: 15px; }
 .view-toggle-btn:hover { background: var(--brand-tint); color: var(--brand-primary); }
 .view-toggle-btn.active { background: var(--brand-primary-active); color: #ffffff; }
-.view-toggle-btn:active { transform: scale(0.96); }
+.view-toggle-btn:active { transform: scale(0.97); }
 
 .btn-add-staff {
-  height: 36px; padding: 0 16px; background: var(--brand-primary-active); border: none; border-radius: 8px;
-  color: #ffffff; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 16px; background: var(--brand-primary-active); border: none; border-radius: 8px;
+  color: #ffffff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
   transition: background 0.15s, transform 0.12s;
 }
+.btn-add-staff svg { width: 14px; height: 14px; }
 .btn-add-staff:hover { background: #2F5636; }
 .btn-add-staff:active { transform: translateY(1px) scale(0.98); }
 
 .staff-view + .staff-view { margin-top: 1rem; }
 
 /* ── Card grid ── */
-.staff-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1rem;
-}
-@media (max-width: 700px) { .staff-grid { grid-template-columns: 1fr; } }
-
 /* Centered vertical profile card — avatar/name/role/status stacked and
    centered, contact + employment info each in their own tinted container
    instead of table-style rows separated by horizontal dividers. Hierarchy
    is entirely vertical (gap-driven spacing), so nothing here relies on
    margins between siblings. */
-.staff-card {
-  position: relative;
-  background: #ffffff;
-  border: 1px solid rgba(56, 102, 65, 0.12);
-  border-radius: 14px;
-  padding: 1.5rem 1.5rem 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.1rem;
-  box-shadow: 0 1px 2px rgba(16, 42, 29, 0.04);
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s;
-  animation: staffCardIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: calc(var(--staff-card-i, 0) * 40ms);
-}
-
-.staff-card:hover {
-  transform: translateY(-3px);
-  border-color: rgba(56, 102, 65, 0.28);
-  box-shadow: 0 14px 28px rgba(16, 42, 29, 0.14);
-}
-
-@keyframes staffCardIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
 /* ── Overflow menu (top-right) — replaces the permanent Activate/
    Deactivate button; the action now lives behind the three dots so the
    card's bottom section can be pure information. ── */
-.staff-card-menu { position: absolute; top: 14px; right: 14px; }
-
+.staff-card-menu { position: relative; display: inline-block; }
 .staff-card-menu-btn {
-  width: 28px; height: 28px; border: none; border-radius: 7px;
-  background: transparent; color: #8A8A9A; cursor: pointer;
+  width: 30px; height: 30px; border: none; border-radius: 8px;
+  background: transparent; color: #5A5A72; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: background 0.12s, color 0.12s;
 }
 .staff-card-menu-btn svg { width: 16px; height: 16px; }
-.staff-card-menu-btn:hover { background: var(--brand-tint); color: var(--brand-primary-hover); }
-.staff-card-menu-btn:active { color: var(--brand-primary-active); }
+.staff-card-menu-btn:hover,
+.staff-card-menu.open .staff-card-menu-btn { background: #E9EFEB; color: #1A1A2E; }
+.staff-card-menu-btn:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 1px; }
 
 .staff-card-menu-dropdown {
   position: absolute; top: calc(100% + 4px); right: 0;
-  min-width: 150px; background: #fff; border: 0.5px solid #E8E8F0; border-radius: 10px;
-  box-shadow: 0 10px 28px rgba(18, 32, 26, 0.14);
+  min-width: 196px; padding: 6px; background: #fff; border: 1px solid #E1E8E4; border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(18, 32, 26, 0.16);
   opacity: 0; visibility: hidden; transform: translateY(-4px);
   transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s;
   z-index: 5;
 }
 .staff-card-menu.open .staff-card-menu-dropdown { opacity: 1; visibility: visible; transform: translateY(0); }
+.staff-card-menu-dropdown form { margin: 0; }
 
 .staff-card-menu-item {
-  display: block; width: 100%; padding: 9px 14px; border: none; background: none;
-  font-size: 12.5px; font-weight: 500; font-family: inherit; color: #1A1A2E;
-  text-align: left; cursor: pointer; border-radius: 10px;
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: none; background: none;
+  font-size: 13px; font-weight: 500; font-family: inherit; color: #1A1A2E;
+  text-align: left; cursor: pointer; border-radius: 7px;
 }
-.staff-card-menu-item:hover { background: var(--brand-tint); }
-.staff-card-menu-item-danger { color: #C0392B; }
+.staff-card-menu-item svg { width: 15px; height: 15px; flex-shrink: 0; color: #5F6B74; }
+.staff-card-menu-item:hover, .staff-card-menu-item:focus-visible { background: #F0F5F2; outline: none; }
+.staff-card-menu-item-danger { color: #B3261E; }
+.staff-card-menu-item-danger svg { color: #B3261E; }
 .staff-card-menu-item-danger:hover { background: #FDF0EF; }
+.staff-card-menu-divider { height: 1px; margin: 5px 4px; background: #E8EEEA; }
+.staff-card-menu.flip-up .staff-card-menu-dropdown { top: auto; bottom: calc(100% + 4px); transform: translateY(4px); }
+.staff-card-menu.flip-up.open .staff-card-menu-dropdown { transform: translateY(0); }
 
 /* ── Profile — centered vertical stack ── */
-.staff-card-profile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.35rem;
-  text-align: center;
-}
-
-.staff-card-avatar {
-  width: 60px; height: 60px; border-radius: 50%; flex-shrink: 0;
-  background: linear-gradient(135deg, var(--brand-accent), var(--brand-gradient));
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px; font-weight: 600; color: #ffffff;
-  margin-bottom: 0.25rem;
-  box-shadow: 0 0 0 4px rgba(56, 102, 65, 0.08), 0 6px 16px rgba(16, 42, 29, 0.18);
-}
-
-.staff-card-name { font-size: 15px; font-weight: 700; color: #1A1A2E; }
-.staff-card-role { font-size: 12px; color: #8A8A9A; }
-
-.staff-status {
-  display: inline-block; margin-top: 0.15rem;
-  font-size: 10.5px; font-weight: 600; text-transform: capitalize;
-  border-radius: 20px; padding: 3px 11px;
-}
-.staff-status-active   { background: var(--brand-tint); color: var(--brand-primary); }
-.staff-status-inactive { background: #FDF0EF; color: #C0392B; }
-
 /* ── Contact + employment info containers ── */
-.staff-card-contact {
-  display: flex; flex-direction: column; gap: 8px;
-  background: rgba(56, 102, 65, 0.06); /* a lighter, less saturated pass over --brand-tint for contrast against the profile block above it */
-  border: 1px solid rgba(56, 102, 65, 0.08);
-  border-radius: 10px;
-  padding: 0.75rem 0.9rem;
-}
-.staff-card-contact-row { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: #3A4A42; min-width: 0; }
-.staff-card-contact-row svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--brand-accent); }
-.staff-card-contact-row span {
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-
-.staff-card-info {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem;
-  background: var(--brand-tint);
-  border-radius: 10px;
-  padding: 0.75rem 0.9rem;
-}
-@media (max-width: 420px) { .staff-card-info { grid-template-columns: 1fr; } }
-
-.staff-card-info-col { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.staff-card-info-label {
-  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: #6E8078;
-}
-.staff-card-info-value { font-size: 12.5px; font-weight: 600; color: #1A1A2E; }
-
-.dept-tag {
-  display: inline-block; align-self: flex-start; font-size: 11px; font-weight: 600;
-  background: #ffffff; color: var(--brand-primary);
-  border-radius: 6px; padding: 3px 9px;
-}
-
 /* ── Table view — breadcrumb, directory header, row checkboxes, name-cell
    avatar, and pagination footer (staff_manage.php's table view only). ── */
 .staff-breadcrumb {
@@ -1264,6 +1193,43 @@ body {
   color: #8A9992; margin-bottom: 0.4rem;
 }
 .staff-breadcrumb-current { color: #1A1A2E; }
+
+/* Staff page header (staff_manage.php): breadcrumb lives in the topbar, the
+   hero is the title + description with page actions on the right. Scoped to
+   modifier classes because .staff-hero is shared across every admin page. */
+.topbar .staff-breadcrumb {
+  margin: 0; font-size: 12.5px; font-weight: 400; letter-spacing: 0; text-transform: none; color: #4A5560;
+}
+.topbar .staff-breadcrumb-current { font-weight: 600; color: #1A1A2E; }
+
+.staff-hero--row {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap;
+  padding-top: 1.1rem; padding-bottom: 2rem;
+}
+.staff-hero--row .page-title { margin-bottom: 0.35rem; }
+.staff-hero--row .staff-hero-desc { max-width: 60ch; }
+.staff-hero-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* Staff cell: avatar + darker name over a small muted @username */
+.staff-name-stack { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.staff-name-primary { font-size: 13.5px; font-weight: 600; color: #1A1A2E; }
+.staff-name-secondary { font-size: 11px; font-weight: 400; color: #8A8A9A; }
+
+/* Trailing ⋮ column */
+.data-table th.staff-actions-col,
+.data-table td.staff-actions-col { width: 44px; text-align: right; }
+
+/* View / Edit modals */
+.staff-detail-list { margin: 0; display: flex; flex-direction: column; }
+.staff-detail-list > div {
+  display: flex; justify-content: space-between; gap: 16px;
+  padding: 10px 0; border-bottom: 0.5px solid #F0F0F5; font-size: 13px;
+}
+.staff-detail-list > div:last-child { border-bottom: none; }
+.staff-detail-list dt { color: #8A8A9A; font-weight: 500; }
+.staff-detail-list dd { margin: 0; color: #1A1A2E; font-weight: 500; text-align: right; word-break: break-word; }
+.staff-edit-username { font-size: 12px; color: #8A8A9A; margin: 0 0 1rem; }
+.staff-edit-username strong { color: #1A1A2E; }
 
 .staff-record-count { font-weight: 400; color: #8A8A9A; }
 
@@ -1291,30 +1257,28 @@ body {
   font-size: 11px; font-weight: 700;
 }
 
-/* Three-zone footer: rows-per-page (left), numbered pages (center),
-   "from-to / total results" summary (right) — a grid rather than
-   space-between so the page numbers stay visually centered regardless of
-   how wide the left/right zones are. */
-.staff-table-pagination {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center;
-  gap: 12px; margin-top: 1rem; padding-top: 0.9rem;
-  border-top: 0.5px solid #F0F0F5;
+/* Table footer: "Showing n of n staff" on the left; page size + page
+   numbers on the right, only once there is more than one page to move
+   through. */
+.staff-table-footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 0.7rem 1.25rem; border-top: 1px solid #E8EEEA;
 }
+.staff-footer-summary { font-size: 12.5px; color: #5A5A72; }
+.staff-pager { display: flex; align-items: center; gap: 16px; }
 
 .staff-pagination-rows {
   display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #5A5A72;
   white-space: nowrap;
 }
 .staff-pagination-rows select {
-  height: 30px; border: 0.5px solid #D4D4E0; border-radius: 6px; background: #fff;
+  height: 30px; border: 1px solid #D4D9D6; border-radius: 6px; background: #fff;
   padding: 0 8px; font-size: 12.5px; font-weight: 600; font-family: inherit; color: #1A1A2E;
   outline: none; cursor: pointer;
 }
 .staff-pagination-rows select:focus { border-color: var(--brand-accent); }
 
-.staff-pagination-pages {
-  justify-self: center; display: flex; align-items: center; gap: 4px;
-}
+.staff-pagination-pages { display: flex; align-items: center; gap: 4px; }
 .staff-pagination-numbers { display: flex; align-items: center; gap: 4px; }
 
 .staff-page-btn {
@@ -1326,14 +1290,10 @@ body {
 .staff-page-btn:hover:not(:disabled) { background: var(--brand-tint); color: var(--brand-primary); }
 .staff-page-btn.active { background: var(--brand-primary); color: #ffffff; font-weight: 700; box-shadow: 0 0 0 3px rgba(56, 102, 65, 0.16); }
 .staff-page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.staff-page-arrow { font-size: 15px; color: #8A8A9A; }
+.staff-page-arrow { font-size: 15px; color: #5A5A72; }
 
 .staff-page-ellipsis {
-  min-width: 20px; text-align: center; color: #ADADBD; font-size: 12.5px;
-}
-
-.staff-pagination-summary {
-  justify-self: end; font-size: 12px; color: #8A8A9A; white-space: nowrap;
+  min-width: 20px; text-align: center; color: #5F6B74; font-size: 12.5px;
 }
 
 /* ── Generic centered overlay/modal (shared by the credentials-reveal
@@ -1347,17 +1307,49 @@ body {
   box-shadow: 0 24px 60px rgba(18,32,26,0.20); padding: 1.75rem 1.75rem 1.5rem;
 }
 
-.staff-modal { max-width: 480px; }
+.staff-modal { max-width: 520px; padding: 1.4rem 1.5rem 1.25rem; }
 .staff-modal-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 1.1rem;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  margin-bottom: 1.1rem; padding-bottom: 0.9rem; border-bottom: 1px solid #E8EEEA;
 }
-.staff-modal-header h2 { font-size: 1.05rem; color: #141C17; }
+.staff-modal-header h2 { font-size: 1.05rem; font-weight: 650; color: #141C17; margin: 0 0 0.2rem; }
+.staff-modal-sub { font-size: 12.5px; line-height: 1.45; color: #5A5A72; margin: 0; }
+.staff-modal-sub strong { color: #1A1A2E; }
 .staff-modal-close {
-  width: 28px; height: 28px; border: none; background: none; border-radius: 6px;
-  color: #ADADBD; font-size: 18px; line-height: 1; cursor: pointer;
+  width: 30px; height: 30px; flex-shrink: 0; border: none; background: none; border-radius: 8px;
+  color: #5A5A72; font-size: 20px; line-height: 1; cursor: pointer;
 }
-.staff-modal-close:hover { background: #F0F0F5; color: #5A5A72; }
+.staff-modal-close:hover { background: #E9EFEB; color: #1A1A2E; }
+
+/* Two-column form; full-width rows opt in with .form-group--wide. */
+.staff-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem 0.9rem; }
+@media (max-width: 480px) { .staff-form-grid { grid-template-columns: 1fr; } }
+.staff-modal .form-group { margin: 0; min-width: 0; }
+.staff-modal .form-group--wide { grid-column: 1 / -1; }
+.staff-modal .form-group label {
+  font-size: 12.5px; font-weight: 600; text-transform: none; letter-spacing: 0; color: #1A1A2E; margin-bottom: 0.3rem;
+}
+.staff-modal .form-group .req { color: #B3261E; }
+.staff-modal .form-group input,
+.staff-modal .form-group select { border: 1px solid #D4D9D6; background: #ffffff; }
+.staff-modal .form-group input::placeholder { color: #6B7680; }
+.staff-modal .form-group input:focus,
+.staff-modal .form-group select:focus { border-color: var(--brand-accent); box-shadow: 0 0 0 3px rgba(56, 102, 65, 0.14); }
+
+.staff-modal-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #E8EEEA;
+}
+.staff-btn {
+  height: 36px; padding: 0 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  font-family: inherit; cursor: pointer; border: 1px solid transparent;
+  transition: background 0.12s, border-color 0.12s;
+}
+.staff-btn--ghost { background: #ffffff; border-color: #D4D9D6; color: #3A4A42; }
+.staff-btn--ghost:hover { border-color: var(--brand-accent); background: var(--brand-tint); }
+.staff-btn--primary { background: var(--brand-primary-active); color: #ffffff; }
+.staff-btn--primary:hover { background: #2F5636; }
+.staff-btn:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
 
 /* ── Credentials reveal modal ── */
 .cred-modal h2 { font-size: 1.05rem; color: #141C17; margin-bottom: 0.35rem; }
@@ -1383,3 +1375,371 @@ body {
 }
 .btn-cred-done:hover { border-color: var(--brand-accent); }
 
+
+/* ─── Settings pages: status tiles, switches, history (admin/school_year_settings.php,
+   admin/fee_settings.php) ────────────────────────────────────────────────────
+   Hierarchy: .page-title (1.65rem) > tile value (1.4rem) > .sy-card-title (15px)
+   > table/body text (13px) > meta (12px, #5A5A72 — never lighter, for contrast). */
+
+.sy-wrap { max-width: 1040px; }
+
+.sy-tiles {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+  margin-bottom: 0.8rem;
+}
+@media (max-width: 640px) { .sy-tiles { grid-template-columns: 1fr; } }
+
+.sy-tile {
+  background: #ffffff; border: 1px solid #D6E4DD; border-radius: 12px;
+  padding: 0.7rem 1.1rem 0.75rem; box-shadow: 0 10px 26px rgba(16, 42, 29, 0.08);
+}
+.sy-tile.is-empty { background: #FAFBFA; border-style: dashed; box-shadow: none; }
+.sy-tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 0.3rem; }
+.sy-tile-label { font-size: 13px; font-weight: 600; color: #1A1A2E; }
+.sy-tile-year {
+  font-family: 'Fraunces', serif; font-size: 1.4rem; font-weight: 650; letter-spacing: -0.01em;
+  color: #1A1A2E; line-height: 1.15; margin: 0 0 0.1rem;
+}
+.sy-tile.is-empty .sy-tile-year { color: #5A5A72; font-weight: 500; }
+.sy-tile-sub { font-size: 12.5px; color: #5A5A72; margin: 0; }
+.sy-tile-sub strong { color: #1A1A2E; font-weight: 600; }
+
+/* Open = green, Closed = neutral gray; always paired with a text label. */
+.sy-status {
+  display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 10px;
+  border-radius: 20px; font-size: 11.5px; font-weight: 600; white-space: nowrap;
+}
+.sy-status i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.sy-status--open   { background: #E3EEE6; color: #24422A; }
+.sy-status--closed { background: #ECEEEF; color: #4A5560; }
+
+.staff-overlap > .card.sy-card { padding: 0; overflow: hidden; overflow: clip; margin-bottom: 0.8rem; }
+.sy-card-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px 24px;
+  flex-wrap: wrap; padding: 0.8rem 1.25rem 0.7rem;
+}
+.sy-card-title { font-size: 15px; font-weight: 600; color: #1A1A2E; margin: 0 0 0.1rem; }
+.sy-card-sub { font-size: 12.5px; line-height: 1.5; color: #5A5A72; margin: 0; max-width: 52ch; }
+.sy-card-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sy-card-actions form { margin: 0; }
+
+.sy-btn {
+  display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px;
+  border: 0.5px solid transparent; border-radius: 8px; background: transparent; color: #3A4A42;
+  font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.sy-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+.sy-btn:hover { background: rgba(56, 102, 65, 0.07); color: var(--brand-primary); }
+.sy-btn:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.sy-btn--primary { background: var(--brand-primary); color: #fff; }
+.sy-btn--primary:hover { background: var(--brand-primary-hover); color: #fff; }
+.sy-btn--outline { border-color: #D4D4E0; background: #fff; }
+.sy-btn--outline:hover { border-color: var(--brand-accent); }
+.sy-btn:disabled, .sy-btn:disabled:hover { background: #E4E6E8; color: #7A828A; cursor: not-allowed; }
+
+.sy-table-wrap { overflow-x: auto; border-top: 1px solid #E8EEEA; }
+.data-table.sy-table th {
+  padding: 0.5rem 1.25rem; background: #F6F9F7; border-bottom: 1px solid #E8EEEA;
+  font-size: 11px; font-weight: 600; color: #4A5560;
+}
+.data-table.sy-table td { padding: 0.6rem 1.25rem; border-bottom: 1px solid #EEF2EF; font-size: 13px; }
+.data-table.sy-table tbody tr:last-child td { border-bottom: none; }
+.sy-th-sub { display: block; margin-top: 1px; font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; color: #5A5A72; }
+.data-table.sy-table th:nth-child(1) { width: 26%; }
+.data-table.sy-table th:nth-child(2), .data-table.sy-table th:nth-child(3) { width: 22%; }
+
+.sy-year { font-size: 14px; font-weight: 600; color: #1A1A2E; margin-right: 8px; }
+.sy-year--sm { font-size: 13px; margin-right: 0; }
+.sy-when { display: block; font-size: 13px; color: #1A1A2E; }
+.sy-by { display: block; margin-top: 1px; font-size: 12px; color: #5A5A72; }
+
+.sy-badge {
+  display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 9px;
+  border-radius: 6px; font-size: 11.5px; font-weight: 600; vertical-align: 1px; cursor: help;
+}
+.sy-badge svg { width: 11px; height: 11px; }
+/* Same tint/border as .topbar-term-badge so "Current" visibly pairs with the A.Y. chip up top. */
+.sy-badge--current { background: rgba(255, 255, 255, 0.5); border: 1px solid #D6E4DD; color: #4A5560; }
+.sy-badge--archived { background: #fff; border: 1px solid #D4D9D6; color: #4A5560; }
+
+.sy-switch {
+  display: inline-flex; align-items: center; gap: 10px; padding: 4px 0; border: none; background: none;
+  font-family: inherit; font-size: 13px; font-weight: 600; color: #4A5560; cursor: pointer;
+}
+.sy-switch:focus-visible .sy-switch-track { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.sy-switch-track { position: relative; width: 40px; height: 22px; border-radius: 22px; background: #AEB8B2; flex-shrink: 0; transition: background 0.15s; }
+.sy-switch-thumb {
+  position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform 0.15s;
+}
+.sy-switch.is-on { color: var(--brand-primary); }
+.sy-switch.is-on .sy-switch-track { background: var(--brand-primary); }
+.sy-switch.is-on .sy-switch-thumb { transform: translateX(18px); }
+.sy-switch:disabled { cursor: not-allowed; opacity: 0.6; }
+
+/* Confirmation dialog body */
+.sy-impact { margin: 0 0 0.9rem; padding: 0 0 0 1.1rem; text-align: left; }
+.sy-impact li { margin-bottom: 0.35rem; }
+.sy-impact-note { margin: 0; text-align: left; font-size: 12.5px; color: #5A5A72; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sy-switch-track, .sy-switch-thumb { transition: none; }
+}
+
+/* ── Fee settings additions ── */
+.fee-body { padding: 0 1.25rem 0.9rem; }
+.fee-last-updated {
+  display: flex; flex-direction: column; gap: 1px; padding-right: 14px; margin-right: 2px;
+  border-right: 1px solid #E1E8E4; line-height: 1.3;
+}
+.fee-last-label { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #5A5A72; }
+.fee-last-updated .sy-when { font-size: 13px; font-weight: 500; }
+.sy-btn[aria-expanded="true"] { background: var(--brand-tint); border-color: #D6E4DD; color: var(--brand-primary); }
+
+.fee-toggle-state { font-size: 12px; font-weight: 600; color: #4A5560; min-width: 5.2em; }
+.fee-field-head .fee-toggle { margin: 0; text-transform: none; letter-spacing: 0; }
+.fee-toggle-input:checked ~ .fee-toggle-state { color: var(--brand-primary); }
+
+.fee-was { display: none; margin: 0.2rem 0 0; font-size: 11.5px; font-weight: 500; text-transform: none; letter-spacing: 0; color: #5A5A72; }
+.fee-field.is-changed .fee-was { display: inline; }
+.fee-field.is-changed p.fee-was { display: block; }
+.fee-field.is-changed .fee-input-wrap { border-color: var(--brand-accent); background: #F4F9F5; }
+
+/* Sticky save bar — stays in view while a long form is scrolled. */
+.fee-savebar {
+  position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; padding: 0.55rem 1.25rem; background: #F6F9F7; border-top: 1px solid #E8EEEA;
+}
+.fee-savebar-status { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #5A5A72; }
+.fee-savebar-status i { width: 8px; height: 8px; border-radius: 50%; background: #AEB8B2; }
+.fee-savebar.is-dirty .fee-savebar-status { color: #1A1A2E; }
+.fee-savebar.is-dirty .fee-savebar-status i { background: #C98A1B; }
+.fee-savebar-actions { display: flex; gap: 8px; }
+
+.fee-diff { margin: 0 0 0.9rem; padding: 0; list-style: none; text-align: left; font-size: 13px; }
+.fee-diff li { display: flex; justify-content: space-between; gap: 12px; padding: 0.4rem 0; border-bottom: 1px solid #EEF2EF; }
+.fee-diff li:last-child { border-bottom: none; }
+.fee-diff-name { color: #5A5A72; }
+.fee-diff-val { font-weight: 600; color: #1A1A2E; white-space: nowrap; }
+
+/* ─── Staff table, pills and status (admin/staff_manage.php) ─────────────── */
+
+.staff-pills { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 1.25rem 0.9rem; }
+.staff-pill {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px;
+  border: 1px solid #D4D9D6; border-radius: 20px; background: #ffffff;
+  font-size: 12.5px; font-weight: 500; font-family: inherit; color: #3A4A42; cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.staff-pill span { font-weight: 600; color: #5A5A72; }
+.staff-pill:hover { border-color: var(--brand-accent); }
+.staff-pill.active { background: #E3EEE6; border-color: #8FB59B; color: #24422A; font-weight: 600; }
+.staff-pill.active span { color: #24422A; }
+.staff-pill:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+
+.data-table.staff-table th {
+  padding: 0.55rem 1rem; background: #F6F9F7; border-top: 1px solid #E8EEEA; border-bottom: 1px solid #E8EEEA;
+  font-size: 12px; font-weight: 500; text-transform: none; letter-spacing: 0; color: #4A5560;
+}
+.data-table.staff-table td { padding: 0.65rem 1rem; border-bottom: 1px solid #EEF2EF; }
+.data-table.staff-table tbody tr:last-child td { border-bottom: none; }
+.data-table.staff-table th:first-child,
+.data-table.staff-table td:first-child { padding-left: 1.25rem; }
+.data-table.staff-table th:last-child,
+.data-table.staff-table td:last-child { padding-right: 1.25rem; }
+.data-table.staff-table td { vertical-align: middle; }
+
+.staff-table .staff-name-primary { font-size: 13.5px; font-weight: 600; }
+.staff-name-secondary { color: #5F6B74; }
+.staff-table tr.is-inactive .staff-name-primary { color: #66717A; }
+.staff-table tr.is-inactive .staff-table-avatar { background: #ECEEEF; color: #5A6570; }
+
+/* Light-tinted initials avatar (table rows and grid cards). */
+.staff-table-avatar {
+  width: 36px; height: 36px; background: #E3EEE6; color: #24422A; font-size: 12px;
+}
+
+.staff-contact-line { display: flex; align-items: center; gap: 8px; font-size: 12.5px; line-height: 1.55; color: #1A1A2E; min-width: 0; }
+.staff-contact-line svg { width: 13px; height: 13px; flex-shrink: 0; color: #5F6B74; }
+.staff-contact-line span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.staff-contact-line--warn svg { color: #B7791F; }
+.staff-contact-line--warn span { color: #4A5560; overflow: visible; }
+.staff-add-link {
+  border: none; background: none; padding: 0; font: inherit; font-size: 12.5px; font-weight: 600;
+  color: #1A1A2E; text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.staff-add-link:hover { color: var(--brand-primary); }
+
+.staff-role-tag {
+  display: inline-block; padding: 3px 9px; border: 1px solid #D4D9D6; border-radius: 6px;
+  background: #F6F8F7; font-size: 12px; font-weight: 500; color: #2F3B35; white-space: nowrap;
+}
+.staff-joined { font-size: 12.5px; color: #3A4A42; white-space: nowrap; }
+
+.staff-state {
+  display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 10px;
+  border-radius: 20px; font-size: 11.5px; font-weight: 600; white-space: nowrap;
+}
+.staff-state i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.staff-state--active   { background: #E3EEE6; color: #24422A; }
+.staff-state--inactive { background: #ffffff; border: 1px solid #D4D9D6; color: #4A5560; }
+
+/* Grid view — subtle alignment with the table (full redesign later). */
+.staff-grid-wrap { padding: 1rem 1.25rem 1.25rem; border-top: 1px solid #E8EEEA; }
+
+/* Add / Edit staff modal — field hints and inline validation. */
+.staff-field-hint { margin: 0.25rem 0 0; font-size: 12px; color: #5A5A72; }
+.staff-modal .field-error { margin: 0.25rem 0 0; font-size: 12px; line-height: 1.4; color: #B3261E; }
+.staff-modal .form-group input.is-invalid,
+.staff-modal .form-group select.is-invalid { border-color: #B3261E; background: #FFFAF9; }
+.staff-modal .form-group input.is-invalid:focus,
+.staff-modal .form-group select.is-invalid:focus { box-shadow: 0 0 0 3px rgba(179, 38, 30, 0.14); }
+.staff-modal .form-group .staff-field-hint:has(+ .field-error) { display: none; }
+
+/* ── Bulk selection bar + deactivate confirmation (staff_manage.php) ── */
+.staff-bulkbar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 0.6rem 1.25rem; background: #E3EEE6; border-top: 1px solid #D2E3D8;
+}
+.staff-bulk-count { margin-right: 6px; font-size: 13px; font-weight: 600; color: #24422A; }
+.staff-bulk-btn {
+  height: 32px; padding: 0 14px; border: 1px solid #D4D9D6; border-radius: 8px; background: #ffffff;
+  font-size: 13px; font-weight: 500; font-family: inherit; color: #1A1A2E; cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.staff-bulk-btn:hover:not(:disabled) { border-color: var(--brand-accent); background: #F6FAF7; }
+.staff-bulk-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.staff-bulk-btn:focus-visible, .staff-bulk-clear:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+.staff-bulk-clear {
+  margin-left: 6px; border: none; background: none; padding: 0 4px; height: 32px;
+  font-size: 13px; font-weight: 500; font-family: inherit; color: #3A4A42; cursor: pointer;
+}
+.staff-bulk-clear:hover { color: #1A1A2E; text-decoration: underline; }
+.staff-table tbody tr.is-selected td { background: #F2F7F4; }
+
+.staff-modal--confirm { max-width: 460px; padding: 1.5rem 1.6rem 1.25rem; }
+.staff-modal--confirm h2 { font-family: 'Fraunces', serif; font-size: 1.3rem; font-weight: 650; color: #141C17; margin: 0 0 0.4rem; }
+.staff-confirm-lead { font-size: 13.5px; line-height: 1.5; color: #5A5A72; margin: 0 0 1rem; }
+.staff-confirm-warn {
+  display: flex; align-items: center; gap: 10px; padding: 0.7rem 0.9rem; margin-bottom: 0.6rem;
+  border-radius: 9px; background: #FBF3DC; font-size: 13px; color: #6F5F1A;
+}
+.staff-confirm-warn svg { width: 15px; height: 15px; flex-shrink: 0; }
+.staff-confirm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.staff-confirm-list li {
+  display: flex; align-items: center; gap: 10px; padding: 0.6rem 0.9rem;
+  border: 1px solid #E1E8E4; border-radius: 9px; font-size: 13px; color: #1A1A2E;
+}
+.staff-confirm-list svg { width: 15px; height: 15px; flex-shrink: 0; color: #3A4A42; }
+.staff-modal-actions--plain { border-top: none; padding-top: 0; margin-top: 1.4rem; }
+.staff-btn--danger { background: #A93226; color: #ffffff; }
+.staff-btn--danger:hover { background: #922B21; }
+
+/* ── Card view (staff_manage.php) ─────────────────────────────────────────────
+   Layout: [checkbox] avatar · name/@username · ⋮  →  role + status tags  →
+   tinted contact panel  →  divider + joined date. Borders and text are
+   darker than the table's hairlines so each card reads clearly on its own. */
+.staff-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  gap: 0.85rem;
+}
+@media (max-width: 520px) { .staff-grid { grid-template-columns: 1fr; } }
+
+.staff-grid-selectall {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0 0 0.75rem;
+  font-size: 12.5px; font-weight: 500; color: #3A4A42; cursor: pointer;
+}
+.staff-grid-selectall input, .staff-card-check { width: 15px; height: 15px; accent-color: var(--brand-primary); cursor: pointer; flex-shrink: 0; }
+
+.staff-card {
+  position: relative;
+  display: flex; flex-direction: column; gap: 0.7rem;
+  padding: 0.9rem 0.95rem 0.8rem;
+  background: #ffffff;
+  border: 1px solid #C3CEC7;
+  border-radius: 12px;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  animation: staffCardIn 0.3s ease-out backwards;
+  animation-delay: calc(var(--staff-card-i, 0) * 25ms);
+}
+.staff-card:hover { border-color: #7FA08B; box-shadow: 0 6px 16px rgba(16, 42, 29, 0.10); }
+.staff-card.is-selected { border-color: var(--brand-primary); background: #F4F9F5; box-shadow: 0 0 0 1px var(--brand-primary); }
+/* Keep an open ⋮ menu above the cards below it. */
+.staff-card:has(.staff-card-menu.open) { z-index: 10; }
+@keyframes staffCardIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .staff-card { animation: none; } }
+
+.staff-card-top { display: flex; align-items: flex-start; gap: 9px; min-width: 0; }
+.staff-card-avatar {
+  width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: #DCE9E0; color: #1E3B25; font-size: 12.5px; font-weight: 700;
+}
+.staff-card-id { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
+.staff-card-name {
+  font-size: 14px; font-weight: 700; color: #141C17; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden;
+}
+.staff-card-user { font-size: 12px; color: #4A5560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.staff-card-top .staff-card-menu { margin-left: auto; flex-shrink: 0; }
+.staff-card-top .staff-card-check { margin-top: 11px; }
+.staff-card-top .staff-card-id { padding-top: 1px; }
+
+.staff-card-tags { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.staff-card-contact {
+  display: flex; flex-direction: column; gap: 6px; min-width: 0;
+  padding: 0.6rem 0.75rem; background: #EDF3EF; border: 1px solid #D3DED7; border-radius: 9px;
+}
+.staff-card-contact-row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; font-size: 12.5px; line-height: 1.4; color: #141C17; }
+.staff-card-contact-row svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; color: #3A4A42; }
+/* Emails wrap before the "@" (see <wbr> in the markup); a very long local part still breaks rather than overflows. */
+.staff-card-contact-row span { min-width: 0; overflow-wrap: break-word; }
+.staff-card-contact-row--warn svg { color: #B7791F; }
+.staff-card-contact-row--warn span { color: #3A4A42; }
+
+.staff-card-foot {
+  margin-top: auto; padding-top: 0.6rem; border-top: 1px solid #D3DED7;
+  font-size: 12px; color: #4A5560;
+}
+.staff-card.is-inactive .staff-card-name { color: #5A656E; }
+.staff-card.is-inactive .staff-card-avatar { background: #E6E9E8; color: #4A5560; }
+
+.staff-table-footer--flush { margin: 1rem -1.25rem -1.25rem; }
+.staff-grid-wrap > .empty-state { padding: 1.5rem 0; color: #4A5560; }
+.staff-page-btn.active:hover:not(:disabled) { background: var(--brand-primary); color: #ffffff; }
+
+/* ── Shared admin list pages (enrollments, students, teacher_accounts) ──────
+   Same panel/toolbar/pills/table/footer as staff_manage.php, driven by
+   assets/js/admin_table.js. Extra status chips (.staff-state is the base). */
+.staff-state--pending   { background: #FFF4E6; color: #8A5300; }
+.staff-state--info      { background: #E8F0F7; color: #2C5A85; }
+.staff-state--danger    { background: #FDF0EF; color: #A93226; }
+.staff-state--muted     { background: #ffffff; border: 1px solid #D4D9D6; color: #4A5560; }
+
+.staff-toolbar-reset {
+  height: 36px; padding: 0 6px; border: none; background: none;
+  font-size: 13px; font-weight: 500; font-family: inherit; color: #3A4A42; cursor: pointer;
+}
+.staff-toolbar-reset:hover { color: #1A1A2E; text-decoration: underline; }
+.staff-toolbar-reset:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; border-radius: 4px; }
+
+/* Inline per-row action (e.g. "Create account") */
+.tbl-action-btn {
+  height: 28px; padding: 0 12px; border: none; border-radius: 6px;
+  background: var(--brand-primary-active); color: #ffffff;
+  font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer; white-space: nowrap;
+  transition: background 0.12s;
+}
+.tbl-action-btn:hover { background: #2F5636; }
+.tbl-action-btn:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+
+.staff-panel .empty-state { padding: 2.5rem 1rem; color: #4A5560; }
+.staff-panel .empty-state .staff-btn { margin-top: 0.75rem; }
+.staff-panel .empty-state strong { display: block; margin-bottom: 0.2rem; font-size: 14px; color: #1A1A2E; }
+
+.data-table.staff-table .td-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.data-table.staff-table .td-muted { color: #8A8A9A; }
+.staff-table tr.is-dim .staff-name-primary { color: #66717A; }

@@ -7,6 +7,7 @@
 session_name('STUDENT_LMS_SESSID');
 session_start();
 require_once __DIR__ . '/../../bootstrap.php';
+require_once BASE_PATH . '/shared/helpers/lms_subject_icon.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -17,26 +18,18 @@ require_once __DIR__ . '/../../bootstrap.php';
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_student.css') ?>">
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_lms.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_lms.css') ?>">
     <style>
-      .ls-picker { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
-      .ls-picker select {
-        appearance: none; -webkit-appearance: none;
-        height:36px; border:1px solid var(--lms-border, #DCE5DE); border-radius:8px;
-        background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 24 16'%3E%3Cpolygon points='2,3 22,3 12,15' fill='%230A3925'/%3E%3C/svg%3E") no-repeat right 12px center;
-        background-size: 12px;
-        padding:0 34px 0 12px; font-size:13px; font-family:inherit; color:#1A1A2E;
-        cursor: pointer; transition: border-color .15s ease;
-      }
-      .ls-picker select:hover, .ls-picker select:focus {
-        outline: none; border-color: var(--lms-ink, #0A3925);
-      }
-      .ls-subject-title { font-size:13px; font-weight:700; color:var(--lms-ink); text-transform:uppercase; letter-spacing:.04em; margin:1rem 0 .5rem; }
-      .ls-subject-title:first-child { margin-top:0; }
-      .ls-item { border-bottom:1px solid var(--lms-border-2); padding:12px 0; }
-      .ls-item:last-child { border-bottom:none; }
-      .ls-item-title { font-weight:600; font-size:14px; color:#1A1A2E; }
-      .ls-item-meta { font-size:11px; color:#8A8A9A; margin:2px 0 6px; }
-      .ls-item-body { font-size:13px; color:#3A3A4A; white-space:pre-wrap; margin-bottom:6px; }
-      .ls-item-attachment { font-size:12px; }
+      /* Lesson cards = LMS Home's Recent Lessons cards. */
+      .ls-list { display:flex; flex-direction:column; gap:10px; }
+      .ls-item { padding:14px 16px; border-radius:10px; background:var(--st-tint); scroll-margin-top:130px; }
+      .ls-item:target { box-shadow:0 0 0 2px var(--st-primary); }
+      .ls-item-title { display:flex; align-items:center; gap:8px; font-weight:700; font-size:14.5px; color:var(--st-dark); }
+      .ls-item-meta { font-size:12px; color:var(--st-sub); margin:2px 0 8px; }
+      .ls-item-body { font-size:13.5px; line-height:1.55; color:#2E3A3B; white-space:pre-wrap; word-break:break-word; margin-bottom:8px; }
+      .ls-item-attachment .attach-chip { background:#fff; }
+      .ls-search { position:relative; flex:1 1 220px; max-width:320px; margin-left:auto; }
+      .ls-search input { width:100%; height:34px; padding:0 12px 0 32px; border:1px solid var(--st-line); border-radius:999px; background:#fff; font:inherit; font-size:12.5px; color:var(--st-dark); }
+      .ls-search input:focus { outline:none; border-color:var(--st-primary); box-shadow:0 0 0 3px rgba(56,102,65,.15); }
+      .ls-search svg { position:absolute; left:11px; top:50%; transform:translateY(-50%); width:14px; height:14px; color:var(--st-sub); pointer-events:none; }
     </style>
 </head>
 <body class="student-layout lms-layout lms-warm-bg">
@@ -157,7 +150,7 @@ require_once __DIR__ . '/../../bootstrap.php';
         <?php if (empty($sy_list)): ?>
           <p class="empty-state">No enrollment record found yet.</p>
         <?php else: ?>
-          <form method="GET" class="ls-picker">
+          <form method="GET" class="lms-picker">
             <?php if ($subject_id > 0): ?><input type="hidden" name="subject_id" value="<?= $subject_id ?>"><?php endif; ?>
             <select name="sy" onchange="this.form.submit()">
               <?php foreach ($sy_list as $y): ?>
@@ -168,18 +161,27 @@ require_once __DIR__ . '/../../bootstrap.php';
               <option value="1" <?= $selected_sem === '1' ? 'selected' : '' ?>>Semester 1</option>
               <option value="2" <?= $selected_sem === '2' ? 'selected' : '' ?>>Semester 2</option>
             </select>
+            <?php if (!empty($lessons_by_subject)): ?>
+              <label class="ls-search">
+                <span class="hm-sr">Search lessons</span>
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="M20 20l-3.5-3.5"/></svg>
+                <input type="search" id="lsSearch" placeholder="Search lessons" autocomplete="off">
+              </label>
+            <?php endif; ?>
           </form>
 
           <?php if (empty($lessons_by_subject)): ?>
             <p class="empty-state">No lessons posted yet for this semester.</p>
           <?php else: ?>
+            <div id="lsList">
             <?php foreach ($lessons_by_subject as $grp_subject_name => $lessons): ?>
               <?php if ($subject_id <= 0): ?>
-                <div class="ls-subject-title"><?= htmlspecialchars($grp_subject_name) ?></div>
+                <h3 class="lms-group-title" data-filter-group><span class="hm-tile" aria-hidden="true"><?= subject_banner_icon($grp_subject_name) ?></span><?= htmlspecialchars($grp_subject_name) ?><span class="count"><?= count($lessons) ?></span></h3>
               <?php endif; ?>
+              <div class="ls-list">
               <?php foreach ($lessons as $l): ?>
-                <div class="ls-item">
-                  <div class="ls-item-title"><?= htmlspecialchars($l['title']) ?></div>
+                <div class="ls-item" id="lesson-<?= (int)$l['lesson_id'] ?>">
+                  <div class="ls-item-title"><?= htmlspecialchars($l['title']) ?><?php if (strtotime($l['posted_at']) >= strtotime('-7 days')): ?><span class="lms-new">NEW</span><?php endif; ?></div>
                   <div class="ls-item-meta">
                     <?= htmlspecialchars($l['teacher_name'] ?? 'Teacher') ?> · <?= date('M j, Y g:i A', strtotime($l['posted_at'])) ?>
                   </div>
@@ -194,13 +196,39 @@ require_once __DIR__ . '/../../bootstrap.php';
                   <?php endif; ?>
                 </div>
               <?php endforeach; ?>
+              </div>
             <?php endforeach; ?>
+            </div>
+            <p class="hm-empty lms-filter-none" id="lsNone" hidden>No lessons match your search.</p>
           <?php endif; ?>
         <?php endif; ?>
       </div>
 
     </div>
   </div>
+  <script>
+    // Search: filters the lesson cards by title / teacher / text as you type.
+    (function () {
+      var input = document.getElementById('lsSearch'), list = document.getElementById('lsList');
+      if (!input || !list) return;
+      var items = list.querySelectorAll('.ls-item'), none = document.getElementById('lsNone');
+      // It sits inside the SY/semester form — Enter must not reload the page.
+      input.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); });
+      input.addEventListener('input', function () {
+        var q = input.value.trim().toLowerCase(), shown = 0;
+        items.forEach(function (el) {
+          var show = !q || el.textContent.toLowerCase().indexOf(q) !== -1;
+          el.hidden = !show;
+          if (show) shown++;
+        });
+        list.querySelectorAll('[data-filter-group]').forEach(function (h) {
+          var any = h.nextElementSibling.querySelector('.ls-item:not([hidden])');
+          h.hidden = !any; h.nextElementSibling.hidden = !any;
+        });
+        none.hidden = shown > 0;
+      });
+    })();
+  </script>
 <?php endif; ?>
 </body>
 </html>

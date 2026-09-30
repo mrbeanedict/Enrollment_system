@@ -15,6 +15,126 @@ $valid_categories = ['written_work' => 'Written Work', 'performance_task' => 'Pe
 $success = '';
 $error   = '';
 
+require_once BASE_PATH . '/shared/helpers/submissions.php';
+
+// ── Grade turned-in work (score + optional written feedback) ────────────────
+// Saves into gradebook_scores — the same row Grade Management's score cells
+// write — so class grade rollups pick it up unchanged.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['grade_submission'])) {
+    $item_id    = (int) ($_POST['item_id'] ?? 0);
+    $student_id = (int) ($_POST['student_id'] ?? 0);
+    $score_raw  = trim((string) ($_POST['score'] ?? ''));
+    $feedback   = trim((string) ($_POST['feedback'] ?? ''));
+    $return_qs  = http_build_query([
+        'subject_id' => (int) ($_POST['subject_id'] ?? 0), 'section_id' => (int) ($_POST['section_id'] ?? 0),
+        'sy' => trim($_POST['school_year'] ?? ''), 'quarter' => $_POST['quarter'] ?? '1',
+    ]);
+
+    // This teacher's item, and work the student has actually turned in.
+    $chk = $conn->prepare("
+        SELECT gi.title, gi.max_score, gi.subject_id, gi.school_year, gsc.raw_score AS prev_score
+        FROM gradebook_items gi
+        JOIN gradebook_submissions gs ON gs.item_id = gi.item_id AND gs.student_id = ? AND gs.status = 'turned_in'
+        LEFT JOIN gradebook_scores gsc ON gsc.item_id = gi.item_id AND gsc.student_id = gs.student_id
+        WHERE gi.item_id = ? AND gi.teacher_id = ? AND gi.accepts_submission = 1
+    ");
+    $chk->bind_param('iii', $student_id, $item_id, $teacher_id);
+    $chk->execute();
+    $item = $chk->get_result()->fetch_assoc();
+    $chk->close();
+
+    $max = $item ? (float) $item['max_score'] : 0.0;
+    if (!$item) {
+        $_SESSION['gb_flash'] = 'That work isn\'t turned in (or isn\'t one of your assignments) — it can\'t be graded yet.';
+        $_SESSION['gb_flash_type'] = 'error';
+    } elseif ($score_raw === '' || !is_numeric($score_raw) || (float) $score_raw < 0 || (float) $score_raw > $max) {
+        $_SESSION['gb_flash'] = 'Enter a score from 0 to ' . rtrim(rtrim(number_format($max, 2), '0'), '.') . '.';
+        $_SESSION['gb_flash_type'] = 'error';
+    } elseif (mb_strlen($feedback) > SUB_COMMENT_MAX) {
+        $_SESSION['gb_flash'] = 'Feedback can be up to ' . SUB_COMMENT_MAX . ' characters.';
+        $_SESSION['gb_flash_type'] = 'error';
+    } else {
+        $score = round((float) $score_raw, 2);
+        $fb    = $feedback === '' ? null : $feedback;
+        $up = $conn->prepare("
+            INSERT INTO gradebook_scores (item_id, student_id, raw_score, feedback, feedback_at, graded_by, graded_at)
+            VALUES (?, ?, ?, ?, IF(? IS NULL, NULL, NOW()), ?, NOW())
+            ON DUPLICATE KEY UPDATE raw_score = VALUES(raw_score), graded_by = VALUES(graded_by), graded_at = NOW(),
+                feedback_at = IF(VALUES(feedback) <=> feedback, feedback_at, VALUES(feedback_at)),
+                feedback = VALUES(feedback)
+        ");
+        $up->bind_param('iidssi', $item_id, $student_id, $score, $fb, $fb, $teacher_id);
+        $up->execute();
+        $up->close();
+
+        $first  = $item['prev_score'] === null;
+        $shown  = rtrim(rtrim(number_format($score, 2), '0'), '.') . ' / ' . rtrim(rtrim(number_format($max, 2), '0'), '.');
+        $us = $conn->prepare("SELECT user_student_id FROM users_student WHERE student_id = ?");
+        $us->bind_param('i', $student_id);
+        $us->execute();
+        $usid = (int) ($us->get_result()->fetch_row()[0] ?? 0);
+        $us->close();
+        if ($usid) {
+            notify_student_users($conn, [$usid],
+                ($first ? "Your work for \"{$item['title']}\" was graded: $shown." : "Your grade for \"{$item['title']}\" was updated: $shown.")
+                    . ($fb !== null ? ' Your teacher left feedback.' : ''),
+                'roles/lms/student_assignments?' . http_build_query(['subject_id' => $item['subject_id'], 'sy' => $item['school_year']]) . '#as-item-' . $item_id,
+                'highlight');
+        }
+        $_SESSION['gb_flash'] = ($first ? 'Graded' : 'Grade updated') . " — $shown" . ($fb !== null ? ', with feedback.' : '.');
+        $_SESSION['gb_flash_type'] = 'success';
+    }
+    header('Location: teacher_gradebook?' . $return_qs . '#gb-sub-' . $item_id . '-' . $student_id);
+    exit();
+}
+
+// ── Private comment reply on a student's assignment ─────────────────────────
+// Only on this teacher's own item, and only to a student who has already
+// engaged with it (a submission or a comment of their own).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sub_comment'])) {
+    $item_id    = (int) ($_POST['item_id'] ?? 0);
+    $student_id = (int) ($_POST['student_id'] ?? 0);
+    $body       = trim($_POST['comment'] ?? '');
+    $return_qs  = http_build_query([
+        'subject_id' => (int) ($_POST['subject_id'] ?? 0), 'section_id' => (int) ($_POST['section_id'] ?? 0),
+        'sy' => trim($_POST['school_year'] ?? ''), 'quarter' => $_POST['quarter'] ?? '1',
+    ]);
+
+    $chk = $conn->prepare("
+        SELECT gi.title, gi.subject_id, gi.school_year FROM gradebook_items gi
+        WHERE gi.item_id = ? AND gi.teacher_id = ? AND gi.accepts_submission = 1
+          AND (EXISTS (SELECT 1 FROM gradebook_submissions gs WHERE gs.item_id = gi.item_id AND gs.student_id = ?)
+            OR EXISTS (SELECT 1 FROM submission_comments sc WHERE sc.item_id = gi.item_id AND sc.student_id = ?))
+    ");
+    $chk->bind_param('iiii', $item_id, $teacher_id, $student_id, $student_id);
+    $chk->execute();
+    $item = $chk->get_result()->fetch_assoc();
+    $chk->close();
+
+    if (!$item) {
+        $_SESSION['gb_flash'] = 'That submission was not found among your assignments.';
+        $_SESSION['gb_flash_type'] = 'error';
+    } elseif ($body === '' || mb_strlen($body) > SUB_COMMENT_MAX) {
+        $_SESSION['gb_flash'] = $body === '' ? 'Please write a comment.' : 'Private comments can be up to ' . SUB_COMMENT_MAX . ' characters.';
+        $_SESSION['gb_flash_type'] = 'error';
+    } else {
+        sub_add_comment($conn, $item_id, $student_id, 'teacher', $teacher_id, $body);
+        $us = $conn->prepare("SELECT user_student_id FROM users_student WHERE student_id = ?");
+        $us->bind_param('i', $student_id);
+        $us->execute();
+        $usid = (int) ($us->get_result()->fetch_row()[0] ?? 0);
+        $us->close();
+        if ($usid) {
+            notify_student_users($conn, [$usid], "Your teacher left a private comment on \"{$item['title']}\".",
+                'roles/lms/student_assignments?' . http_build_query(['subject_id' => $item['subject_id'], 'sy' => $item['school_year']]) . '#as-item-' . $item_id);
+        }
+        $_SESSION['gb_flash'] = 'Private comment sent.';
+        $_SESSION['gb_flash_type'] = 'success';
+    }
+    header('Location: teacher_gradebook?' . $return_qs . '#gb-sub-' . $item_id . '-' . $student_id);
+    exit();
+}
+
 // ── Add a gradable item (assignment/quiz/long quiz) to a class+quarter ─────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_item'])) {
     $subject_id = (int) ($_POST['subject_id'] ?? 0);
@@ -182,7 +302,31 @@ unset($_SESSION['gb_flash'], $_SESSION['gb_flash_type']);
       .gb-submission-toggle input { height:auto !important; }
       .gb-submissions { margin-top:6px; padding:8px 10px; background:#FAFAFC; border:0.5px solid #EBEBF0; border-radius:6px; font-size:11px; }
       .gb-submissions-summary { font-weight:600; color:#5A5A72; margin-bottom:4px; }
-      .gb-submission-row { display:flex; justify-content:space-between; gap:8px; padding:2px 0; }
+      .gb-submission-row { padding:8px 0; border-top:0.5px solid #EBEBF0; scroll-margin-top:80px; }
+      .gb-submission-row:first-of-type { border-top:0; }
+      .gb-sub-main { display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; }
+      .gb-sub-name { font-weight:600; color:#1A1A2E; font-size:12px; }
+      .gb-sub-when { color:#8A8A9A; }
+      .gb-sub-files { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+      .gb-sub-files a { padding:2px 8px; border:0.5px solid #D4D4E0; border-radius:999px; background:#fff; color:var(--brand-primary); text-decoration:none; max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .gb-sub-files a:hover { border-color:var(--brand-primary); }
+      .gb-graded-badge { margin-left:6px; padding:1px 7px; border-radius:999px; background:#E6F4EC; color:#17663F; font-weight:700; font-size:10.5px; }
+      .gb-grade { display:flex; gap:6px; align-items:flex-start; flex-wrap:wrap; margin-top:6px; }
+      .gb-grade-score { display:flex; align-items:center; gap:5px; color:#5A5A72; font-weight:600; white-space:nowrap; }
+      .gb-grade-score input { width:70px; height:30px !important; border:0.5px solid #D4D4E0; border-radius:6px; padding:0 6px; font-size:12px; font-family:inherit; box-sizing:border-box; }
+      .gb-grade textarea { flex:1; min-width:180px; min-height:30px; resize:vertical; border:0.5px solid #D4D4E0; border-radius:6px; padding:6px 8px; font-size:12px; font-family:inherit; box-sizing:border-box; }
+      .gb-grade-btn { height:30px; background:var(--brand-primary); border-color:var(--brand-primary); color:#fff; }
+      .gb-grade-btn:hover { background:var(--brand-primary-hover); color:#fff; }
+      .gb-pc { margin-top:4px; }
+      .gb-pc summary { cursor:pointer; color:#5A5A72; font-weight:600; }
+      .gb-pc-new { margin-left:4px; padding:0 6px; border-radius:999px; background:var(--brand-primary); color:#fff; font-size:10px; }
+      .gb-pc-item { margin:6px 0 0; padding:4px 8px; border-left:2px solid #D4D4E0; }
+      .gb-pc-item.is-teacher { border-left-color:var(--brand-primary); }
+      .gb-pc-meta { color:#8A8A9A; }
+      .gb-pc-meta b { color:#1A1A2E; }
+      .gb-pc-text { font-size:12px; color:#3A3A4A; white-space:pre-wrap; word-break:break-word; }
+      .gb-pc-form { display:flex; gap:6px; margin-top:6px; }
+      .gb-pc-form textarea { flex:1; min-height:32px; resize:vertical; border:0.5px solid #D4D4E0; border-radius:6px; padding:6px 8px; font-size:12px; font-family:inherit; box-sizing:border-box; }
       .gb-late-badge { color:#C0392B; font-weight:600; }
       .gb-due-badge { color:#8A8A9A; font-size:10px; display:block; }
       .btn-sm { height:32px; padding:0 12px; border:0.5px solid #D4D4E0; border-radius:6px; background:#fff; font-size:12px; font-family:inherit; cursor:pointer; color:#5A5A72; }
@@ -302,21 +446,63 @@ unset($_SESSION['gb_flash'], $_SESSION['gb_flash_type']);
 
         // Submissions per item, for the compact summary shown under any
         // item with accepts_submission=1.
+        // Turned-in work only — drafts stay private to the student until
+        // they turn in (see schema/submission_turn_in.sql).
         $submissionsByItem = [];
         $sub_stmt = $conn->prepare("
-            SELECT gsub.item_id, gsub.student_id, gsub.submitted_at, gsub.is_late, s.family_name, s.given_name
+            SELECT gsub.submission_id, gsub.item_id, gsub.student_id, gsub.submitted_at, gsub.is_late, s.family_name, s.given_name
             FROM gradebook_submissions gsub
             JOIN gradebook_items gi ON gi.item_id = gsub.item_id
             JOIN students s ON s.student_id = gsub.student_id
             WHERE gi.subject_id=? AND gi.section_id=? AND gi.school_year=? AND gi.quarter=? AND gi.teacher_id=?
+              AND gsub.status = 'turned_in'
             ORDER BY s.family_name, s.given_name
         ");
         $sub_stmt->bind_param('iissi', $sel_subject, $sel_section, $sel_sy, $sel_quarter, $teacher_id);
         $sub_stmt->execute();
-        foreach ($sub_stmt->get_result()->fetch_all(MYSQLI_ASSOC) as $row) {
-            $submissionsByItem[(int) $row['item_id']][] = $row;
-        }
+        $sub_rows = $sub_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $sub_stmt->close();
+        foreach ($sub_rows as $row) {
+            $submissionsByItem[(int) $row['item_id']][(int) $row['student_id']] = $row;
+        }
+        $filesBySubmission = sub_files_by_submission($conn, array_column($sub_rows, 'submission_id'));
+
+        // Private comment threads per item. A student who commented but
+        // hasn't turned in (or unsubmitted) still gets a row, so no comment
+        // goes unseen.
+        $commentsByItem = [];
+        $extraStudents  = [];
+        foreach ($items as $catItems) {
+            foreach ($catItems as $ci) {
+                if (!$ci['accepts_submission']) continue;
+                $threads = sub_comments($conn, (int) $ci['item_id']);
+                $commentsByItem[(int) $ci['item_id']] = $threads;
+                foreach (array_keys($threads) as $tsid) {
+                    if (!isset($submissionsByItem[(int) $ci['item_id']][$tsid])) $extraStudents[$tsid] = true;
+                }
+            }
+        }
+        // Current grade + feedback per item/student (pre-fills the Grade box).
+        $gradesByItem = [];
+        $subItemIds = array_keys($submissionsByItem);
+        if ($subItemIds) {
+            $gq = $conn->prepare("SELECT item_id, student_id, raw_score, feedback FROM gradebook_scores
+                                  WHERE item_id IN (" . implode(',', array_fill(0, count($subItemIds), '?')) . ")");
+            $gq->bind_param(str_repeat('i', count($subItemIds)), ...$subItemIds);
+            $gq->execute();
+            foreach ($gq->get_result()->fetch_all(MYSQLI_ASSOC) as $g) $gradesByItem[(int) $g['item_id']][(int) $g['student_id']] = $g;
+            $gq->close();
+        }
+
+        $studentNames = [];
+        if ($extraStudents) {
+            $ids = array_keys($extraStudents);
+            $nm = $conn->prepare("SELECT student_id, family_name, given_name FROM students WHERE student_id IN (" . implode(',', array_fill(0, count($ids), '?')) . ")");
+            $nm->bind_param(str_repeat('i', count($ids)), ...$ids);
+            $nm->execute();
+            foreach ($nm->get_result()->fetch_all(MYSQLI_ASSOC) as $n) $studentNames[(int) $n['student_id']] = $n;
+            $nm->close();
+        }
     }
 
     // Flatten all categories into one ordered list for the unified table —
@@ -343,7 +529,7 @@ unset($_SESSION['gb_flash'], $_SESSION['gb_flash_type']);
 
     <div class="teacher-content">
 
-      <?php if ($flash): ?><div class="notice notice-<?= htmlspecialchars($flash_type) ?>"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+      <?php if ($flash): ?><div class="notice notice-<?= htmlspecialchars($flash_type) ?>" data-ui-toast><?= htmlspecialchars($flash) ?></div><?php endif; ?>
 
       <?php if (empty($classes)): ?>
         <div class="notice notice-info">No class assignments found yet.</div>
@@ -465,18 +651,80 @@ unset($_SESSION['gb_flash'], $_SESSION['gb_flash_type']);
             </div>
 
             <?php foreach ($allItems as $it): if (!$it['accepts_submission']) continue;
-              $subs = $submissionsByItem[(int)$it['item_id']] ?? [];
-              if (empty($subs)) continue;
+              $iid     = (int)$it['item_id'];
+              $subs    = $submissionsByItem[$iid] ?? [];
+              $threads = $commentsByItem[$iid] ?? [];
+              if (empty($subs) && empty($threads)) continue;
+              // Turned-in students first (alphabetical), then comment-only ones.
+              $rows = $subs;
+              foreach ($threads as $tsid => $_) {
+                  if (!isset($rows[$tsid]) && isset($studentNames[$tsid])) $rows[$tsid] = $studentNames[$tsid] + ['student_id' => $tsid, 'submission_id' => null];
+              }
             ?>
               <div class="gb-submissions">
-                <div class="gb-submissions-summary"><?= htmlspecialchars($it['title']) ?> — <?= count($subs) ?> / <?= count($roster) ?> submitted</div>
-                <?php foreach ($subs as $sub): ?>
-                  <div class="gb-submission-row">
-                    <span><?= htmlspecialchars($sub['family_name'] . ', ' . $sub['given_name']) ?><?= $sub['is_late'] ? ' <span class="gb-late-badge">Late</span>' : '' ?></span>
-                    <span>
-                      <?= date('M j, g:i A', strtotime($sub['submitted_at'])) ?>
-                      — <a href="submission_attachment?item_id=<?= (int)$it['item_id'] ?>&student_id=<?= (int)$sub['student_id'] ?>" target="_blank">View</a>
-                    </span>
+                <div class="gb-submissions-summary"><?= htmlspecialchars($it['title']) ?> — <?= count($subs) ?> / <?= count($roster) ?> turned in</div>
+                <?php foreach ($rows as $sid => $sub):
+                  $files  = $sub['submission_id'] ? ($filesBySubmission[(int)$sub['submission_id']] ?? []) : [];
+                  $thread = $threads[$sid] ?? [];
+                  $last   = $thread ? end($thread) : null;
+                  $unread = $last && $last['author_type'] === 'student';
+                  $grade  = $gradesByItem[$iid][$sid] ?? null;
+                  $gscore = $grade && $grade['raw_score'] !== null ? rtrim(rtrim(number_format((float) $grade['raw_score'], 2), '0'), '.') : '';
+                  $gmax   = rtrim(rtrim(number_format((float) $it['max_score'], 2), '0'), '.');
+                ?>
+                  <div class="gb-submission-row" id="gb-sub-<?= $iid ?>-<?= (int)$sid ?>">
+                    <div class="gb-sub-main">
+                      <span class="gb-sub-name"><?= htmlspecialchars($sub['family_name'] . ', ' . $sub['given_name']) ?><?= !empty($sub['is_late']) ? ' <span class="gb-late-badge">Late</span>' : '' ?></span>
+                      <span class="gb-sub-when">
+                        <?= $sub['submission_id'] ? 'Turned in ' . date('M j, g:i A', strtotime($sub['submitted_at'])) : 'Not turned in' ?>
+                        <?php if ($gscore !== ''): ?><span class="gb-graded-badge">Graded <?= $gscore ?> / <?= $gmax ?></span><?php endif; ?>
+                      </span>
+                    </div>
+                    <?php if ($files): ?>
+                      <div class="gb-sub-files">
+                        <?php foreach ($files as $f): ?>
+                          <a href="submission_attachment?file_id=<?= (int)$f['file_id'] ?>" target="_blank" rel="noopener"><?= htmlspecialchars($f['original_filename']) ?></a>
+                        <?php endforeach; ?>
+                      </div>
+                    <?php endif; ?>
+                    <?php if ($sub['submission_id']): ?>
+                      <form method="POST" class="gb-grade">
+                        <input type="hidden" name="item_id" value="<?= $iid ?>">
+                        <input type="hidden" name="student_id" value="<?= (int)$sid ?>">
+                        <input type="hidden" name="subject_id" value="<?= $sel_subject ?>">
+                        <input type="hidden" name="section_id" value="<?= $sel_section ?>">
+                        <input type="hidden" name="school_year" value="<?= htmlspecialchars($sel_sy) ?>">
+                        <input type="hidden" name="quarter" value="<?= htmlspecialchars($sel_quarter) ?>">
+                        <label class="gb-grade-score">
+                          <span>Grade</span>
+                          <input type="number" name="score" min="0" max="<?= $gmax ?>" step="0.01" required value="<?= $gscore ?>"
+                                 aria-label="Score for <?= htmlspecialchars($sub['given_name'] . ' ' . $sub['family_name']) ?>, out of <?= $gmax ?>">
+                          <span>/ <?= $gmax ?></span>
+                        </label>
+                        <textarea name="feedback" rows="1" maxlength="<?= SUB_COMMENT_MAX ?>" placeholder="Feedback for <?= htmlspecialchars($sub['given_name']) ?> (optional)"
+                                  aria-label="Feedback for <?= htmlspecialchars($sub['given_name'] . ' ' . $sub['family_name']) ?>"><?= htmlspecialchars($grade['feedback'] ?? '') ?></textarea>
+                        <button type="submit" name="grade_submission" value="1" class="btn-sm gb-grade-btn"><?= $gscore !== '' ? 'Update grade' : 'Return grade' ?></button>
+                      </form>
+                    <?php endif; ?>
+                    <details class="gb-pc" <?= $unread ? 'open' : '' ?>>
+                      <summary>Private comments (<?= count($thread) ?>)<?= $unread ? ' <span class="gb-pc-new">student replied</span>' : '' ?></summary>
+                      <?php foreach ($thread as $c): ?>
+                        <div class="gb-pc-item <?= $c['author_type'] === 'teacher' ? 'is-teacher' : '' ?>">
+                          <div class="gb-pc-meta"><b><?= $c['author_type'] === 'teacher' ? 'You' : htmlspecialchars($c['author_name']) ?></b> · <?= date('M j, g:i A', strtotime($c['created_at'])) ?></div>
+                          <div class="gb-pc-text"><?= htmlspecialchars($c['body']) ?></div>
+                        </div>
+                      <?php endforeach; ?>
+                      <form method="POST" class="gb-pc-form">
+                        <input type="hidden" name="item_id" value="<?= $iid ?>">
+                        <input type="hidden" name="student_id" value="<?= (int)$sid ?>">
+                        <input type="hidden" name="subject_id" value="<?= $sel_subject ?>">
+                        <input type="hidden" name="section_id" value="<?= $sel_section ?>">
+                        <input type="hidden" name="school_year" value="<?= htmlspecialchars($sel_sy) ?>">
+                        <input type="hidden" name="quarter" value="<?= htmlspecialchars($sel_quarter) ?>">
+                        <textarea name="comment" rows="1" maxlength="<?= SUB_COMMENT_MAX ?>" required placeholder="Private comment to <?= htmlspecialchars($sub['given_name']) ?>…" aria-label="Private comment to <?= htmlspecialchars($sub['given_name'] . ' ' . $sub['family_name']) ?>"></textarea>
+                        <button type="submit" name="sub_comment" value="1" class="btn-sm">Send</button>
+                      </form>
+                    </details>
                   </div>
                 <?php endforeach; ?>
               </div>

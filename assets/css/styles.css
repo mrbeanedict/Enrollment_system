@@ -200,7 +200,7 @@ nav .wrap{
     min-height:100vh;
     display:flex;
     align-items:center;
-    background:url('/Enrollment_system/images/background/ui_landscape_clear.png') center/cover no-repeat, var(--color-accent);
+    background:url('../images/background/ui_landscape_clear.png') center/cover no-repeat, var(--color-accent);
     overflow:hidden;
   }
   .hero-inner {
@@ -355,7 +355,7 @@ nav .wrap{
     box-shadow:var(--shadow-soft);
     position:relative;
     z-index:1;
-    transition:transform 0.22s cubic-bezier(.2,.8,.3,1.3),
+    transition:transform 0.22s cubic-bezier(.25,1,.5,1),
                background 0.22s ease,
                border-color 0.22s ease,
                box-shadow 0.22s ease;
@@ -553,48 +553,9 @@ nav .wrap{
   .form-success{display:none;background:var(--accent-bg);border:0.5px solid var(--info);border-radius:9px;padding:14px 16px;font-size:0.9rem;color:var(--accent-deep);}
   .form-success.show{display:block;}
 
-/* ---------- FOOTER ---------- */
-:root{
-  --footer-bg:var(--dark);
-  --footer-heading:var(--cream);
-  --footer-text:var(--muted);
-  --footer-text-soft:rgba(159,184,184,0.75);
-  --footer-accent:var(--primary);
-  --footer-info:var(--info);
-}
-
-footer{background:var(--footer-bg);padding:0;}
-.footer-main{padding:56px 0 40px;}
-
-.footer-grid{display:grid;grid-template-columns:1fr;gap:32px;}
-@media(min-width:720px){.footer-grid{grid-template-columns:1.3fr 1fr 1fr;gap:56px;}}
-
-.footer-about .brand{color:var(--footer-heading);font-weight:600;font-size:1.05rem;gap:10px;}
-.footer-about p{color:var(--footer-text-soft);font-size:0.88rem;margin-top:14px;max-width:32ch;}
-
-.footer-social{display:flex;gap:10px;margin-top:18px;}
-.footer-social a{
-  width:32px;height:32px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;
-  background:rgba(255,255,255,0.06);
-  color:var(--footer-info);
-  transition:background 0.15s ease,color 0.15s ease;
-}
-.footer-social a:hover{background:var(--footer-accent);color:#fff;}
-
-footer h4{color:var(--footer-heading);font-size:0.82rem;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:16px;font-weight:600;}
-footer ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}
-footer a{text-decoration:none;color:var(--footer-text);font-size:0.88rem;transition:color 0.15s ease;}
-footer a:hover{color:var(--footer-info);}
-
-.footer-contact-item{display:flex;gap:10px;align-items:flex-start;color:var(--footer-text);font-size:0.88rem;}
-.footer-contact-item svg{flex-shrink:0;margin-top:2px;color:var(--footer-accent);}
-.footer-contact-item a{color:var(--footer-text);}
-.footer-contact-item a:hover{color:var(--footer-info);}
-
-.footer-bottom{background:var(--footer-heading);padding:16px 0;}
-.footer-bottom .wrap{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;}
-.footer-bottom span{color:var(--footer-bg);font-size:0.78rem;font-weight:600;}
+/* ---------- FOOTER ----------
+   Lives entirely in shared/includes/footer.php (self-contained markup +
+   scoped .site-footer CSS) — don't add footer rules here. */
 
 /* ══════════════════════════════════════════════════════════════════════
    ADMISSION PAGE (student/admission.php) — glassmorphism shell over the
@@ -625,8 +586,9 @@ body.adm-page {
   --brand-primary-hover: var(--color-primary-hover, #2F5636);
   --brand-primary-active: var(--color-primary-active, #24422A);
   --brand-accent: var(--color-primary, #386641);
-  --brand-gradient: #4A8A54;
-  --brand-tint: rgba(56,102,65,0.10);
+  /* Same aliases as css_student.css (student portal) */
+  --brand-gradient: var(--color-dark, #1C2628);
+  --brand-tint: var(--color-info, #CADEDE);
 
   --adm-ink: var(--color-dark, #1C2628);
   --adm-cream: var(--color-accent, #FEFAE0);
@@ -634,7 +596,7 @@ body.adm-page {
   --adm-muted: var(--color-muted, #9FB8B8);
 
   /* Plain, flat page background — no gradient/texture. */
-  background: #F5F8F6;
+  background: #EFF5F3;
 }
 
 /* ── Nav: plain solid bar ── */
@@ -746,7 +708,7 @@ body.adm-page .page-title {
   color: #fff;
   transform: scale(1.12);
 }
-.adm-step.complete .adm-step-num { background: var(--brand-primary-hover); color: #fff; }
+.adm-step.complete .adm-step-num { background: var(--adm-teal); color: var(--brand-primary-active); }
 .adm-step-label {
   font-size: 10px;
   font-weight: 600;
@@ -808,14 +770,15 @@ body.adm-page section.card .adm-card-head h2 {
   padding-bottom: 0;
   margin-bottom: 2px;
 }
+/* Student-portal icon chip: info tint + deep green glyph (same as
+   css_student.css's --icon-circle-bg usage) */
 .adm-card-icon {
   width: 42px; height: 42px;
   border-radius: 12px;
-  background: linear-gradient(140deg, var(--brand-primary) 0%, var(--brand-primary-active) 100%);
-  color: #fff;
+  background: var(--adm-teal);
+  color: var(--brand-primary-active);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 8px 18px -6px rgba(28,38,40,0.35);
 }
 .adm-card-icon svg { width: 20px; height: 20px; }
 .adm-card-sub { margin: 2px 0 0; font-size: 12px; color: #6E8080; }
@@ -988,8 +951,8 @@ body.adm-page input[type="date"]::-webkit-calendar-picker-indicator {
 .adm-card-row:not(.adm-strand-row) .adm-pick input:checked + label {
   border-color: var(--brand-primary);
   border-width: 1.5px;
-  background: linear-gradient(165deg, var(--brand-primary), var(--brand-primary-active));
-  box-shadow: 0 0 0 1px var(--brand-primary), 0 6px 18px rgba(20,35,25,0.35);
+  background: var(--brand-primary);
+  box-shadow: 0 0 0 1px var(--brand-primary);
 }
 .adm-card-row:not(.adm-strand-row) .adm-pick input:checked + label .adm-pick-title { color: #FFFFFF; }
 .adm-card-row:not(.adm-strand-row) .adm-pick input:checked + label .adm-pick-sub { color: rgba(255,255,255,0.82); }
@@ -1000,9 +963,10 @@ body.adm-page input[type="date"]::-webkit-calendar-picker-indicator {
 .adm-strand-row .adm-pick input:checked + label {
   border-color: var(--brand-primary);
   border-width: 2px;
-  background: #FFFFFF;
-  box-shadow: 0 0 0 1px rgba(56,102,65,0.25), 0 6px 16px rgba(56,102,65,0.22);
+  background: rgba(202,222,222,0.35); /* light info tint */
+  box-shadow: 0 0 0 1px rgba(56,102,65,0.2);
 }
+.adm-strand-row .adm-pick input:checked + label .adm-pick-title { color: var(--brand-primary-active); }
 
 /* ── Nitpicks: suffix width, no-middle-name toggle, required-marker removal ── */
 .adm-suffix-col { max-width: 130px; }
@@ -1033,6 +997,57 @@ body.adm-page .form-actions { justify-content: flex-end; }
    green via --brand-tint. */
 body.adm-page .btn-secondary:hover { color: var(--brand-primary); }
 
+/* ── Buttons: student-portal style ──
+   This file's global .btn-primary (homepage gradient pill with a lift on
+   hover) otherwise wins over css_staff.css's. Flatten it to the portal's
+   .btn-student-primary: solid green, hover/active step darker, no lift. */
+body.adm-page .btn-primary {
+  height: 44px;
+  padding: 0 26px;
+  border-radius: 10px;
+  background: var(--brand-primary);
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: none;
+  transform: none;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+body.adm-page .btn-primary:hover { background: var(--brand-primary-hover); box-shadow: none; transform: none; }
+body.adm-page .btn-primary:active { background: var(--brand-primary-active); transform: scale(0.98); }
+body.adm-page .btn-primary:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
+body.adm-page .btn-primary:disabled,
+body.adm-page .btn-primary[disabled] { opacity: 0.45; }
+
+body.adm-page .btn-secondary {
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid rgba(28,38,40,0.14);
+  color: var(--adm-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+body.adm-page .btn-secondary:hover {
+  background: var(--adm-teal);
+  border-color: var(--adm-teal);
+  color: var(--adm-ink);
+}
+
+/* ── Hint card: beige accent surface (portal's tone-accent card) ── */
+body.adm-page .adm-hint-card,
+body.adm-page p.field-hint.adm-hint-card {
+  background: var(--adm-cream);
+  border: 1px solid rgba(138,109,31,0.22);
+  color: #5E4A14;
+}
+
+/* ── Upload dropzone: info tint on hover/drag instead of a flat green wash ── */
+body.adm-page .upload-dropzone:hover,
+body.adm-page .upload-dropzone.is-dragover {
+  border-color: var(--brand-primary);
+  background: rgba(202,222,222,0.3);
+}
+
 /* ── Closed / post-submit screens ──────────────────────────────────────
    Both the "admissions closed" and "application submitted" states get a
    plain white card behind them, matching the rest of this page's cards,
@@ -1062,7 +1077,7 @@ body.adm-page .success-screen .page-sub {
   align-items: center;
   justify-content: center;
   margin: 0 auto 1rem;
-  box-shadow: 0 10px 24px rgba(56,102,65,0.35);
+  box-shadow: 0 0 0 6px var(--adm-teal);
 }
 .success-icon svg { width: 26px; height: 26px; }
 
@@ -1098,18 +1113,3 @@ body.adm-page .success-screen .page-sub {
   gap: 10px;
 }
 
-/* ── Footer contrast, scoped to this page only ──
-   includes/footer.php is deliberately self-contained with hard-coded
-   colors so it renders identically on every page that includes it —
-   left untouched here. But against this page's now much-darker
-   bottom-of-gradient backdrop, its muted teal-gray text (#9FB8B8 and
-   a further-dimmed rgba variant) reads too low-contrast, so this
-   lightens just those tones for admission.php without editing the
-   shared include. */
-body.adm-page footer .footer-about p { color: rgba(216,232,227,0.92); }
-body.adm-page footer a,
-body.adm-page .footer-contact-item,
-body.adm-page .footer-contact-item svg,
-body.adm-page .footer-contact-item a { color: #D8E8E3; }
-body.adm-page footer a:hover,
-body.adm-page .footer-contact-item a:hover { color: #FEFAE0; }

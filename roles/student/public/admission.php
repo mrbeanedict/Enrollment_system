@@ -745,12 +745,12 @@ function old(string $key, string $default = ''): string {
   <div class="wrap">
     <a href="index" class="brand">
       <img
-        src="/Enrollment_system/assets/images/log_ui.png"
+        src="<?= APP_URL ?>/assets/images/log_ui.png"
         alt=""
         class="brand-icon"
       >
       <img
-        src="/Enrollment_system/assets/images/logo_mini2.png"
+        src="<?= APP_URL ?>/assets/images/logo_mini2.png"
         alt="Greenfield Senior High School"
       >
     </a>
@@ -1424,7 +1424,8 @@ function old(string $key, string $default = ''): string {
   </div><!-- /.adm-shell -->
 
 <script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
-<script src="<?= APP_URL ?>/assets/js/blur_detect.js"></script>
+<?php require_once __DIR__ . '/../../../shared/includes/ui_modal_css.php'; ?>
+<script src="<?= APP_URL ?>/assets/js/blur_detect.js?v=<?= filemtime(BASE_PATH . '/assets/js/blur_detect.js') ?>"></script>
 <script>
   // ── "I'll submit ALL documents in person" master checkbox ───────────────
   // Declared up front (rather than down by the requirement-uploads code

@@ -59,6 +59,15 @@
         ],
         "createdAt": "2026-09-14T09:45:58.008Z",
         "reason": "pre-existing width transitions (off-canvas sidebar drawer, upload progress bar) unrelated to this session's sidebar reskin work"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "assets/css/css_lms.css"
+        ],
+        "createdAt": "2026-09-28T02:57:16.155Z",
+        "reason": "Claude: the user's lms_home mockup explicitly shows a colored left stripe on 'This week' day items (.hm-cal-item) keyed to exam/quiz/assignment"
       }
     ]
   }

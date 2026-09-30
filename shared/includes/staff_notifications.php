@@ -16,8 +16,8 @@ $sn_user_id = (int)($_SESSION['user_id'] ?? 0);
 $sn_notifs = [];
 $sn_unread = 0;
 $sn_stmt = $conn->prepare(
-    "SELECT notification_id, message, link, is_read, created_at
-     FROM notifications WHERE user_id = ? AND recipient_type = 'staff' ORDER BY created_at DESC LIMIT 10"
+    "SELECT notification_id, message, link, type, is_read, created_at, " . notif_group_sql() . "
+     FROM notifications WHERE user_id = ? AND recipient_type = 'staff' ORDER BY created_at DESC LIMIT 30"
 );
 $sn_stmt->bind_param('i', $sn_user_id);
 $sn_stmt->execute();
@@ -30,14 +30,6 @@ mysqli_stmt_execute($sn_uc);
 mysqli_stmt_bind_result($sn_uc, $sn_unread);
 mysqli_stmt_fetch($sn_uc);
 mysqli_stmt_close($sn_uc);
-
-function sn_time_ago($dt) {
-    $diff = time() - strtotime($dt);
-    if ($diff < 60) return 'just now';
-    if ($diff < 3600) return floor($diff / 60) . 'm ago';
-    if ($diff < 86400) return floor($diff / 3600) . 'h ago';
-    return floor($diff / 86400) . 'd ago';
-}
 ?>
 <div class="staff-notif-wrap">
   <button class="staff-notif-bell" id="staffNotifBell" type="button" aria-label="Notifications">
@@ -48,16 +40,7 @@ function sn_time_ago($dt) {
   </button>
   <div class="staff-notif-dropdown" id="staffNotifDropdown">
     <div class="staff-notif-header">Notifications</div>
-    <?php if (!$sn_notifs): ?>
-      <div class="staff-notif-empty">No notifications yet.</div>
-    <?php else: ?>
-      <?php foreach ($sn_notifs as $sn_n): ?>
-        <a href="<?= APP_URL . '/' . htmlspecialchars($sn_n['link']) ?>" class="staff-notif-item<?= $sn_n['is_read'] ? '' : ' unread' ?>">
-          <div class="staff-notif-msg"><?= htmlspecialchars($sn_n['message']) ?></div>
-          <div class="staff-notif-time"><?= sn_time_ago($sn_n['created_at']) ?></div>
-        </a>
-      <?php endforeach; ?>
-    <?php endif; ?>
+    <?php notif_render_list('staff', $sn_notifs); ?>
   </div>
 </div>
 

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../../../bootstrap.php';
 header("Cache-Control: no-store, no-cache, must-revalidate");
 header("Pragma: no-cache");
 ?>
@@ -58,38 +59,13 @@ header("Pragma: no-cache");
   .section-head h2{font-size:clamp(1.7rem,3.2vw,2.4rem);margin-top:10px;}
   .section-head p{margin-top:12px;font-size:1.02rem;}
 
-  /* ================= NAV ================= */
-  nav{position:fixed;top:0;left:0;right:0;z-index:60;padding-top:20px;}
-  .nav-inner{
-    max-width:1180px;margin:0 auto;padding:10px 14px;
-    display:flex;align-items:center;justify-content:space-between;
-    background:rgba(28,38,40,0.9);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-    border-radius:999px;box-shadow:0 12px 30px rgba(28,38,40,0.18);
-  }
-  .brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
-  .brand img{display:block;height:32px;width:auto;flex-shrink:0;}
-  .brand-mark{width:32px;height:32px;border-radius:9px;background:var(--color-primary);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-  .brand span{font-family:'Fraunces',serif;font-weight:600;font-size:0.98rem;color:#fff;}
-  .nav-links{display:none;gap:2px;align-items:center;}
-  @media(min-width:860px){.nav-links{display:flex;}}
-  .nav-links a{font-weight:500;font-size:0.86rem;text-decoration:none;color:rgba(255,255,255,0.72);padding:9px 16px;border-radius:999px;transition:background .15s ease,color .15s ease;}
-  .nav-links a:hover{background:rgba(255,255,255,0.1);color:#fff;}
-  .nav-right{display:flex;align-items:center;gap:8px;}
-  .nav-portal{
-    display:inline-flex;align-items:center;gap:7px;
-    background:var(--color-accent);color:var(--accent-ink);
-    font-size:0.82rem;font-weight:700;padding:9px 16px 9px 12px;border-radius:999px;text-decoration:none;
-  }
-  .nav-portal:hover{background:#FBF2C9;}
-  .nav-cta{display:none;background:var(--color-primary);color:#fff;font-size:0.82rem;font-weight:700;padding:10px 18px;border-radius:999px;text-decoration:none;}
-  @media(min-width:860px){.nav-cta{display:inline-flex;}}
-  .nav-cta:hover{background:var(--color-primary-hover);}
+  /* Top bar lives in shared/includes/public_topbar.php (self-contained). */
 
   /* ================= HERO ================= */
   .hero{
     position:relative;overflow:hidden;
-    min-height:100vh;
-    display:flex;align-items:center;
+    min-height:calc(100vh - var(--topbar-h));
+    display:flex;align-items:flex-end;
     padding-top:0;padding-bottom:0;
     background:var(--color-dark);
   }
@@ -100,7 +76,7 @@ header("Pragma: no-cache");
      itself stays visible instead of reading as a dark backdrop. */
   .hero-photo{
     position:absolute;inset:0;
-    background-image:url('/Enrollment_system/assets/images/background/ui_landscape_clear.png');
+    background-image:url('<?= APP_URL ?>/assets/images/background/ui_landscape_clear.png');
     background-size:cover;
     background-position:center 62%;
     filter:contrast(1.02) brightness(.98) saturate(1);
@@ -116,44 +92,26 @@ header("Pragma: no-cache");
     opacity:.18;
   }
 
-  .hero-deco{position:absolute;inset:0;overflow:hidden;}
-
-  /* light brand wash — just enough for white type to stay legible without
-     hiding the photo underneath (per the old heavy-tint version, which
-     made the background read as nearly solid dark green). */
-  .hero-deco .tint{
+  /* single scrim: darkens toward the lower-left where the copy sits, and
+     leaves the upper/right part of the photo mostly untouched */
+  .hero-scrim{
     position:absolute;inset:0;
-    background:linear-gradient(165deg, rgba(28,38,40,0.42) 0%, rgba(36,66,42,0.32) 42%, rgba(56,102,65,0.18) 78%, rgba(28,38,40,0.22) 100%);
-    mix-blend-mode:multiply;
-  }
-  .hero-deco .tint-top{
-    position:absolute;inset:0;
-    background:linear-gradient(180deg, rgba(28,38,40,0.35) 0%, rgba(28,38,40,0) 34%, rgba(28,38,40,0) 62%, rgba(28,38,40,0.5) 100%);
+    background:
+      linear-gradient(0deg, rgba(20,28,30,0.78) 0%, rgba(20,28,30,0.35) 45%, rgba(20,28,30,0) 75%),
+      linear-gradient(90deg, rgba(20,28,30,0.45) 0%, rgba(20,28,30,0) 60%);
   }
 
-  .hero-deco .blob{position:absolute;border-radius:50%;filter:blur(2px);opacity:.55;mix-blend-mode:screen;}
-  .hero-deco .b1{width:480px;height:480px;background:radial-gradient(circle at 30% 30%,#4A7A54,transparent 70%);top:-160px;right:-120px;}
-  .hero-deco .b2{width:340px;height:340px;background:radial-gradient(circle at 60% 40%,#2F5636,transparent 70%);bottom:-140px;left:-80px;}
-  .hero-deco .grid{position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,0.08) 1px, transparent 1px);background-size:26px 26px;opacity:.5;}
-  .hero-deco .spark{position:absolute;color:var(--color-accent);opacity:.75;font-size:1.1rem;}
-
-  /* film-grain / noise pass — sits above everything else in .hero-deco so
-     the whole composite (photo + tint + blobs) reads as one grainy plate */
-  .hero-deco .noise{
-    position:absolute;inset:-10%;
-    width:120%;height:120%;
-    opacity:.22;
-    mix-blend-mode:overlay;
-    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-    background-size:180px 180px;
-    pointer-events:none;
+  .hero-inner{position:relative;z-index:2;text-align:left;padding-top:120px;padding-bottom:clamp(48px,8vh,88px);}
+  .hero-eyebrow{
+    display:inline-block;color:var(--color-accent);
+    font-size:0.76rem;letter-spacing:0.14em;text-transform:uppercase;font-weight:700;
   }
-  .hero-inner{position:relative;z-index:2;text-align:center;padding-bottom:70px;}
-  .hero-eyebrow{color:var(--color-muted);}
-  .hero h1{font-size:clamp(2.4rem,5.6vw,4.1rem);color:#fff;margin-top:16px;max-width:820px;margin-left:auto;margin-right:auto;}
-  .hero h1 .accent{color:#fff;}
-  .hero .lead{font-size:1.06rem;margin:20px auto 0;max-width:52ch;color:rgba(255,255,255,0.72);}
-  .hero-actions{display:flex;justify-content:center;flex-wrap:wrap;gap:12px;margin-top:32px;}
+  .hero h1{
+    font-size:clamp(2.2rem,5vw,3.8rem);color:#fff;margin-top:14px;max-width:16ch;
+    line-height:1.08;text-shadow:0 2px 18px rgba(0,0,0,0.25);
+  }
+  .hero .lead{font-size:1.1rem;margin-top:18px;max-width:46ch;color:rgba(255,255,255,0.9);}
+  .hero-actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px;}
 
   /* ================= ABOUT (two-col, checklist + image) ================= */
   .about-grid{display:grid;grid-template-columns:1fr;gap:44px;align-items:center;}
@@ -186,30 +144,8 @@ header("Pragma: no-cache");
      the brand tokens only */
   .tone-a{background-image:linear-gradient(155deg,#4A7A54 0%,var(--color-primary) 55%,var(--color-primary-active) 100%);}
 
-  /* ================= FULL BLEED BAND ================= */
-  .band{
-    position:relative;overflow:hidden;border-radius:var(--radius-lg);
-    background:linear-gradient(120deg,var(--color-dark) 0%,var(--color-primary-active) 100%);
-    padding:clamp(48px,8vw,88px) clamp(28px,6vw,72px);
-    color:#fff;margin:0 auto;max-width:1180px;
-  }
-  .band-grid{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:32px;}
-  .band h2{color:#fff;font-size:clamp(1.7rem,3.4vw,2.5rem);max-width:16ch;}
-  .band-badge{
-    flex-shrink:0;width:112px;height:112px;border-radius:50%;
-    background:var(--color-accent);color:var(--accent-ink);
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
-    font-family:'Fraunces',serif;
-  }
-  .band-badge strong{font-size:1.6rem;line-height:1;}
-  .band-badge span{font-size:0.62rem;text-transform:uppercase;letter-spacing:.06em;margin-top:4px;font-family:'Inter',sans-serif;font-weight:700;}
-  .band-deco{position:absolute;right:-60px;top:-60px;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,0.08),transparent 70%);}
-
-  /* ================= STATEMENT STRIP ================= */
-  .statement{display:grid;grid-template-columns:1fr;gap:26px;align-items:center;}
-  @media(min-width:820px){.statement{grid-template-columns:auto 1fr;}}
-  .statement-icon{width:64px;height:64px;border-radius:16px;background:var(--primary-tint);color:var(--color-primary);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-  .statement p.big{font-family:'Fraunces',serif;font-size:clamp(1.3rem,2.6vw,1.8rem);font-weight:500;color:var(--ink);line-height:1.4;}
+  /* thin divider between content sections (about / strands / journey) */
+  .section-rule{border:0;border-top:1px solid var(--border);margin:0;}
 
   /* ================= JOURNEY ================= */
   .section-alt{background:var(--paper);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
@@ -258,7 +194,7 @@ header("Pragma: no-cache");
 
   .strand-col{
     display:block;text-decoration:none;
-    flex:0 0 clamp(220px,24vw,300px);
+    flex:0 0 var(--strand-card-w,clamp(220px,24vw,300px));
   }
 
   .strand-photo{
@@ -299,19 +235,36 @@ header("Pragma: no-cache");
   .strand-dot:hover{background:var(--ink-faint);}
   .strand-dot.active{width:22px;border-radius:5px;background:var(--color-primary);}
 
-  /* Prev/next/play-pause controls, centered as one deliberate control bar. */
+  /* Play/pause sits alone under the dots; prev/next live on the sides. */
   .strand-controls{display:flex;justify-content:center;gap:10px;margin-top:16px;}
   .strand-nav-btn{
     width:42px;height:42px;border-radius:50%;
     border:0.5px solid var(--border);background:var(--paper);color:var(--ink-soft);
     display:flex;align-items:center;justify-content:center;cursor:pointer;
-    transition:border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+    transition:border-color 0.15s ease, background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
   }
-  .strand-nav-btn.strand-nav-next{background:var(--color-dark);border-color:var(--color-dark);color:#fff;}
-  .strand-nav-btn.strand-nav-next:hover{background:var(--color-primary-active);border-color:var(--color-primary-active);}
-  .strand-nav-btn:not(.strand-nav-next):hover{border-color:var(--color-primary);color:var(--color-primary);}
+  .strand-nav-btn:hover{border-color:var(--color-primary);color:var(--color-primary);}
   .strand-nav-btn:disabled{opacity:0.4;cursor:not-allowed;}
   .strand-nav-btn svg{width:15px;height:15px;}
+
+  /* Side arrows: overlap the viewport edges, vertically centred on the
+     photos (photo height = card width × 4.3/3, so half of that). */
+  .strand-stage{position:relative;--strand-card-w:clamp(220px,24vw,300px);}
+  .strand-side{
+    position:absolute;z-index:3;
+    top:calc(var(--strand-card-w) * 4.3 / 3 / 2 - 22px);
+    width:44px;height:44px;
+    color:var(--ink);
+    box-shadow:0 6px 18px rgba(28,38,40,0.16);
+  }
+  .strand-side-prev{left:-22px;}
+  .strand-side-next{right:-22px;}
+  /* at either end, the unusable arrow disappears instead of greying out */
+  .strand-side:disabled{opacity:0;pointer-events:none;}
+  @media(max-width:600px){
+    .strand-side-prev{left:-14px;}
+    .strand-side-next{right:-14px;}
+  }
 
   /* Autoplay progress bar — thin track under the control bar, fill
      animates 0%→100% over one autoplay cycle, driven by JS toggling
@@ -326,35 +279,23 @@ header("Pragma: no-cache");
   }
   .strand-progress-fill.running{width:100%;transition-duration:var(--strand-autoplay-ms,4500ms);}
 
-  /* Footer markup/CSS now lives in includes/footer.php (self-contained,
-     included below) so it can be reused by other student/ pages. Forced
-     here too since this page's own body{background:var(--bg)} (light)
-     was showing through instead of the footer's dark background. */
-  footer{background:var(--color-dark) !important;}
-
   @media (prefers-reduced-motion: reduce){*{transition:none !important;}}
 </style>
 </head>
 <body>
 
+<!-- ==================== TOP BAR ==================== -->
+<?php $topbar_on_index = true; include BASE_PATH . '/shared/includes/public_topbar.php'; ?>
+
 <!-- ==================== HERO ==================== -->
 <header class="hero" id="top">
   <div class="hero-photo"></div>
   <div class="hero-photo-duotone"></div>
-  <div class="hero-deco">
-    <div class="tint"></div>
-    <div class="grid"></div>
-    <div class="blob b1"></div>
-    <div class="blob b2"></div>
-    <span class="spark" style="top:120px;left:8%;">✦</span>
-    <span class="spark" style="top:190px;right:10%;">✦</span>
-    <span class="spark" style="top:70px;right:26%;">✦</span>
-    <div class="noise"></div>
-    <div class="tint-top"></div>
-  </div>
+  <div class="hero-scrim"></div>
 
   <div class="wrap hero-inner">
-    <h1>Shape your future at <span class="accent">Greenfield Senior High School.</span></h1>
+    <span class="hero-eyebrow">Senior High School</span>
+    <h1>Shape your future at Greenfield</h1>
     <p class="lead">Discover the strand that fits your goals, build the skills that matter, and take your next step with confidence.</p>
     <div class="hero-actions">
       <a href="admission" class="btn btn-primary">Start Enrollment</a>
@@ -391,10 +332,12 @@ header("Pragma: no-cache");
         <a href="#strands" class="btn btn-primary">Explore Our Strands →</a>
       </div>
 
-      <img src="/Enrollment_system/assets/images/logo2.png" alt="Greenfield Senior High School" class="about-logo">
+      <img src="<?= APP_URL ?>/assets/images/logo2.png" alt="Greenfield Senior High School" class="about-logo">
     </div>
   </div>
 </section>
+
+<div class="wrap"><hr class="section-rule"></div>
 
 <!-- ==================== TRACKS & STRANDS (kept from the original page) ==================== -->
 <section id="strands">
@@ -406,13 +349,17 @@ header("Pragma: no-cache");
       <p>Five DepEd-recognized tracks, each built around where you want to go after Grade 12.</p>
     </div>
 
+    <div class="strand-stage">
+    <button type="button" class="strand-nav-btn strand-side strand-side-prev" id="strandPrev" aria-label="Previous strand">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
     <div class="strand-viewport">
       <div class="strand-gallery" id="strandGallery">
 
         <!-- STEM -->
         <a class="strand-col" href="admission?strand=STEM">
           <span class="strand-photo">
-            <img src="/Enrollment_system/assets/images/admission_strand/STEM.png" alt="">
+            <img src="<?= APP_URL ?>/assets/images/admission_strand/STEM.png" alt="">
             <span class="strand-photo-label">STEM</span>
           </span>
           <span class="strand-caption">
@@ -423,7 +370,7 @@ header("Pragma: no-cache");
         <!-- ABM -->
         <a class="strand-col" href="admission?strand=ABM">
           <span class="strand-photo">
-            <img src="/Enrollment_system/assets/images/admission_strand/ABM.jpeg" alt="">
+            <img src="<?= APP_URL ?>/assets/images/admission_strand/ABM.jpeg" alt="">
             <span class="strand-photo-label">ABM</span>
           </span>
           <span class="strand-caption">
@@ -434,7 +381,7 @@ header("Pragma: no-cache");
         <!-- HUMSS -->
         <a class="strand-col" href="admission?strand=HUMSS">
           <span class="strand-photo">
-            <img src="/Enrollment_system/assets/images/admission_strand/HUMSS.jpg" alt="">
+            <img src="<?= APP_URL ?>/assets/images/admission_strand/HUMSS.jpg" alt="">
             <span class="strand-photo-label">HUMSS</span>
           </span>
           <span class="strand-caption">
@@ -445,7 +392,7 @@ header("Pragma: no-cache");
         <!-- GAS -->
         <a class="strand-col" href="admission?strand=GAS">
           <span class="strand-photo">
-            <img src="/Enrollment_system/assets/images/admission_strand/GAS.png" alt="">
+            <img src="<?= APP_URL ?>/assets/images/admission_strand/GAS.png" alt="">
             <span class="strand-photo-label">GAS</span>
           </span>
           <span class="strand-caption">
@@ -456,7 +403,7 @@ header("Pragma: no-cache");
         <!-- TVL-ICT -->
         <a class="strand-col" href="admission?strand=TVL-ICT">
           <span class="strand-photo">
-            <img src="/Enrollment_system/assets/images/admission_strand/ICT.jpg" alt="">
+            <img src="<?= APP_URL ?>/assets/images/admission_strand/ICT.jpg" alt="">
             <span class="strand-photo-label">TVL-ICT</span>
           </span>
           <span class="strand-caption">
@@ -465,6 +412,10 @@ header("Pragma: no-cache");
         </a>
 
       </div>
+    </div>
+    <button type="button" class="strand-nav-btn strand-side strand-side-next" id="strandNext" aria-label="Next strand">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
     </div>
 
     <div class="strand-dots" id="strandDots">
@@ -476,12 +427,6 @@ header("Pragma: no-cache");
     </div>
 
     <div class="strand-controls">
-      <button type="button" class="strand-nav-btn" id="strandPrev" aria-label="Previous strand">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <button type="button" class="strand-nav-btn strand-nav-next" id="strandNext" aria-label="Next strand">
-        <svg viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
       <button type="button" class="strand-nav-btn" id="strandPlayPause" aria-label="Pause carousel">
         <svg id="strandPlayPauseIcon" viewBox="0 0 24 24" fill="none"><path d="M8 6v12M16 6v12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
@@ -491,30 +436,7 @@ header("Pragma: no-cache");
   </div>
 </section>
 
-<!-- ==================== FULL-BLEED BAND ==================== -->
-<section>
-  <div class="wrap">
-    <div class="band">
-      <div class="band-deco"></div>
-      <div class="band-grid">
-        <h2>Learn beyond the classroom, with mentors who know your name.</h2>
-        <div class="band-badge"><strong>5</strong><span>Tracks</span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ==================== STATEMENT STRIP ==================== -->
-<section class="section-alt">
-  <div class="wrap">
-    <div class="statement">
-      <div class="statement-icon">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.9 6.3 6.9.6-5.2 4.6 1.6 6.8-6.2-3.7-6.2 3.7 1.6-6.8L2.2 8.9l6.9-.6L12 2z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
-      </div>
-      <p class="big">We're changing what senior high feels like — smaller sections, real mentorship, and a campus built around five clear paths forward.</p>
-    </div>
-  </div>
-</section>
+<div class="wrap"><hr class="section-rule"></div>
 
 <!-- ==================== HOW TO ENROLL ==================== -->
 <section id="journey">
@@ -757,7 +679,7 @@ header("Pragma: no-cache");
       body.set('identifier', identifier);
       body.set('website', document.getElementById('statusWebsite').value);
 
-      fetch('/Enrollment_system/ajax/status_lookup', {
+      fetch('<?= APP_URL ?>/ajax/status_lookup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString()

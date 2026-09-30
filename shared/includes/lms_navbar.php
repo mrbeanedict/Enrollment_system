@@ -19,7 +19,7 @@ if (!isset($conn)) {
 }
 
 $current = basename($_SERVER['PHP_SELF']);
-$academicsPages = ['student_lessons.php', 'student_discussions.php', 'student_assignments.php', 'student_quizzes.php', 'take_quiz.php'];
+$academicsPages = ['student_stream.php', 'student_lessons.php', 'student_discussions.php', 'student_assignments.php', 'student_quizzes.php', 'take_quiz.php', 'student_people.php'];
 $academicsActive = in_array($current, $academicsPages, true);
 
 // Plain pill tab — the primary, always-visible tabs (Overview, My Courses).
@@ -74,92 +74,70 @@ $profile_name = trim(($sb_given_name ?? '') . ' ' . ($sb_family_name ?? '')) ?: 
 $profile_role = $sb_section_name ?: 'Student';
 
 // ── Notification bell — same shape as staff/staff_notifications.php,
-// scoped to recipient_type='student' (see notify.php). Same underlying
-// rows as the Student Portal's bell (student_topbar_right.php) — just a
-// separate session/cookie (STUDENT_LMS_SESSID) for the same person, so
-// marking read here is also reflected there and vice versa.
+// scoped to recipient_type='student' (see notify.php) AND to LMS-origin
+// rows only (link starts with roles/lms/ — every notify_student_users()
+// call site already passes such a link for LMS business like new lessons,
+// quizzes, discussion replies). This used to share the exact same rows as
+// the Student Portal's bell (student_topbar_right.php), which meant
+// portal-only notifications like a declined payment showed up here too —
+// the link-prefix filter is what actually separates the two bells now.
 $lms_notif_user_id = (int) ($_SESSION['user_student_id'] ?? 0);
 $lms_notifs = [];
 $lms_unread = 0;
 $lms_n_stmt = mysqli_prepare($conn, "
-    SELECT notification_id, message, link, is_read, created_at
-    FROM notifications WHERE user_id = ? AND recipient_type = 'student' ORDER BY created_at DESC LIMIT 10
+    SELECT notification_id, message, link, type, is_read, created_at, " . notif_group_sql() . "
+    FROM notifications WHERE user_id = ? AND recipient_type = 'student' AND link LIKE 'roles/lms/%' ORDER BY created_at DESC LIMIT 30
 ");
 mysqli_stmt_bind_param($lms_n_stmt, "i", $lms_notif_user_id);
 mysqli_stmt_execute($lms_n_stmt);
 $lms_notifs = mysqli_stmt_get_result($lms_n_stmt)->fetch_all(MYSQLI_ASSOC);
 mysqli_stmt_close($lms_n_stmt);
 
-$lms_uc_stmt = mysqli_prepare($conn, "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND recipient_type = 'student' AND is_read = 0");
+$lms_uc_stmt = mysqli_prepare($conn, "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND recipient_type = 'student' AND is_read = 0 AND link LIKE 'roles/lms/%'");
 mysqli_stmt_bind_param($lms_uc_stmt, "i", $lms_notif_user_id);
 mysqli_stmt_execute($lms_uc_stmt);
 mysqli_stmt_bind_result($lms_uc_stmt, $lms_unread);
 mysqli_stmt_fetch($lms_uc_stmt);
 mysqli_stmt_close($lms_uc_stmt);
-
-function lms_time_ago($dt) {
-    $diff = time() - strtotime($dt);
-    if ($diff < 60) return 'just now';
-    if ($diff < 3600) return floor($diff / 60) . 'm ago';
-    if ($diff < 86400) return floor($diff / 3600) . 'h ago';
-    return floor($diff / 86400) . 'd ago';
-}
 ?>
 
 <!-- SweetAlert2 -->
 <script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
+<?php require_once __DIR__ . '/ui_modal_css.php'; ?>
 <script src="<?= APP_URL ?>/assets/js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-storage-key="sg_tab_token_lms" data-logout-url="<?= APP_URL ?>/roles/lms/lms_logout"></script>
 
 <div class="page-loader" id="pageLoader"><div class="page-loader-spinner"></div></div>
 
-<nav class="lms-foldernav" id="lmsFolderNav">
+<nav class="lms-foldernav" id="lmsFolderNav" aria-label="Student LMS">
+  <!-- Row 1: brand, search, notifications, account -->
   <div class="lms-foldernav-inner">
     <a href="<?= APP_URL ?>/roles/lms/lms_home" class="lms-foldernav-logo">
-      <img src="<?= APP_URL ?>/assets/images/log_ui.png" alt="">
-      <span class="lms-foldernav-logo-text">Greenfield Senior High School</span>
+      <span class="lms-foldernav-logo-tile"><img src="<?= APP_URL ?>/assets/images/log_ui.png" alt=""></span>
+      <span class="lms-foldernav-logo-text">Greenfield SHS</span>
     </a>
 
-    <button type="button" class="lms-foldernav-toggle" id="lmsFolderNavToggle" aria-label="Toggle menu"><span></span><span></span><span></span></button>
-
-    <div class="lms-foldernav-tabs" id="lmsFolderNavTabs">
-      <?php lmsNavTab(APP_URL . '/roles/lms/lms_home', 'Overview', $current, 'lms_home.php'); ?>
-      <?php lmsNavTab(APP_URL . '/roles/lms/my_courses', 'My Courses', $current, 'my_courses.php'); ?>
-
-      <div class="lms-navtab-dropdown<?= $academicsActive ? ' open-active' : '' ?>" id="lmsAcademicsDropdown">
-        <button type="button" class="lms-navtab lms-navtab-toggle<?= $academicsActive ? ' active' : '' ?>" id="lmsAcademicsToggle">
-          <span class="lms-navtab-label">Academics</span> <?= $ico_chevron ?>
-        </button>
-        <div class="lms-navtab-panel">
-          <?php lmsNavPanelLink(APP_URL . '/roles/lms/student_lessons', 'Lessons', $current, 'student_lessons.php'); ?>
-          <?php lmsNavPanelLink(APP_URL . '/roles/lms/student_discussions', 'Discussions', $current, 'student_discussions.php'); ?>
-          <?php lmsNavPanelLink(APP_URL . '/roles/lms/student_assignments', 'Assignments', $current, 'student_assignments.php'); ?>
-          <?php lmsNavPanelLink(APP_URL . '/roles/lms/student_quizzes', 'Quizzes', $current, 'student_quizzes.php'); ?>
-        </div>
+    <form class="lms-search" role="search" id="lmsSearch" autocomplete="off" onsubmit="return false;">
+      <svg class="lms-search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" id="lmsSearchInput" class="lms-search-input" placeholder="Search courses, lessons…"
+             aria-label="Search courses, lessons, assignments and quizzes" role="combobox" aria-expanded="false"
+             aria-controls="lmsSearchList" aria-autocomplete="list" maxlength="60">
+      <div class="lms-search-panel" id="lmsSearchPanel" hidden>
+        <div class="lms-search-status" id="lmsSearchStatus" role="status" aria-live="polite"></div>
+        <ul class="lms-search-list" id="lmsSearchList" role="listbox" aria-label="Search results"></ul>
       </div>
-    </div>
+    </form>
 
     <div class="lms-foldernav-right">
       <div class="lms-notif-wrap">
-        <button type="button" class="lms-foldernav-notif" id="lmsNotifBell" aria-label="Notifications" title="Notifications">
+        <button type="button" class="lms-foldernav-notif" id="lmsNotifBell" aria-label="Notifications<?= $lms_unread > 0 ? ' (unread)' : '' ?>" title="Notifications">
           <?= $ico_bell ?>
           <?php if ($lms_unread > 0): ?><span class="lms-foldernav-notif-dot"></span><?php endif; ?>
         </button>
         <div class="lms-notif-dropdown" id="lmsNotifDropdown">
           <div class="lms-notif-header">Notifications</div>
-          <?php if (!$lms_notifs): ?>
-            <div class="lms-notif-empty">No notifications yet.</div>
-          <?php else: ?>
-            <?php foreach ($lms_notifs as $lms_n): ?>
-              <a href="<?= APP_URL . '/' . htmlspecialchars($lms_n['link']) ?>" class="lms-notif-item<?= $lms_n['is_read'] ? '' : ' unread' ?>">
-                <div class="lms-notif-msg"><?= htmlspecialchars($lms_n['message']) ?></div>
-                <div class="lms-notif-time"><?= lms_time_ago($lms_n['created_at']) ?></div>
-              </a>
-            <?php endforeach; ?>
-          <?php endif; ?>
+          <?php notif_render_list('lms', $lms_notifs); ?>
         </div>
       </div>
-
-      <span class="lms-foldernav-divider"></span>
 
       <div class="lms-foldernav-profile-wrapper" id="lmsProfileWrapper">
         <button type="button" class="lms-foldernav-profile" id="lmsProfileToggle" aria-haspopup="true" aria-expanded="false" aria-label="<?= htmlspecialchars($profile_name) ?> — account menu" title="<?= htmlspecialchars($profile_name) ?>">
@@ -167,19 +145,45 @@ function lms_time_ago($dt) {
             <?php if (!empty($sb_photo_path)): ?>
               <img src="<?= APP_URL ?>/roles/student/portal/student_photo?portal=lms" alt="">
             <?php else: ?>
-              <?= strtoupper(substr($profile_name, 0, 1)) ?>
+              <?= htmlspecialchars(strtoupper(mb_substr(trim($sb_given_name ?? $profile_name), 0, 1) . mb_substr(trim($sb_family_name ?? ''), 0, 1))) ?>
             <?php endif; ?>
           </span>
           <span class="lms-foldernav-profile-text">
             <span class="lms-foldernav-profile-name"><?= htmlspecialchars($profile_name) ?></span>
             <span class="lms-foldernav-profile-role"><?= htmlspecialchars($profile_role) ?></span>
           </span>
-          <span class="lms-foldernav-profile-chevron"><?= $ico_chevron ?></span>
+          <span class="lms-foldernav-profile-chevron" aria-hidden="true"><?= $ico_chevron ?></span>
         </button>
+        <!-- Menu design: "Profile dropdown" in shared/modal.php -->
         <div class="lms-foldernav-dropdown" id="lmsProfileDropdown">
-          <a href="<?= APP_URL ?>/roles/student/portal/student_profile?portal=lms" class="lms-foldernav-dropdown-item"><span>Profile</span></a>
-          <a href="<?= APP_URL ?>/roles/lms/lms_logout" class="lms-foldernav-dropdown-item lms-foldernav-dropdown-logout" id="lmsFolderLogoutBtn"><span>Logout</span></a>
+          <a href="<?= APP_URL ?>/roles/student/portal/student_profile?portal=lms" class="lms-foldernav-dropdown-item">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 20c1.4-3.6 4.3-5.5 7.5-5.5s6.1 1.9 7.5 5.5"/></svg>
+            <span>Profile</span>
+          </a>
+          <div class="lms-foldernav-dropdown-divider" role="separator"></div>
+          <a href="<?= APP_URL ?>/roles/lms/lms_logout" class="lms-foldernav-dropdown-item lms-foldernav-dropdown-logout" id="lmsFolderLogoutBtn">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 8V6.5A2.5 2.5 0 0 1 11.5 4H17a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5.5A2.5 2.5 0 0 1 9 17.5V16"/><path stroke-linecap="round" stroke-linejoin="round" d="M3.5 12H14"/><path stroke-linecap="round" stroke-linejoin="round" d="M7 8.5 3.5 12 7 15.5"/></svg>
+            <span>Logout</span>
+          </a>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: section tabs -->
+  <div class="lms-foldernav-tabs" id="lmsFolderNavTabs">
+    <?php lmsNavTab(APP_URL . '/roles/lms/lms_home', 'Overview', $current, 'lms_home.php'); ?>
+    <?php lmsNavTab(APP_URL . '/roles/lms/my_courses', 'My Courses', $current, 'my_courses.php'); ?>
+
+    <div class="lms-navtab-dropdown<?= $academicsActive ? ' open-active' : '' ?>" id="lmsAcademicsDropdown">
+      <button type="button" class="lms-navtab lms-navtab-toggle<?= $academicsActive ? ' active' : '' ?>" id="lmsAcademicsToggle" aria-haspopup="true" aria-expanded="false">
+        <span class="lms-navtab-label">Academics</span> <?= $ico_chevron ?>
+      </button>
+      <div class="lms-navtab-panel">
+        <?php lmsNavPanelLink(APP_URL . '/roles/lms/student_lessons', 'Lessons', $current, 'student_lessons.php'); ?>
+        <?php lmsNavPanelLink(APP_URL . '/roles/lms/student_discussions', 'Discussions', $current, 'student_discussions.php'); ?>
+        <?php lmsNavPanelLink(APP_URL . '/roles/lms/student_assignments', 'Assignments', $current, 'student_assignments.php'); ?>
+        <?php lmsNavPanelLink(APP_URL . '/roles/lms/student_quizzes', 'Quizzes', $current, 'student_quizzes.php'); ?>
       </div>
     </div>
   </div>
@@ -187,23 +191,89 @@ function lms_time_ago($dt) {
 
 <script>
 (function () {
-  const navToggle    = document.getElementById('lmsFolderNavToggle');
-  const navTabs       = document.getElementById('lmsFolderNavTabs');
   const academicsDD   = document.getElementById('lmsAcademicsDropdown');
   const academicsBtn  = document.getElementById('lmsAcademicsToggle');
 
-  navToggle.addEventListener('click', function () {
-    navTabs.classList.toggle('open');
-  });
-
+  function setAcademics(open) {
+    academicsDD.classList.toggle('open', open);
+    academicsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
   academicsBtn.addEventListener('click', function (e) {
     e.stopPropagation();
-    academicsDD.classList.toggle('open');
+    setAcademics(!academicsDD.classList.contains('open'));
+  });
+  document.addEventListener('click', function (e) {
+    if (!academicsDD.contains(e.target)) setAcademics(false);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && academicsDD.classList.contains('open')) { setAcademics(false); academicsBtn.focus(); }
   });
 
-  document.addEventListener('click', function (e) {
-    if (!academicsDD.contains(e.target)) {
-      academicsDD.classList.remove('open');
+  /* ── Search: courses, lessons, assignments, quizzes (ajax/lms_search) ──
+        Combobox pattern — arrows move through results, Enter opens,
+        Esc closes, "/" anywhere jumps to the box. */
+  const sForm   = document.getElementById('lmsSearch');
+  const sInput  = document.getElementById('lmsSearchInput');
+  const sPanel  = document.getElementById('lmsSearchPanel');
+  const sList   = document.getElementById('lmsSearchList');
+  const sStatus = document.getElementById('lmsSearchStatus');
+  let sTimer = null, sCtrl = null, sActive = -1, sLast = '';
+
+  const esc = function (t) { return String(t).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+  function options() { return Array.prototype.slice.call(sList.querySelectorAll('[role="option"]')); }
+  function openPanel(open) { sPanel.hidden = !open; sInput.setAttribute('aria-expanded', open ? 'true' : 'false'); if (!open) setActive(-1); }
+  function setActive(i) {
+    const opts = options();
+    opts.forEach(function (o, k) { o.classList.toggle('is-active', k === i); o.setAttribute('aria-selected', k === i ? 'true' : 'false'); });
+    sActive = i;
+    if (i >= 0 && opts[i]) { sInput.setAttribute('aria-activedescendant', opts[i].id); opts[i].scrollIntoView({ block: 'nearest' }); }
+    else sInput.removeAttribute('aria-activedescendant');
+  }
+  function render(q, groups) {
+    let html = '', n = 0;
+    groups.forEach(function (g) {
+      html += '<li class="lms-search-group" role="presentation">' + esc(g.label) + '</li>';
+      g.items.forEach(function (it) {
+        html += '<li role="option" id="lmsSearchOpt' + n + '" class="lms-search-opt" data-url="' + esc(it.url) + '" aria-selected="false">'
+              + '<span class="t">' + esc(it.title) + '</span><span class="s">' + esc(it.sub) + '</span></li>';
+        n++;
+      });
+    });
+    sList.innerHTML = html;
+    sStatus.textContent = n ? n + (n === 1 ? ' result' : ' results') : 'No matches for “' + q + '”';
+    sStatus.classList.toggle('is-empty', !n);
+    openPanel(true);
+  }
+  function search() {
+    const q = sInput.value.trim();
+    if (q.length < 2) { sLast = ''; sList.innerHTML = ''; openPanel(false); return; }
+    if (q === sLast) { openPanel(true); return; }
+    sLast = q;
+    if (sCtrl) sCtrl.abort();
+    sCtrl = new AbortController();
+    sStatus.textContent = 'Searching…'; sStatus.classList.remove('is-empty'); openPanel(true);
+    fetch('<?= APP_URL ?>/ajax/lms_search?q=' + encodeURIComponent(q), { signal: sCtrl.signal, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (q === sInput.value.trim()) render(q, j.groups || []); })
+      .catch(function (e) { if (e.name !== 'AbortError') { sStatus.textContent = 'Search is unavailable right now.'; sList.innerHTML = ''; } });
+  }
+  function go(i) { const o = options()[i]; if (o) window.location.href = o.dataset.url; }
+
+  sInput.addEventListener('input', function () { clearTimeout(sTimer); sTimer = setTimeout(search, 180); });
+  sInput.addEventListener('focus', function () { if (sInput.value.trim().length >= 2) search(); });
+  sInput.addEventListener('keydown', function (e) {
+    const n = options().length;
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (sPanel.hidden) search(); else if (n) setActive((sActive + 1) % n); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); if (n) setActive(sActive <= 0 ? n - 1 : sActive - 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); go(sActive >= 0 ? sActive : 0); }
+    else if (e.key === 'Escape') { if (!sPanel.hidden) { e.stopPropagation(); openPanel(false); } else { sInput.value = ''; } }
+  });
+  sList.addEventListener('mousedown', function (e) { const o = e.target.closest('[role="option"]'); if (o) { e.preventDefault(); window.location.href = o.dataset.url; } });
+  sList.addEventListener('mousemove', function (e) { const o = e.target.closest('[role="option"]'); if (o) setActive(options().indexOf(o)); });
+  document.addEventListener('click', function (e) { if (!sForm.contains(e.target)) openPanel(false); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === '/' && !e.ctrlKey && !e.metaKey && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName) && !document.activeElement.isContentEditable) {
+      e.preventDefault(); sInput.focus();
     }
   });
 
@@ -271,6 +341,7 @@ function lms_time_ago($dt) {
         }
         Swal.fire({
           title: 'Log out?',
+          customClass: { popup: 'ui-swal-logout' },
           text: 'You will be returned to the login page.',
           icon: 'question',
           showCancelButton: true,

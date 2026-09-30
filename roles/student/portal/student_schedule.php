@@ -83,12 +83,15 @@ require_once __DIR__ . '/../../../bootstrap.php';
 
     if ($enrollment && $enrollment['section_id'] && !$sem2_not_yet_enrolled) {
         $sched_stmt = mysqli_prepare($conn, "
-            SELECT sub.subject_name, ss.day, ss.start_time, ss.end_time, ss.room, CONCAT(t.given_name, ' ', t.family_name) AS teacher_name
+            SELECT sub.subject_name, m.day, m.start_time, m.end_time, m.room, CONCAT(t.given_name, ' ', t.family_name) AS teacher_name
             FROM section_subjects ss
             JOIN subjects sub ON sub.subject_id = ss.subject_id
             LEFT JOIN teachers t ON t.teacher_id = ss.teacher_id
+            -- One row per weekly class meeting (a subject can meet several times).
+            LEFT JOIN section_subject_meetings m
+                   ON m.section_id = ss.section_id AND m.subject_id = ss.subject_id AND m.semester = ss.semester
             WHERE ss.section_id = ? AND ss.semester = ?
-            ORDER BY FIELD(ss.day, 'Mon','Tue','Wed','Thu','Fri'), ss.start_time
+            ORDER BY FIELD(m.day, 'Mon','Tue','Wed','Thu','Fri'), m.start_time
         ");
         mysqli_stmt_bind_param($sched_stmt, "ii", $enrollment['section_id'], $selected_sem);
         mysqli_stmt_execute($sched_stmt);

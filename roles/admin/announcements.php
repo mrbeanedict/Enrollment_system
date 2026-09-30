@@ -110,14 +110,14 @@ $conn->close();
     <div class="content">
 
       <div class="staff-hero">
-        <p class="staff-breadcrumb"><span>Admin Portal</span> / <span class="staff-breadcrumb-current">Announcements</span></p>
+        <p class="page-eyebrow">Admin Portal</p>
         <h1 class="page-title">Announcements</h1>
         <p class="page-sub">Published announcements appear on every student's dashboard.</p>
       </div>
 
       <div class="staff-overlap">
 
-      <?php if ($success): ?><div class="alert alert-success"><?= htmlspecialchars($success) ?></div><?php endif; ?>
+      <?php if ($success): ?><div class="alert alert-success" data-ui-toast><?= htmlspecialchars($success) ?></div><?php endif; ?>
       <?php if ($error):   ?><div class="alert alert-error"><?= htmlspecialchars($error) ?></div><?php endif; ?>
 
       <div class="card">

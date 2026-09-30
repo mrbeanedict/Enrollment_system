@@ -19,6 +19,29 @@ function disc_owns_class(mysqli $conn, int $teacher_id, int $subject_id, int $se
     return $ok;
 }
 
+// Reverse direction of roles/lms/student_discussions.php's disc_teacher_targets() —
+// same enrolled-students query already proven in
+// roles/teacher/teacher_lessons.php's lesson_notify_targets().
+function disc_student_targets(mysqli $conn, int $subject_id, int $section_id, string $sy): array {
+    $stmt = $conn->prepare("
+        SELECT us.user_student_id
+        FROM enrollment_subjects es
+        JOIN enrollments e ON e.enrollment_id = es.enrollment_id
+        JOIN users_student us ON us.student_id = e.student_id
+        WHERE es.subject_id = ? AND es.section_id = ? AND e.school_year = ? AND e.status = 'enrolled'
+    ");
+    $stmt->bind_param('iis', $subject_id, $section_id, $sy);
+    $stmt->execute();
+    $ids = array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC), 'user_student_id');
+    $stmt->close();
+    return $ids;
+}
+
+// Where a student lands for an announcement: its card on the subject Stream.
+function disc_stream_link(int $subject_id, string $sy, int $thread_id): string {
+    return 'roles/lms/student_stream?' . http_build_query(['subject_id' => $subject_id, 'sy' => $sy]) . '#ann-' . $thread_id;
+}
+
 // ── Start a new thread ───────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_thread'])) {
     $subject_id = (int) ($_POST['subject_id'] ?? 0);
@@ -26,22 +49,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_thread'])) {
     $sy         = trim($_POST['school_year'] ?? '');
     $title      = trim($_POST['title'] ?? '');
     $body       = trim($_POST['body'] ?? '');
+    // 'announcement' posts to the class Stream (roles/lms/student_stream.php)
+    // instead of the Discussions list; its later posts are class comments.
+    $kind       = ($_POST['kind'] ?? '') === 'announcement' ? 'announcement' : 'discussion';
+    $is_ann     = $kind === 'announcement';
     $return_qs  = http_build_query(['subject_id' => $subject_id, 'section_id' => $section_id, 'sy' => $sy]);
 
     if (!disc_owns_class($conn, $teacher_id, $subject_id, $section_id, $sy)) {
         $_SESSION['dc_flash'] = 'That class was not found among your assignments.';
         $_SESSION['dc_flash_type'] = 'error';
     } elseif ($title === '' || $body === '') {
-        $_SESSION['dc_flash'] = 'Please provide a thread title and an opening message.';
+        $_SESSION['dc_flash'] = $is_ann ? 'Please provide an announcement title and message.' : 'Please provide a thread title and an opening message.';
         $_SESSION['dc_flash_type'] = 'error';
     } else {
         $conn->begin_transaction();
         try {
             $ins = $conn->prepare("
-                INSERT INTO discussion_threads (subject_id, section_id, school_year, title, created_by_type, created_by_teacher_id)
-                VALUES (?, ?, ?, ?, 'teacher', ?)
+                INSERT INTO discussion_threads (subject_id, section_id, school_year, title, kind, created_by_type, created_by_teacher_id)
+                VALUES (?, ?, ?, ?, ?, 'teacher', ?)
             ");
-            $ins->bind_param('iissi', $subject_id, $section_id, $sy, $title, $teacher_id);
+            $ins->bind_param('iisssi', $subject_id, $section_id, $sy, $title, $kind, $teacher_id);
             $ins->execute();
             $thread_id = $ins->insert_id;
             $ins->close();
@@ -52,12 +79,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_thread'])) {
             $insp->close();
 
             $conn->commit();
+
+            notify_student_users(
+                $conn,
+                disc_student_targets($conn, $subject_id, $section_id, $sy),
+                $is_ann ? "New announcement: \"$title\"." : "New discussion thread: \"$title\".",
+                $is_ann ? disc_stream_link($subject_id, $sy, $thread_id) : 'roles/lms/student_discussions'
+            );
+
             $return_qs .= '&thread_id=' . $thread_id;
-            $_SESSION['dc_flash'] = "\"$title\" started.";
+            $_SESSION['dc_flash'] = $is_ann ? "Announcement \"$title\" posted to the class Stream." : "\"$title\" started.";
             $_SESSION['dc_flash_type'] = 'success';
         } catch (Exception $e) {
             $conn->rollback();
-            $_SESSION['dc_flash'] = 'Could not start the thread. Please try again.';
+            $_SESSION['dc_flash'] = $is_ann ? 'Could not post the announcement. Please try again.' : 'Could not start the thread. Please try again.';
             $_SESSION['dc_flash_type'] = 'error';
         }
     }
@@ -76,17 +111,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply'])) {
 
     // Confirm this thread belongs to a class this teacher actually teaches
     // and isn't locked — never trust the posted thread_id blindly.
-    $chk = $conn->prepare("SELECT is_locked FROM discussion_threads WHERE thread_id=? AND subject_id=? AND section_id=? AND school_year=?");
+    $chk = $conn->prepare("SELECT title, kind, is_locked FROM discussion_threads WHERE thread_id=? AND subject_id=? AND section_id=? AND school_year=?");
     $chk->bind_param('iiis', $thread_id, $subject_id, $section_id, $sy);
     $chk->execute();
     $thread = $chk->get_result()->fetch_assoc();
     $chk->close();
+    $is_ann = $thread && $thread['kind'] === 'announcement';
 
     if (!$thread || !disc_owns_class($conn, $teacher_id, $subject_id, $section_id, $sy)) {
         $_SESSION['dc_flash'] = 'That thread was not found among your assignments.';
         $_SESSION['dc_flash_type'] = 'error';
     } elseif ((int) $thread['is_locked'] === 1) {
-        $_SESSION['dc_flash'] = 'This thread is locked.';
+        $_SESSION['dc_flash'] = $is_ann ? 'Comments are turned off for this announcement.' : 'This thread is locked.';
         $_SESSION['dc_flash_type'] = 'error';
     } elseif ($body === '') {
         $_SESSION['dc_flash'] = 'Please write a reply.';
@@ -96,7 +132,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply'])) {
         $ins->bind_param('iis', $thread_id, $teacher_id, $body);
         $ins->execute();
         $ins->close();
-        $_SESSION['dc_flash'] = 'Reply posted.';
+
+        notify_student_users(
+            $conn,
+            disc_student_targets($conn, $subject_id, $section_id, $sy),
+            $is_ann ? "Your teacher commented on \"{$thread['title']}\"." : 'New reply in a discussion thread.',
+            $is_ann ? disc_stream_link($subject_id, $sy, $thread_id) : 'roles/lms/student_discussions'
+        );
+
+        $_SESSION['dc_flash'] = $is_ann ? 'Comment posted.' : 'Reply posted.';
         $_SESSION['dc_flash_type'] = 'success';
     }
     header("Location: teacher_discussions?" . $return_qs);
@@ -130,7 +174,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_post'])) {
     $sy         = trim($_POST['school_year'] ?? '');
     $return_qs  = http_build_query(['subject_id' => $subject_id, 'section_id' => $section_id, 'sy' => $sy, 'thread_id' => $thread_id]);
 
-    if (disc_owns_class($conn, $teacher_id, $subject_id, $section_id, $sy)) {
+    // An announcement's opening post is the announcement text itself — it
+    // goes away with the whole announcement (Delete in the list), never alone.
+    $op = $conn->prepare("SELECT MIN(dp.post_id) FROM discussion_posts dp JOIN discussion_threads dt ON dt.thread_id = dp.thread_id WHERE dt.thread_id = ? AND dt.kind = 'announcement'");
+    $op->bind_param('i', $thread_id);
+    $op->execute();
+    $opening_id = (int) ($op->get_result()->fetch_row()[0] ?? 0);
+    $op->close();
+
+    if ($opening_id > 0 && $post_id === $opening_id) {
+        $_SESSION['dc_flash'] = 'That is the announcement itself — delete the announcement from the list instead.';
+        $_SESSION['dc_flash_type'] = 'error';
+    } elseif (disc_owns_class($conn, $teacher_id, $subject_id, $section_id, $sy)) {
         $del = $conn->prepare("
             DELETE dp FROM discussion_posts dp
             JOIN discussion_threads dt ON dt.thread_id = dp.thread_id
@@ -273,6 +328,17 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
       .btn-sm:hover { border-color:var(--brand-accent); color:var(--brand-primary); }
       .btn-sm.danger:hover { border-color:#F5C6C2; color:#C0392B; }
       .dc-back { font-size:12px; color:#5A5A72; text-decoration:none; display:inline-block; margin-bottom:.75rem; }
+      .dc-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+      .dc-kind { display:flex; gap:8px; flex-wrap:wrap; border:0; padding:0; margin:0; }
+      .dc-kind label { display:flex; align-items:center; gap:7px; padding:8px 12px; border:0.5px solid #D4D4E0; border-radius:8px; background:#FAFAFC;
+                       font-size:13px; font-weight:600; color:#1A1A2E; cursor:pointer; }
+      .dc-kind label span { font-weight:400; color:#8A8A9A; font-size:12px; }
+      .dc-kind label:has(input:checked) { border-color:var(--brand-primary); background:#fff; box-shadow:0 0 0 1px var(--brand-primary) inset; }
+      .dc-kind input { accent-color:var(--brand-primary); margin:0; }
+      .dc-ann-badge { display:inline-block; margin-right:6px; padding:1px 7px; border-radius:999px; background:var(--brand-primary); color:#fff;
+                      font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; vertical-align:1px; }
+      .dc-ann-note { margin:0 0 .5rem; font-size:12px; color:#8A8A9A; }
+      .dc-ann-comments { margin-top:.75rem; padding-top:.5rem; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:#8A8A9A; }
       .dc-back:hover { color:var(--brand-primary); }
     </style>
 </head>
@@ -321,12 +387,13 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
     $posts = [];
     if ($current !== null) {
         $th_stmt = $conn->prepare("
-            SELECT dt.thread_id, dt.title, dt.is_locked, dt.created_at,
+            SELECT dt.thread_id, dt.title, dt.kind, dt.is_locked, dt.created_at,
                    (SELECT COUNT(*) FROM discussion_posts dp WHERE dp.thread_id = dt.thread_id) AS post_count,
-                   (SELECT MAX(dp.posted_at) FROM discussion_posts dp WHERE dp.thread_id = dt.thread_id) AS last_activity
+                   (SELECT MAX(dp.posted_at) FROM discussion_posts dp WHERE dp.thread_id = dt.thread_id) AS last_activity,
+                   (SELECT MIN(dp.post_id) FROM discussion_posts dp WHERE dp.thread_id = dt.thread_id) AS first_post_id
             FROM discussion_threads dt
             WHERE dt.subject_id=? AND dt.section_id=? AND dt.school_year=?
-            ORDER BY last_activity DESC
+            ORDER BY dt.kind = 'announcement' DESC, last_activity DESC
         ");
         $th_stmt->bind_param('iis', $sel_subject, $sel_section, $sel_sy);
         $th_stmt->execute();
@@ -368,7 +435,7 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
 
     <div class="teacher-content">
 
-      <?php if ($flash): ?><div class="notice notice-<?= htmlspecialchars($flash_type) ?>"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+      <?php if ($flash): ?><div class="notice notice-<?= htmlspecialchars($flash_type) ?>" data-ui-toast><?= htmlspecialchars($flash) ?></div><?php endif; ?>
 
       <?php if (empty($classes)): ?>
         <div class="notice notice-info">No class assignments found yet.</div>
@@ -400,12 +467,24 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
           <a class="dc-back" href="teacher_discussions?subject_id=<?= $sel_subject ?>&section_id=<?= $sel_section ?>&sy=<?= urlencode($sel_sy) ?>">&larr; Back to threads</a>
 
           <div class="teacher-panel-block">
+            <?php $is_ann = $thread_detail['kind'] === 'announcement'; ?>
             <div class="dc-thread-title" style="font-size:15px; margin-bottom:.25rem;">
+              <?php if ($is_ann): ?><span class="dc-ann-badge">Announcement</span><?php endif; ?>
               <?= htmlspecialchars($thread_detail['title']) ?>
-              <?php if ($thread_detail['is_locked']): ?><span class="dc-lock-badge">LOCKED</span><?php endif; ?>
+              <?php if ($thread_detail['is_locked']): ?><span class="dc-lock-badge"><?= $is_ann ? 'COMMENTS OFF' : 'LOCKED' ?></span><?php endif; ?>
             </div>
+            <?php if ($is_ann): ?>
+              <p class="dc-ann-note">Shown on the class Stream. Everyone in this class can read and join the comments below.</p>
+            <?php endif; ?>
 
-            <?php foreach ($posts as $p): ?>
+            <?php foreach ($posts as $p):
+              // An announcement's opening post is the announcement itself — it
+              // goes with the announcement (delete that from the list), not
+              // one comment at a time.
+              $is_opening = $is_ann && (int) $p['post_id'] === (int) $thread_detail['first_post_id']; ?>
+              <?php if ($is_ann && !$is_opening && (int) $p['post_id'] === (int) ($posts[1]['post_id'] ?? 0)): ?>
+                <div class="dc-ann-comments">Class comments</div>
+              <?php endif; ?>
               <div class="dc-post">
                 <div class="dc-post-meta">
                   <span class="dc-post-author"><?= htmlspecialchars($p['author_name'] ?? 'User') ?></span>
@@ -413,7 +492,8 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
                   · <?= date('M j, Y g:i A', strtotime($p['posted_at'])) ?>
                 </div>
                 <div class="dc-post-body"><?= nl2br(htmlspecialchars($p['body'])) ?></div>
-                <form method="POST" style="display:inline;" data-confirm="Delete this post?" data-icon="warning">
+                <?php if (!$is_opening): ?>
+                <form method="POST" style="display:inline;" data-confirm="Delete this <?= $is_ann ? 'comment' : 'post' ?>?" data-icon="warning">
                   <input type="hidden" name="post_id" value="<?= (int)$p['post_id'] ?>">
                   <input type="hidden" name="thread_id" value="<?= $sel_thread ?>">
                   <input type="hidden" name="subject_id" value="<?= $sel_subject ?>">
@@ -421,16 +501,17 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
                   <input type="hidden" name="school_year" value="<?= htmlspecialchars($sel_sy) ?>">
                   <button type="submit" name="delete_post" class="btn-sm danger" style="margin-top:4px;">Delete</button>
                 </form>
+                <?php endif; ?>
               </div>
             <?php endforeach; ?>
 
             <div style="margin-top:1rem; display:flex; gap:8px; flex-wrap:wrap;">
-              <form method="POST" style="display:inline;" data-confirm="<?= $thread_detail['is_locked'] ? 'Unlock' : 'Lock' ?> this thread?" data-icon="question">
+              <form method="POST" style="display:inline;" data-confirm="<?= $is_ann ? ($thread_detail['is_locked'] ? 'Turn comments back on for this announcement?' : 'Turn off comments for this announcement?') : ($thread_detail['is_locked'] ? 'Unlock this thread?' : 'Lock this thread?') ?>" data-icon="question">
                 <input type="hidden" name="thread_id" value="<?= $sel_thread ?>">
                 <input type="hidden" name="subject_id" value="<?= $sel_subject ?>">
                 <input type="hidden" name="section_id" value="<?= $sel_section ?>">
                 <input type="hidden" name="school_year" value="<?= htmlspecialchars($sel_sy) ?>">
-                <button type="submit" name="toggle_lock" class="btn-sm"><?= $thread_detail['is_locked'] ? 'Unlock Thread' : 'Lock Thread' ?></button>
+                <button type="submit" name="toggle_lock" class="btn-sm"><?= $is_ann ? ($thread_detail['is_locked'] ? 'Turn On Comments' : 'Turn Off Comments') : ($thread_detail['is_locked'] ? 'Unlock Thread' : 'Lock Thread') ?></button>
               </form>
             </div>
 
@@ -440,8 +521,8 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
                 <input type="hidden" name="subject_id" value="<?= $sel_subject ?>">
                 <input type="hidden" name="section_id" value="<?= $sel_section ?>">
                 <input type="hidden" name="school_year" value="<?= htmlspecialchars($sel_sy) ?>">
-                <textarea name="body" placeholder="Write a reply" required></textarea>
-                <button type="submit" name="reply" class="btn-primary-dc">Reply</button>
+                <textarea name="body" placeholder="<?= $is_ann ? 'Add a class comment' : 'Write a reply' ?>" required></textarea>
+                <button type="submit" name="reply" class="btn-primary-dc"><?= $is_ann ? 'Comment' : 'Reply' ?></button>
               </form>
             <?php endif; ?>
           </div>
@@ -453,9 +534,14 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
               <input type="hidden" name="subject_id" value="<?= $sel_subject ?>">
               <input type="hidden" name="section_id" value="<?= $sel_section ?>">
               <input type="hidden" name="school_year" value="<?= htmlspecialchars($sel_sy) ?>">
-              <input type="text" name="title" placeholder="New thread title" required>
-              <textarea name="body" placeholder="Opening message" required></textarea>
-              <button type="submit" name="new_thread" class="btn-primary-dc">Start Thread</button>
+              <fieldset class="dc-kind">
+                <legend class="dc-sr">Post type</legend>
+                <label><input type="radio" name="kind" value="discussion" checked> Discussion thread</label>
+                <label><input type="radio" name="kind" value="announcement"> Class announcement <span>shows on the class Stream; students can comment</span></label>
+              </fieldset>
+              <input type="text" name="title" placeholder="New thread title" required maxlength="150" data-ph-discussion="New thread title" data-ph-announcement="Announcement title">
+              <textarea name="body" placeholder="Opening message" required data-ph-discussion="Opening message" data-ph-announcement="What do you want to tell the class?"></textarea>
+              <button type="submit" name="new_thread" class="btn-primary-dc" data-label-discussion="Start Thread" data-label-announcement="Post Announcement">Start Thread</button>
             </form>
 
             <?php if (empty($threads)): ?>
@@ -465,10 +551,16 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
                 <div class="dc-thread-row">
                   <div>
                     <div class="dc-thread-title">
+                      <?php $t_ann = $t['kind'] === 'announcement'; ?>
+                      <?php if ($t_ann): ?><span class="dc-ann-badge">Announcement</span><?php endif; ?>
                       <a href="teacher_discussions?subject_id=<?= $sel_subject ?>&section_id=<?= $sel_section ?>&sy=<?= urlencode($sel_sy) ?>&thread_id=<?= (int)$t['thread_id'] ?>"><?= htmlspecialchars($t['title']) ?></a>
-                      <?php if ($t['is_locked']): ?><span class="dc-lock-badge">LOCKED</span><?php endif; ?>
+                      <?php if ($t['is_locked']): ?><span class="dc-lock-badge"><?= $t_ann ? 'COMMENTS OFF' : 'LOCKED' ?></span><?php endif; ?>
                     </div>
-                    <div class="dc-thread-meta"><?= (int)$t['post_count'] ?> post<?= (int)$t['post_count'] === 1 ? '' : 's' ?></div>
+                    <?php if ($t_ann): $cc = max(0, (int)$t['post_count'] - 1); ?>
+                      <div class="dc-thread-meta">Posted <?= date('M j, Y', strtotime($t['created_at'])) ?> · <?= $cc ?> comment<?= $cc === 1 ? '' : 's' ?></div>
+                    <?php else: ?>
+                      <div class="dc-thread-meta"><?= (int)$t['post_count'] ?> post<?= (int)$t['post_count'] === 1 ? '' : 's' ?></div>
+                    <?php endif; ?>
                   </div>
                   <div class="dc-thread-menu">
                     <button type="button" class="dc-thread-menu-btn" data-menu-toggle aria-label="Thread options">
@@ -481,7 +573,7 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
                         data-thread-title="<?= htmlspecialchars($t['title'], ENT_QUOTES) ?>">
                         Edit title
                       </button>
-                      <form method="POST" data-confirm="Delete this thread and all its posts? This cannot be undone." data-icon="warning">
+                      <form method="POST" data-confirm="<?= $t_ann ? 'Delete this announcement and all its comments? This cannot be undone.' : 'Delete this thread and all its posts? This cannot be undone.' ?>" data-icon="warning">
                         <input type="hidden" name="thread_id" value="<?= (int)$t['thread_id'] ?>">
                         <input type="hidden" name="subject_id" value="<?= $sel_subject ?>">
                         <input type="hidden" name="section_id" value="<?= $sel_section ?>">
@@ -527,6 +619,16 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
       if (e.key === 'Escape') {
         document.querySelectorAll('.dc-thread-menu-dropdown.open').forEach(function (d) { d.classList.remove('open'); });
       }
+    });
+
+    // New post: wording follows the chosen type (discussion vs announcement).
+    document.querySelectorAll('.dc-kind input[name="kind"]').forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        var form = radio.form, k = radio.value;
+        form.querySelectorAll('[data-ph-' + k + ']').forEach(function (el) { el.placeholder = el.getAttribute('data-ph-' + k); });
+        var btn = form.querySelector('[data-label-' + k + ']');
+        if (btn) btn.textContent = btn.getAttribute('data-label-' + k);
+      });
     });
 
     // Edit thread title — prompt via SweetAlert2 (falls back to native prompt()).

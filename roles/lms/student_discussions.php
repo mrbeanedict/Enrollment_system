@@ -12,37 +12,9 @@ require_once __DIR__ . '/../../bootstrap.php';
 $is_student = require_login('student', null, 'ignore', 'bool');
 $student_id = $is_student ? (int) ($_SESSION['student_id'] ?? 0) : 0;
 
-// Confirm the student is currently enrolled in this exact subject+section+
-// school_year — never trust the posted values blindly.
-function disc_student_owns_class(mysqli $conn, int $student_id, int $subject_id, int $section_id, string $sy): bool {
-    $stmt = $conn->prepare("
-        SELECT 1 FROM enrollments e
-        JOIN section_subjects ss ON ss.section_id = e.section_id AND ss.subject_id = ?
-        WHERE e.student_id = ? AND e.section_id = ? AND e.school_year = ? AND e.status = 'enrolled'
-        LIMIT 1
-    ");
-    $stmt->bind_param('iiis', $subject_id, $student_id, $section_id, $sy);
-    $stmt->execute();
-    $ok = (bool) $stmt->get_result()->fetch_row();
-    $stmt->close();
-    return $ok;
-}
-
-// Every teacher currently assigned to this exact subject/section/school
-// year — not the thread's own created_by_teacher_id, which is null for
-// student-started threads.
-function disc_teacher_targets(mysqli $conn, int $subject_id, int $section_id, string $sy): array {
-    $stmt = $conn->prepare("
-        SELECT t.user_id FROM teacher_assignments ta
-        JOIN teachers t ON t.teacher_id = ta.teacher_id
-        WHERE ta.subject_id = ? AND ta.section_id = ? AND ta.school_year = ? AND ta.is_active = 1
-    ");
-    $stmt->bind_param('iis', $subject_id, $section_id, $sy);
-    $stmt->execute();
-    $ids = array_column($stmt->get_result()->fetch_all(MYSQLI_ASSOC), 'user_id');
-    $stmt->close();
-    return $ids;
-}
+// Ownership check, teacher notification targets, reply/delete — shared
+// with the subject Stream page (announcement comments are replies too).
+require_once BASE_PATH . '/shared/helpers/lms_class.php';
 
 // ── Start a new thread ───────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['new_thread']) && $is_student) {
@@ -105,35 +77,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reply']) && $is_stude
     $body       = trim($_POST['body'] ?? '');
     $return_qs  = http_build_query(['subject_id' => $subject_id, 'section_id' => $section_id, 'sy' => $sy, 'thread_id' => $thread_id]);
 
-    $chk = $conn->prepare("SELECT is_locked FROM discussion_threads WHERE thread_id=? AND subject_id=? AND section_id=? AND school_year=?");
-    $chk->bind_param('iiis', $thread_id, $subject_id, $section_id, $sy);
-    $chk->execute();
-    $thread = $chk->get_result()->fetch_assoc();
-    $chk->close();
-
-    if (!$thread || !disc_student_owns_class($conn, $student_id, $subject_id, $section_id, $sy)) {
-        $_SESSION['dc_flash'] = 'That thread was not found among your subjects.';
-        $_SESSION['dc_flash_type'] = 'error';
-    } elseif ((int) $thread['is_locked'] === 1) {
-        $_SESSION['dc_flash'] = 'This thread is locked.';
-        $_SESSION['dc_flash_type'] = 'error';
-    } elseif ($body === '') {
-        $_SESSION['dc_flash'] = 'Please write a reply.';
-        $_SESSION['dc_flash_type'] = 'error';
-    } else {
-        $ins = $conn->prepare("INSERT INTO discussion_posts (thread_id, posted_by_type, posted_by_student_id, body) VALUES (?, 'student', ?, ?)");
-        $ins->bind_param('iis', $thread_id, $student_id, $body);
-        $ins->execute();
-        $ins->close();
-        $_SESSION['dc_flash'] = 'Reply posted.';
-        $_SESSION['dc_flash_type'] = 'success';
-        notify_teacher_users(
-            $conn,
-            disc_teacher_targets($conn, $subject_id, $section_id, $sy),
-            'New reply in a discussion thread.',
-            'roles/teacher/teacher_discussions'
-        );
-    }
+    [$ok, $msg] = disc_student_reply($conn, $student_id, $thread_id, $subject_id, $section_id, $sy, $body);
+    $_SESSION['dc_flash'] = $msg;
+    $_SESSION['dc_flash_type'] = $ok ? 'success' : 'error';
     header("Location: student_discussions?" . $return_qs);
     exit();
 }
@@ -147,10 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_post']) && $is
     $sy         = trim($_POST['school_year'] ?? '');
     $return_qs  = http_build_query(['subject_id' => $subject_id, 'section_id' => $section_id, 'sy' => $sy, 'thread_id' => $thread_id]);
 
-    $del = $conn->prepare("DELETE FROM discussion_posts WHERE post_id=? AND thread_id=? AND posted_by_type='student' AND posted_by_student_id=?");
-    $del->bind_param('iii', $post_id, $thread_id, $student_id);
-    $del->execute();
-    $del->close();
+    disc_student_delete_post($conn, $student_id, $post_id, $thread_id);
     $_SESSION['dc_flash'] = 'Post deleted.';
     $_SESSION['dc_flash_type'] = 'success';
     header("Location: student_discussions?" . $return_qs);
@@ -170,39 +113,42 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_student.css') ?>">
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_lms.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_lms.css') ?>">
     <style>
-      .dc-picker { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
-      .dc-picker select {
-        appearance: none; -webkit-appearance: none;
-        height:36px; border:1px solid var(--lms-border, #DCE5DE); border-radius:8px;
-        background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 24 16'%3E%3Cpolygon points='2,3 22,3 12,15' fill='%230A3925'/%3E%3C/svg%3E") no-repeat right 12px center;
-        background-size: 12px;
-        padding:0 34px 0 12px; font-size:13px; font-family:inherit; color:#1A1A2E;
-        cursor: pointer; transition: border-color .15s ease;
-      }
-      .dc-picker select:hover, .dc-picker select:focus {
-        outline: none; border-color: var(--lms-ink, #0A3925);
-      }
-      .dc-subject-title { font-size:13px; font-weight:700; color:var(--lms-ink); text-transform:uppercase; letter-spacing:.04em; margin:1rem 0 .5rem; }
-      .dc-subject-title:first-child { margin-top:0; }
-      .dc-thread-row { padding:10px 0; border-bottom:1px solid var(--lms-border-2); }
-      .dc-thread-row:last-child { border-bottom:none; }
-      .dc-thread-title { font-weight:600; font-size:13px; color:#1A1A2E; }
+      /* Thread rows = LMS Home's My Courses rows. */
+      .dc-threads { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; }
+      .dc-thread-row { position:relative; display:flex; align-items:center; gap:14px; padding:10px; border-radius:10px; }
+      .dc-thread-row:hover, .dc-thread-row:focus-within { background:var(--st-hover); }
+      .dc-thread-row .hm-tile { width:34px; height:34px; background:var(--st-info); color:var(--st-dark); }
+      .dc-thread-main { flex:1; min-width:0; }
+      .dc-thread-title { font-weight:700; font-size:14px; color:var(--st-dark); }
       .dc-thread-title a { color:inherit; text-decoration:none; }
-      .dc-thread-title a:hover { color:var(--lms-ink); }
-      .dc-thread-meta { font-size:11px; color:#8A8A9A; }
-      .dc-lock-badge { font-size:10px; color:#C0392B; font-weight:600; margin-left:6px; }
+      .dc-thread-row .dc-thread-title a::after { content:''; position:absolute; inset:0; border-radius:inherit; }
+      .dc-thread-meta { font-size:12.5px; color:var(--st-sub); }
+      .dc-count { flex:none; padding:3px 10px; border-radius:999px; background:var(--st-tint); color:var(--st-dark); font-size:11.5px; font-weight:700; white-space:nowrap; }
+      .dc-lock-badge { display:inline-block; margin-left:6px; padding:1px 6px; border-radius:4px; background:var(--st-tint); color:var(--st-sub); font-size:9.5px; font-weight:800; letter-spacing:.06em; vertical-align:2px; }
+      .dc-new { margin-bottom:16px; border:1px solid var(--st-line); border-radius:12px; background:var(--st-hover); }
+      .dc-new summary { list-style:none; cursor:pointer; display:flex; align-items:center; gap:8px; padding:12px 14px; font-size:13.5px; font-weight:700; color:var(--st-dark); }
+      .dc-new summary::-webkit-details-marker { display:none; }
+      .dc-new summary::before { content:'+'; display:grid; place-items:center; width:22px; height:22px; border-radius:50%; background:var(--st-dark); color:#fff; font-size:15px; line-height:1; }
+      .dc-new[open] summary::before { content:'–'; }
+      .dc-new .dc-new-form { padding:0 14px 14px; margin:0; }
       .dc-new-form { display:flex; flex-direction:column; gap:8px; margin-bottom:1rem; }
       .dc-new-form input[type="text"], .dc-new-form textarea {
-        border:1px solid var(--lms-border); border-radius:8px; padding:8px 10px; font-size:13px; font-family:inherit; box-sizing:border-box;
+        border:1px solid var(--st-line); border-radius:8px; background:#fff; padding:9px 12px; font-size:13.5px; font-family:inherit; box-sizing:border-box;
       }
+      .dc-new-form input[type="text"]:focus, .dc-new-form textarea:focus { outline:none; border-color:var(--st-primary); box-shadow:0 0 0 3px rgba(56,102,65,.15); }
       .dc-new-form textarea { min-height:70px; resize:vertical; }
-      .btn-primary-dc { height:38px; padding:0 18px; background:var(--lms-ink); border:none; border-radius:8px; color:#fff; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; align-self:flex-start; }
-      .btn-primary-dc:hover { background:var(--lms-ink-hover); }
-      .dc-post { border-bottom:1px solid var(--lms-border-2); padding:10px 0; }
-      .dc-post:last-child { border-bottom:none; }
-      .dc-post-meta { font-size:11px; color:#8A8A9A; margin-bottom:3px; }
-      .dc-post-author { font-weight:600; color:#1A1A2E; }
-      .dc-post-body { font-size:13px; color:#3A3A4A; white-space:pre-wrap; }
+      .btn-primary-dc { height:34px; padding:0 18px; background:var(--st-dark); border:none; border-radius:999px; color:#fff; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; align-self:flex-start; }
+      .btn-primary-dc:hover { background:var(--st-primary); }
+      .dc-thread-head { font-family:'Fraunces', Georgia, serif; font-size:19px; font-weight:600; color:var(--st-dark); margin-bottom:12px; }
+      .dc-post { display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--lms-border-2); }
+      .dc-post:last-of-type { border-bottom:none; }
+      .dc-ava { flex:none; width:32px; height:32px; border-radius:50%; display:grid; place-items:center; font-size:11.5px; font-weight:700; background:var(--st-tint); color:var(--st-dark); }
+      .dc-ava.teacher { background:var(--st-dark); color:var(--st-beige); }
+      .dc-post-main { flex:1; min-width:0; }
+      .dc-post-meta { font-size:12px; color:var(--st-sub); margin-bottom:3px; }
+      .dc-post-author { font-weight:700; color:var(--st-dark); }
+      .dc-post-tag { margin-left:4px; font-size:10px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; color:var(--st-primary); }
+      .dc-post-body { font-size:13.5px; line-height:1.5; color:#2E3A3B; white-space:pre-wrap; word-break:break-word; }
       .btn-sm { height:28px; padding:0 10px; border:1px solid var(--lms-border); border-radius:6px; background:#fff; font-size:11px; font-family:inherit; cursor:pointer; color:#5A5A72; }
       .btn-sm:hover { border-color:var(--lms-ink); color:var(--lms-ink); }
       .btn-sm.danger:hover { border-color:#F5C6C2; color:#C0392B; }
@@ -284,7 +230,7 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
                    (SELECT COUNT(*) FROM discussion_posts dp WHERE dp.thread_id = dt.thread_id) AS post_count,
                    (SELECT MAX(dp.posted_at) FROM discussion_posts dp WHERE dp.thread_id = dt.thread_id) AS last_activity
             FROM discussion_threads dt
-            WHERE dt.subject_id=? AND dt.section_id=? AND dt.school_year=?
+            WHERE dt.subject_id=? AND dt.section_id=? AND dt.school_year=? AND dt.kind = 'discussion'
             ORDER BY last_activity DESC
         ");
         $th_stmt->bind_param('iis', $sel_subject, $sec_id, $selected_sy);
@@ -337,12 +283,12 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
           </div>
         </div>
 
-        <?php if ($flash): ?><div class="notice notice-<?= htmlspecialchars($flash_type) ?>" style="margin-bottom:.75rem;"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+        <?php if ($flash): ?><div class="notice notice-<?= htmlspecialchars($flash_type) ?>" data-ui-toast style="margin-bottom:.75rem;"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
 
         <?php if (empty($sy_list) || empty($subjects)): ?>
           <p class="empty-state">No subjects found yet.</p>
         <?php else: ?>
-          <form method="GET" class="dc-picker">
+          <form method="GET" class="lms-picker">
             <select name="sy" onchange="this.form.submit()">
               <?php foreach ($sy_list as $y): ?>
                 <option value="<?= htmlspecialchars($y) ?>" <?= $selected_sy === $y ? 'selected' : '' ?>>SY <?= htmlspecialchars($y) ?></option>
@@ -359,19 +305,23 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
 
             <a class="dc-back" href="student_discussions?sy=<?= urlencode($selected_sy) ?>&subject_id=<?= $sel_subject ?>">&larr; Back to threads</a>
 
-            <div class="dc-thread-title" style="font-size:15px; margin-bottom:.5rem;">
+            <h2 class="dc-thread-head">
               <?= htmlspecialchars($thread_detail['title']) ?>
               <?php if ($thread_detail['is_locked']): ?><span class="dc-lock-badge">LOCKED</span><?php endif; ?>
-            </div>
+            </h2>
 
-            <?php foreach ($posts as $p): ?>
+            <?php foreach ($posts as $p):
+              [$pg, $pf] = array_pad(explode(' ', (string) ($p['author_name'] ?? 'User'), 2), 2, '');
+              $isTeacher = $p['posted_by_type'] === 'teacher';
+            ?>
               <div class="dc-post">
+                <span class="dc-ava<?= $isTeacher ? ' teacher' : '' ?>" aria-hidden="true"><?= htmlspecialchars(lms_initials($pg, $pf)) ?></span>
+                <div class="dc-post-main">
                 <div class="dc-post-meta">
-                  <span class="dc-post-author"><?= htmlspecialchars($p['author_name'] ?? 'User') ?></span>
-                  <?= $p['posted_by_type'] === 'teacher' ? ' (Teacher)' : '' ?>
+                  <span class="dc-post-author"><?= htmlspecialchars($p['author_name'] ?? 'User') ?></span><?php if ($isTeacher): ?><span class="dc-post-tag">Teacher</span><?php endif; ?>
                   · <?= date('M j, Y g:i A', strtotime($p['posted_at'])) ?>
                 </div>
-                <div class="dc-post-body"><?= nl2br(htmlspecialchars($p['body'])) ?></div>
+                <div class="dc-post-body"><?= htmlspecialchars($p['body']) ?></div>
                 <?php if ($p['posted_by_type'] === 'student' && (int) $p['posted_by_student_id'] === $student_id): ?>
                   <form method="POST" style="display:inline;" data-confirm="Delete this post?" data-icon="warning">
                     <input type="hidden" name="post_id" value="<?= (int)$p['post_id'] ?>">
@@ -379,9 +329,10 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
                     <input type="hidden" name="subject_id" value="<?= $sel_subject ?>">
                     <input type="hidden" name="section_id" value="<?= $sec_id ?>">
                     <input type="hidden" name="school_year" value="<?= htmlspecialchars($selected_sy) ?>">
-                    <button type="submit" name="delete_post" class="btn-sm danger" style="margin-top:4px;">Delete</button>
+                    <button type="submit" name="delete_post" class="btn-sm danger" style="margin-top:6px;">Delete</button>
                   </form>
                 <?php endif; ?>
+                </div>
               </div>
             <?php endforeach; ?>
 
@@ -400,27 +351,36 @@ unset($_SESSION['dc_flash'], $_SESSION['dc_flash_type']);
 
           <?php else: ?>
 
-            <form method="POST" class="dc-new-form">
-              <input type="hidden" name="subject_id" value="<?= $sel_subject ?>">
-              <input type="hidden" name="section_id" value="<?= $sec_id ?>">
-              <input type="hidden" name="school_year" value="<?= htmlspecialchars($selected_sy) ?>">
-              <input type="text" name="title" placeholder="New thread title" required>
-              <textarea name="body" placeholder="Opening message" required></textarea>
-              <button type="submit" name="new_thread" class="btn-primary-dc">Start Thread</button>
-            </form>
+            <details class="dc-new"<?= empty($threads) ? ' open' : '' ?>>
+              <summary>Start a new thread</summary>
+              <form method="POST" class="dc-new-form">
+                <input type="hidden" name="subject_id" value="<?= $sel_subject ?>">
+                <input type="hidden" name="section_id" value="<?= $sec_id ?>">
+                <input type="hidden" name="school_year" value="<?= htmlspecialchars($selected_sy) ?>">
+                <input type="text" name="title" placeholder="Thread title" aria-label="Thread title" required>
+                <textarea name="body" placeholder="Opening message" aria-label="Opening message" required></textarea>
+                <button type="submit" name="new_thread" class="btn-primary-dc">Start thread</button>
+              </form>
+            </details>
 
             <?php if (empty($threads)): ?>
               <p class="empty-state">No discussions yet for this subject.</p>
             <?php else: ?>
-              <?php foreach ($threads as $t): ?>
-                <div class="dc-thread-row">
-                  <div class="dc-thread-title">
-                    <a href="student_discussions?sy=<?= urlencode($selected_sy) ?>&subject_id=<?= $sel_subject ?>&thread_id=<?= (int)$t['thread_id'] ?>"><?= htmlspecialchars($t['title']) ?></a>
-                    <?php if ($t['is_locked']): ?><span class="dc-lock-badge">LOCKED</span><?php endif; ?>
+              <ul class="dc-threads">
+              <?php foreach ($threads as $t): $replies = max(0, (int) $t['post_count'] - 1); ?>
+                <li class="dc-thread-row">
+                  <span class="hm-tile" aria-hidden="true"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8-1.222 0-2.386-.216-3.447-.61L3 21l1.395-4.184A7.94 7.94 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg></span>
+                  <div class="dc-thread-main">
+                    <div class="dc-thread-title">
+                      <a href="student_discussions?sy=<?= urlencode($selected_sy) ?>&subject_id=<?= $sel_subject ?>&thread_id=<?= (int)$t['thread_id'] ?>"><?= htmlspecialchars($t['title']) ?></a>
+                      <?php if ($t['is_locked']): ?><span class="dc-lock-badge">LOCKED</span><?php endif; ?>
+                    </div>
+                    <div class="dc-thread-meta">Started <?= date('M j', strtotime($t['created_at'])) ?><?php if ($t['last_activity']): ?> · last post <?= date('M j, g:i A', strtotime($t['last_activity'])) ?><?php endif; ?></div>
                   </div>
-                  <div class="dc-thread-meta"><?= (int)$t['post_count'] ?> post<?= (int)$t['post_count'] === 1 ? '' : 's' ?></div>
-                </div>
+                  <span class="dc-count"><?= $replies ?> <?= $replies === 1 ? 'reply' : 'replies' ?></span>
+                </li>
               <?php endforeach; ?>
+              </ul>
             <?php endif; ?>
 
           <?php endif; ?>

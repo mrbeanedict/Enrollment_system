@@ -45,8 +45,8 @@ $tbr_notif_user_id = (int) ($_SESSION['user_id'] ?? 0);
 $tbr_notifs = [];
 $tbr_unread = 0;
 $tbr_n_stmt = mysqli_prepare($conn, "
-    SELECT notification_id, message, link, is_read, created_at
-    FROM notifications WHERE user_id = ? AND recipient_type = 'teacher' ORDER BY created_at DESC LIMIT 10
+    SELECT notification_id, message, link, type, is_read, created_at, " . notif_group_sql() . "
+    FROM notifications WHERE user_id = ? AND recipient_type = 'teacher' ORDER BY created_at DESC LIMIT 30
 ");
 mysqli_stmt_bind_param($tbr_n_stmt, "i", $tbr_notif_user_id);
 mysqli_stmt_execute($tbr_n_stmt);
@@ -59,14 +59,6 @@ mysqli_stmt_execute($tbr_uc_stmt);
 mysqli_stmt_bind_result($tbr_uc_stmt, $tbr_unread);
 mysqli_stmt_fetch($tbr_uc_stmt);
 mysqli_stmt_close($tbr_uc_stmt);
-
-function tbr_time_ago($dt) {
-    $diff = time() - strtotime($dt);
-    if ($diff < 60) return 'just now';
-    if ($diff < 3600) return floor($diff / 60) . 'm ago';
-    if ($diff < 86400) return floor($diff / 3600) . 'h ago';
-    return floor($diff / 86400) . 'd ago';
-}
 ?>
 <div class="teacher-topbar-right">
   <div class="teacher-notif-wrap">
@@ -76,16 +68,7 @@ function tbr_time_ago($dt) {
     </button>
     <div class="teacher-notif-dropdown" id="teacherNotifDropdown">
       <div class="teacher-notif-header">Notifications</div>
-      <?php if (!$tbr_notifs): ?>
-        <div class="teacher-notif-empty">No notifications yet.</div>
-      <?php else: ?>
-        <?php foreach ($tbr_notifs as $tbr_n): ?>
-          <a href="<?= APP_URL . "/" . htmlspecialchars($tbr_n["link"]) ?>" class="teacher-notif-item<?= $tbr_n['is_read'] ? '' : ' unread' ?>">
-            <div class="teacher-notif-msg"><?= htmlspecialchars($tbr_n['message']) ?></div>
-            <div class="teacher-notif-time"><?= tbr_time_ago($tbr_n['created_at']) ?></div>
-          </a>
-        <?php endforeach; ?>
-      <?php endif; ?>
+      <?php notif_render_list('teacher', $tbr_notifs); ?>
     </div>
   </div>
   <div class="teacher-topbar-profile-wrapper" id="teacherProfileWrapper">
@@ -179,6 +162,7 @@ function tbr_time_ago($dt) {
         }
         Swal.fire({
           title: 'Log out?',
+          customClass: { popup: 'ui-swal-logout' },
           text: 'You will be returned to the login page.',
           icon: 'question',
           showCancelButton: true,

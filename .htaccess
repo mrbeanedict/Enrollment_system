@@ -21,11 +21,24 @@ Options -Indexes
 
 RewriteEngine On
 
+# Work out this folder's URL prefix (e.g. /Enrollment_system/, or / when
+# served from a domain root) into %{ENV:BASE}, so the redirects below don't
+# depend on the folder name.
+RewriteCond %{REQUEST_URI}::$1 ^(.*?/)(.*)::\2$
+RewriteRule ^(.*)$ - [E=BASE:%1]
+
 # Remove .php from URLs
 RewriteCond %{THE_REQUEST} \s/+(.+?)\.php[\s?] [NC]
-RewriteRule ^(.+)\.php$ /Enrollment_system/$1 [R=301,L,NE]
+RewriteRule ^(.+)\.php$ %{ENV:BASE}$1 [R=301,L,NE]
+
+# Strip a trailing slash from page URLs (e.g. /login/ -> /login). Otherwise
+# the browser treats "login/" as a folder, every relative asset URL on the
+# page resolves under it, and the CSS/images come back as 404 HTML (which
+# X-Content-Type-Options: nosniff then refuses to apply as a stylesheet).
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.+)/$ %{ENV:BASE}$1 [R=301,L]
 
 # Internally add .php when the extension is omitted
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteCond %{REQUEST_FILENAME}.php -f
-RewriteRule ^(.+?)/?$ $1.php [L]
+RewriteRule ^(.+)$ $1.php [L]

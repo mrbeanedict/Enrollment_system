@@ -5,153 +5,160 @@
 // signed into both at once; this page must never flip to Student
 // Portal branding just because an unrelated Student Portal session
 // also happens to be alive.
+//
+// All questions scroll on one page (no pagination). Every answer is saved
+// the moment it's picked (ajax/quiz_autosave.php), and the time limit is
+// enforced on the server — see shared/helpers/quiz.php.
 session_name('STUDENT_LMS_SESSID');
 session_start();
 require_once __DIR__ . '/../../bootstrap.php';
+require_once BASE_PATH . '/shared/helpers/quiz.php';
 
 $is_student = require_login('student', null, 'ignore', 'bool');
 $student_id = $is_student ? (int) ($_SESSION['student_id'] ?? 0) : 0;
 $item_id    = (int) ($_GET['item_id'] ?? $_POST['item_id'] ?? 0);
 
-// Confirm this quiz belongs to a subject the student is currently enrolled
-// in (via their current section's offerings) — never trust the posted
-// item_id blindly. Mirrors student_assignments.php's ownership check.
-function quiz_item_for_student(mysqli $conn, int $item_id, int $student_id): ?array {
-    $stmt = $conn->prepare("
-        SELECT gi.item_id, gi.title, gi.max_score, gi.time_limit_minutes, sub.subject_name
-        FROM gradebook_items gi
-        JOIN subjects sub ON sub.subject_id = gi.subject_id
-        JOIN enrollments e ON e.section_id = gi.section_id AND e.school_year = gi.school_year
-        WHERE gi.item_id = ? AND gi.is_quiz = 1 AND e.student_id = ? AND e.status = 'enrolled'
-        LIMIT 1
-    ");
-    $stmt->bind_param('ii', $item_id, $student_id);
-    $stmt->execute();
-    $row = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-    return $row ?: null;
+function tq_graded_notice(mysqli $conn, array $item): void {
+    notify_student_users($conn, [(int) ($_SESSION['user_student_id'] ?? 0)],
+        'Your quiz "' . $item['title'] . '" has been graded.',
+        'roles/lms/take_quiz?item_id=' . (int) $item['item_id']);
 }
 
-$flash      = '';
-$flash_type = 'info';
-
-// ── Grade and submit the attempt ────────────────────────────────────────
+// ── Submit (by the student, or automatically when time runs out) ─────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_quiz']) && $is_student) {
-    $item = quiz_item_for_student($conn, $item_id, $student_id);
+    $item    = quiz_item_for_student($conn, $item_id, $student_id);
+    $attempt = $item ? quiz_attempt($conn, $item, $student_id) : null;
 
     if (!$item) {
         $_SESSION['tq_flash'] = 'That quiz was not found among your subjects.';
         $_SESSION['tq_flash_type'] = 'error';
-        header("Location: take_quiz?item_id=" . $item_id);
-        exit();
-    }
-
-    $att_stmt = $conn->prepare("SELECT attempt_id, submitted_at FROM quiz_attempts WHERE item_id=? AND student_id=?");
-    $att_stmt->bind_param('ii', $item_id, $student_id);
-    $att_stmt->execute();
-    $attempt = $att_stmt->get_result()->fetch_assoc();
-    $att_stmt->close();
-
-    if (!$attempt || $attempt['submitted_at'] !== null) {
-        // No attempt in progress, or already submitted — nothing to do.
-        header("Location: take_quiz?item_id=" . $item_id);
-        exit();
-    }
-    $attempt_id = (int) $attempt['attempt_id'];
-
-    $q_stmt = $conn->prepare("SELECT question_id, points FROM quiz_questions WHERE item_id=?");
-    $q_stmt->bind_param('i', $item_id);
-    $q_stmt->execute();
-    $questions = $q_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-    $q_stmt->close();
-
-    $correctByQ = [];
-    if (!empty($questions)) {
-        $qids = array_column($questions, 'question_id');
-        $placeholders = implode(',', array_fill(0, count($qids), '?'));
-        $c_stmt = $conn->prepare("SELECT question_id, choice_id FROM quiz_choices WHERE question_id IN ($placeholders) AND is_correct=1");
-        $c_stmt->bind_param(str_repeat('i', count($qids)), ...$qids);
-        $c_stmt->execute();
-        foreach ($c_stmt->get_result()->fetch_all(MYSQLI_ASSOC) as $row) {
-            $correctByQ[(int)$row['question_id']] = (int)$row['choice_id'];
+    } elseif ($attempt && $attempt['submitted_at'] === null) {
+        $answers = quiz_saved_answers($conn, (int) $attempt['attempt_id']);
+        // Answers posted with the form count only while time remains (plus a
+        // little slack for an auto-submit fired at 0:00); after that, only
+        // what was already saved is graded.
+        if (!quiz_time_up($attempt, QUIZ_GRACE_SECONDS)) {
+            foreach ((array) ($_POST['answer'] ?? []) as $qid => $cid) {
+                if ((int) $cid > 0) $answers[(int) $qid] = (int) $cid;
+            }
+        } else {
+            $_SESSION['tq_flash'] = 'Time ran out — the answers saved before then were submitted.';
+            $_SESSION['tq_flash_type'] = 'info';
         }
-        $c_stmt->close();
+        quiz_finalize($conn, $item, (int) $attempt['attempt_id'], $student_id, $answers);
+        tq_graded_notice($conn, $item);
     }
-
-    $answered = $_POST['answer'] ?? []; // [question_id] => choice_id
-    $earned = 0.0;
-    $totalPoints = 0.0;
-    $ansIns = $conn->prepare("INSERT INTO quiz_answers (attempt_id, question_id, choice_id, is_correct) VALUES (?, ?, ?, ?)");
-    foreach ($questions as $q) {
-        $qid = (int) $q['question_id'];
-        $pts = (float) $q['points'];
-        $totalPoints += $pts;
-        $chosen = isset($answered[$qid]) ? (int) $answered[$qid] : null;
-        $isCorrect = ($chosen !== null && isset($correctByQ[$qid]) && $chosen === $correctByQ[$qid]) ? 1 : 0;
-        if ($isCorrect) $earned += $pts;
-        $ansIns->bind_param('iiii', $attempt_id, $qid, $chosen, $isCorrect);
-        $ansIns->execute();
-    }
-    $ansIns->close();
-
-    $rawScore = $totalPoints > 0 ? ($earned / $totalPoints) * (float) $item['max_score'] : 0.0;
-
-    $updAtt = $conn->prepare("UPDATE quiz_attempts SET submitted_at=NOW(), score=? WHERE attempt_id=?");
-    $updAtt->bind_param('di', $earned, $attempt_id);
-    $updAtt->execute();
-    $updAtt->close();
-
-    // Same upsert pattern save_scores uses in teacher_gradebook.php — no
-    // second grading path, this flows straight into the existing rollup.
-    $gradedBy = $conn->prepare("SELECT teacher_id FROM gradebook_items WHERE item_id=?");
-    $gradedBy->bind_param('i', $item_id);
-    $gradedBy->execute();
-    $teacher_id = (int) ($gradedBy->get_result()->fetch_assoc()['teacher_id'] ?? 0);
-    $gradedBy->close();
-
-    $ups = $conn->prepare("
-        INSERT INTO gradebook_scores (item_id, student_id, raw_score, graded_by, graded_at)
-        VALUES (?, ?, ?, ?, NOW())
-        ON DUPLICATE KEY UPDATE raw_score = VALUES(raw_score), graded_by = VALUES(graded_by), graded_at = NOW()
-    ");
-    $ups->bind_param('iidi', $item_id, $student_id, $rawScore, $teacher_id);
-    $ups->execute();
-    $ups->close();
-
-    notify_student_users(
-        $conn,
-        [(int) ($_SESSION['user_student_id'] ?? 0)],
-        'Your quiz "' . $item['title'] . '" has been graded.',
-        'roles/lms/student_quizzes'
-    );
-
-    header("Location: take_quiz?item_id=" . $item_id);
+    header('Location: take_quiz?item_id=' . $item_id);
     exit();
 }
 
 $flash      = $_SESSION['tq_flash']      ?? '';
 $flash_type = $_SESSION['tq_flash_type'] ?? 'info';
 unset($_SESSION['tq_flash'], $_SESSION['tq_flash_type']);
+
+$item = $attempt = null;
+$questions = $saved = [];
+if ($is_student) {
+    $item = quiz_item_for_student($conn, $item_id, $student_id);
+    if ($item) {
+        $attempt = quiz_attempt($conn, $item, $student_id, true);
+        // Came back after the time ran out (closed the tab, lost connection):
+        // grade what was saved instead of leaving the attempt hanging open.
+        if ($attempt['submitted_at'] === null && quiz_time_up($attempt, QUIZ_GRACE_SECONDS)) {
+            quiz_finalize($conn, $item, (int) $attempt['attempt_id'], $student_id, quiz_saved_answers($conn, (int) $attempt['attempt_id']));
+            tq_graded_notice($conn, $item);
+            $flash = 'Time ran out — the answers saved before then were submitted.';
+            $flash_type = 'info';
+            $attempt = quiz_attempt($conn, $item, $student_id);
+        }
+        if ($attempt['submitted_at'] === null) {
+            $questions = quiz_questions($conn, $item_id);
+            $saved     = quiz_saved_answers($conn, (int) $attempt['attempt_id']);
+        }
+    }
+}
+$num = fn($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Take Quiz — SHS Enrollment</title>
+    <title><?= $item ? htmlspecialchars($item['title']) . ' — Quiz' : 'Quiz' ?> — SHS Enrollment</title>
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_student.css') ?>">
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_lms.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_lms.css') ?>">
     <style>
-      .tq-back { font-size:12px; color:#5A5A72; text-decoration:none; display:inline-block; margin-bottom:.75rem; }
-      .tq-back:hover { color:var(--lms-ink); }
-      .tq-timer { font-size:13px; font-weight:700; color:#C0392B; margin-bottom:1rem; }
-      .tq-question { border-bottom:1px solid var(--lms-border-2); padding:14px 0; }
-      .tq-question:last-child { border-bottom:none; }
-      .tq-qtext { font-weight:600; font-size:14px; color:#1A1A2E; margin-bottom:8px; }
-      .tq-choice { display:flex; align-items:center; gap:8px; font-size:13px; color:#333; padding:4px 0; }
-      .btn-primary-gb { height:38px; padding:0 18px; background:var(--lms-ink); border:none; border-radius:8px; color:#fff; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; margin-top:1rem; }
-      .btn-primary-gb:hover { background:var(--lms-ink-hover); }
-      .tq-result { font-size:20px; font-weight:700; color:#1A6B4A; background:#EBF7F2; border:0.5px solid #A8D9C5; border-radius:10px; padding:20px; text-align:center; }
+      .tq { --tq-line:var(--st-line); --tq-card:#fff; --tq-ink:var(--st-dark); --tq-muted:var(--st-sub); --tq-green:var(--st-dark); --tq-green-2:var(--st-primary);
+            --tq-pick:#E2ECE6; --tq-warm:#FBF0DA; --tq-warm-line:#EBD7A6; --tq-warm-ink:#9A7026;
+            --tq-mono: ui-monospace, 'JetBrains Mono', 'Cascadia Mono', 'SF Mono', Consolas, monospace;
+            max-width:860px; margin-inline:auto; color:var(--tq-ink); }
+      .tq-sr { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+
+      .tq-crumb { font-size:12px; color:var(--tq-muted); margin-bottom:6px; }
+      .tq-crumb a { color:inherit; text-decoration:none; }
+      .tq-crumb a:hover { color:var(--tq-ink); text-decoration:underline; text-underline-offset:2px; }
+      .tq h1 { margin:0; font-family:'Fraunces', Georgia, serif; font-size:24px; font-weight:600; line-height:1.25; }
+      .tq-sub { margin:4px 0 18px; font-size:13px; color:var(--tq-muted); }
+
+      .tq-stats { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; background:var(--tq-card); border:1px solid var(--tq-line); border-radius:12px; padding:14px 16px; margin-bottom:18px; }
+      .tq-stat b { display:block; font-family:var(--tq-mono); font-size:17px; font-weight:700; line-height:1.2; }
+      .tq-stat span { font-size:11.5px; color:var(--tq-muted); }
+
+      /* Sticky while the questions scroll underneath. */
+      .tq-bar { position:sticky; top:0; z-index:5; background:var(--tq-warm); border:1px solid var(--tq-warm-line); border-radius:12px; padding:10px 16px; margin-bottom:14px;
+                box-shadow:0 6px 12px -10px rgba(40,30,0,.35); }
+      .tq-bar-row { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+      .tq-bar-label { font-size:13px; font-weight:600; color:var(--tq-warm-ink); }
+      .tq-clock { font-family:var(--tq-mono); font-size:15px; font-weight:700; color:var(--tq-warm-ink); font-variant-numeric:tabular-nums; }
+      .tq-bar.is-low { background:#FCE8E6; border-color:#EFB9B3; }
+      .tq-bar.is-low .tq-bar-label, .tq-bar.is-low .tq-clock { color:#A5221B; }
+      .tq-progress { display:flex; justify-content:space-between; gap:12px; margin-top:8px; font-size:11.5px; color:var(--tq-muted); }
+      .tq-meter { height:3px; background:rgba(0,0,0,.08); border-radius:2px; margin-top:6px; overflow:hidden; }
+      .tq-meter i { display:block; height:100%; width:0; background:var(--tq-green-2); transition:width .2s ease; }
+      .tq-save.is-error { color:#A5221B; font-weight:600; }
+
+      .tq-q { background:var(--tq-card); border:1px solid var(--tq-line); border-radius:12px; padding:16px 18px 18px; margin:0 0 12px; scroll-margin-top:90px; }
+      .tq-q-head { display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:8px; padding:0; }
+      .tq-q-num { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--tq-green-2); }
+      .tq-q-pts { font-size:11.5px; color:var(--tq-muted); }
+      .tq-q-text { margin:0 0 12px; font-size:15px; font-weight:600; line-height:1.45; white-space:pre-wrap; word-break:break-word; }
+      .tq-opts { display:flex; flex-direction:column; gap:8px; }
+      .tq-opt { display:flex; align-items:center; gap:12px; padding:10px 12px; background:#fff; border:1px solid var(--tq-line); border-radius:10px; cursor:pointer;
+                font-size:14px; transition:border-color .12s, background-color .12s; }
+      .tq-opt:hover { border-color:#AEB8B1; }
+      .tq-opt input { appearance:none; -webkit-appearance:none; flex:none; width:16px; height:16px; margin:0; border:1.5px solid #8C9A92; border-radius:50%; display:grid; place-items:center; cursor:pointer; }
+      .tq-opt input::after { content:""; width:8px; height:8px; border-radius:50%; background:var(--tq-green-2); transform:scale(0); transition:transform .12s; }
+      .tq-opt input:checked { border-color:var(--tq-green-2); }
+      .tq-opt input:checked::after { transform:scale(1); }
+      .tq-opt input:focus-visible { outline:2px solid var(--tq-green-2); outline-offset:2px; }
+      .tq-opt:has(input:checked) { background:var(--tq-pick); border-color:var(--tq-green-2); }
+      .tq-opt-text { flex:1; min-width:0; word-break:break-word; }
+      .tq-opt-key { flex:none; font-size:11.5px; color:#A3ADA7; }
+
+      .tq-foot { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 0 24px; }
+      .tq-foot-note { font-size:12.5px; color:var(--tq-muted); }
+      .tq-foot-actions { display:flex; gap:10px; margin-left:auto; }
+      .tq-btn { display:inline-flex; align-items:center; justify-content:center; height:40px; padding:0 20px; border-radius:999px; font-size:13.5px; font-weight:600; font-family:inherit; text-decoration:none; cursor:pointer; }
+      .tq-btn-ghost { background:#fff; border:1px solid var(--tq-line); color:var(--tq-ink); }
+      .tq-btn-ghost:hover { border-color:#AEB8B1; }
+      .tq-btn-primary { background:var(--tq-green); border:1px solid var(--tq-green); color:#fff; }
+      .tq-btn-primary:hover { background:var(--st-primary); border-color:var(--st-primary); }
+      .tq-btn:disabled { opacity:.55; cursor:progress; }
+
+      .tq-result { background:var(--tq-card); border:1px solid var(--tq-line); border-radius:12px; padding:28px 20px; text-align:center; }
+      .tq-result-label { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--tq-green-2); }
+      .tq-result-score { margin:6px 0 4px; font-family:var(--tq-mono); font-size:34px; font-weight:700; }
+      .tq-result-meta { font-size:13px; color:var(--tq-muted); margin-bottom:18px; }
+      .tq-empty { background:var(--tq-card); border:1px dashed var(--tq-line); border-radius:12px; padding:28px 20px; text-align:center; color:var(--tq-muted); font-size:14px; }
+
+      @media (max-width: 560px) {
+        .tq h1 { font-size:19px; }
+        .tq-stat b { font-size:15px; }
+        .tq-q { padding:14px; }
+        .tq-foot-actions { width:100%; }
+        .tq-foot-actions .tq-btn { flex:1; }
+      }
+      @media (prefers-reduced-motion: reduce) { .tq * { transition:none !important; } }
     </style>
 </head>
 <body class="student-layout lms-layout lms-warm-bg">
@@ -159,127 +166,201 @@ unset($_SESSION['tq_flash'], $_SESSION['tq_flash_type']);
   <p>You are not logged in. Please <a href="lms_login">log in</a> to access this page.</p>
 
 <?php else: ?>
-  <?php
-    include_once BASE_PATH . '/shared/includes/lms_navbar.php';
-    $item = quiz_item_for_student($conn, $item_id, $student_id);
-
-    $attempt = null;
-    if ($item) {
-        $att_stmt = $conn->prepare("SELECT attempt_id, started_at, submitted_at, score FROM quiz_attempts WHERE item_id=? AND student_id=?");
-        $att_stmt->bind_param('ii', $item_id, $student_id);
-        $att_stmt->execute();
-        $attempt = $att_stmt->get_result()->fetch_assoc();
-        $att_stmt->close();
-
-        if (!$attempt) {
-            $ins = $conn->prepare("INSERT INTO quiz_attempts (item_id, student_id) VALUES (?, ?)");
-            $ins->bind_param('ii', $item_id, $student_id);
-            $ins->execute();
-            $ins->close();
-            $att_stmt = $conn->prepare("SELECT attempt_id, started_at, submitted_at, score FROM quiz_attempts WHERE item_id=? AND student_id=?");
-            $att_stmt->bind_param('ii', $item_id, $student_id);
-            $att_stmt->execute();
-            $attempt = $att_stmt->get_result()->fetch_assoc();
-            $att_stmt->close();
-        }
-
-        $questions = [];
-        if ($attempt['submitted_at'] === null) {
-            $q_stmt = $conn->prepare("SELECT question_id, question_text, points FROM quiz_questions WHERE item_id=? ORDER BY sort_order");
-            $q_stmt->bind_param('i', $item_id);
-            $q_stmt->execute();
-            $questions = $q_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-            $q_stmt->close();
-
-            if (!empty($questions)) {
-                $qids = array_column($questions, 'question_id');
-                $placeholders = implode(',', array_fill(0, count($qids), '?'));
-                $c_stmt = $conn->prepare("SELECT question_id, choice_id, choice_text FROM quiz_choices WHERE question_id IN ($placeholders) ORDER BY sort_order");
-                $c_stmt->bind_param(str_repeat('i', count($qids)), ...$qids);
-                $c_stmt->execute();
-                $choicesByQ = [];
-                foreach ($c_stmt->get_result()->fetch_all(MYSQLI_ASSOC) as $row) {
-                    $choicesByQ[(int)$row['question_id']][] = $row;
-                }
-                $c_stmt->close();
-                foreach ($questions as &$q) { $q['choices'] = $choicesByQ[(int)$q['question_id']] ?? []; }
-                unset($q);
-            }
-        }
-    }
-  ?>
+  <?php include_once BASE_PATH . '/shared/includes/lms_navbar.php'; ?>
   <div class="student-main">
-    <div class="student-topbar">
-      <div class="student-topbar-left">
-        <div class="student-topbar-title">
-          <?= $item ? htmlspecialchars($item['title']) : 'Quiz' ?>
-          <span class="student-topbar-subtitle"><?= $item ? htmlspecialchars($item['subject_name']) : '' ?></span>
-        </div>
-      </div>
-      <span class="student-topbar-date"><?= date('F j, Y') ?></span>
-    </div>
-
     <div class="student-content">
-      <a class="tq-back" href="student_quizzes">&larr; Back to Quizzes</a>
+      <div class="tq">
+        <?php if ($flash): ?><div class="notice notice-<?= htmlspecialchars($flash_type) ?>" data-ui-toast style="margin-bottom:12px;"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
 
-      <?php if ($flash): ?><div class="notice notice-<?= htmlspecialchars($flash_type) ?>"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+        <?php if (!$item): ?>
+          <div class="tq-empty">That quiz was not found among your subjects. <a href="student_quizzes">Back to Quizzes</a></div>
+        <?php else:
+          $qs_subj  = http_build_query(['subject_id' => $item['subject_id'], 'sy' => $item['school_year']]);
+          $back_url = 'student_quizzes?' . $qs_subj;
+        ?>
+          <nav class="tq-crumb" aria-label="Breadcrumb">
+            <a href="my_courses?<?= http_build_query(['sy' => $item['school_year']]) ?>">Academics</a> /
+            <a href="student_stream?<?= $qs_subj ?>"><?= htmlspecialchars($item['subject_name']) ?></a> /
+            <a href="<?= $back_url ?>">Quizzes</a>
+          </nav>
+          <h1><?= htmlspecialchars($item['title']) ?> — <?= htmlspecialchars($item['subject_name']) ?></h1>
 
-      <?php if (!$item): ?>
-        <div class="notice notice-info">That quiz was not found among your subjects.</div>
-      <?php elseif ($attempt['submitted_at'] !== null): ?>
-        <div class="student-panel-block">
-          <div class="tq-result">You scored <?= rtrim(rtrim(number_format((float)$attempt['score'], 2), '0'), '.') ?> / <?= rtrim(rtrim(number_format((float)$item['max_score'], 2), '0'), '.') ?></div>
-        </div>
-      <?php elseif (empty($questions)): ?>
-        <div class="notice notice-info">This quiz has no questions yet — check back later.</div>
-      <?php else: ?>
-        <div class="student-panel-block">
-          <?php if ($item['time_limit_minutes']): ?>
-            <div class="tq-timer" id="tqTimer"></div>
-          <?php endif; ?>
-          <form method="POST" id="tqForm">
-            <input type="hidden" name="item_id" value="<?= $item_id ?>">
-            <?php foreach ($questions as $i => $q): ?>
-              <div class="tq-question">
-                <div class="tq-qtext"><?= ($i + 1) ?>. <?= htmlspecialchars($q['question_text']) ?></div>
-                <?php foreach ($q['choices'] as $c): ?>
-                  <label class="tq-choice">
-                    <input type="radio" name="answer[<?= (int)$q['question_id'] ?>]" value="<?= (int)$c['choice_id'] ?>">
-                    <?= htmlspecialchars($c['choice_text']) ?>
-                  </label>
-                <?php endforeach; ?>
+          <?php if ($attempt['submitted_at'] !== null): $res = quiz_result($conn, $item, $attempt, $student_id); ?>
+            <p class="tq-sub">Submitted <?= date('M j, Y · g:i A', strtotime($attempt['submitted_at'])) ?></p>
+            <div class="tq-result">
+              <div class="tq-result-label">Your score</div>
+              <div class="tq-result-score"><?= $res['score'] !== null ? $num($res['score']) : '—' ?> / <?= $num($res['max']) ?></div>
+              <div class="tq-result-meta"><?= $res['correct'] ?> of <?= $res['questions'] ?> <?= $res['questions'] === 1 ? 'question' : 'questions' ?> correct</div>
+              <a class="tq-btn tq-btn-ghost" href="<?= $back_url ?>">Back to Quizzes</a>
+            </div>
+
+          <?php elseif (!$questions): ?>
+            <p class="tq-sub">&nbsp;</p>
+            <div class="tq-empty">This quiz has no questions yet — check back later.</div>
+
+          <?php else:
+            $nq      = count($questions);
+            $nsaved  = count(array_intersect_key($saved, array_flip(array_map('intval', array_column($questions, 'question_id')))));
+            $timed   = $attempt['seconds_left'] !== null;
+            $letters = range('A', 'Z');
+          ?>
+            <p class="tq-sub">Quiz in progress · autosaves every answer<?= $timed ? ' · the timer keeps running if you leave' : '' ?></p>
+
+            <div class="tq-stats">
+              <div class="tq-stat"><b><?= $nq ?></b><span>Questions</span></div>
+              <div class="tq-stat"><b id="tqAnswered"><?= $nsaved ?></b><span>Answered</span></div>
+              <div class="tq-stat"><b>1 attempt</b><span>Allowed</span></div>
+            </div>
+
+            <div class="tq-bar" id="tqBar" role="region" aria-label="Quiz progress">
+              <div class="tq-bar-row">
+                <span class="tq-bar-label"><?= $timed ? 'Time remaining' : 'No time limit' ?></span>
+                <?php if ($timed): ?>
+                  <span class="tq-clock" id="tqClock" role="timer" aria-live="off" data-seconds="<?= max(0, (int) $attempt['seconds_left']) ?>">--:--</span>
+                <?php endif; ?>
               </div>
-            <?php endforeach; ?>
-            <button type="submit" name="submit_quiz" class="btn-primary-gb">Submit Quiz</button>
-          </form>
-        </div>
-        <?php if ($item['time_limit_minutes']): ?>
-          <script>
-            (function () {
-              var startedAt = new Date(<?= json_encode(str_replace(' ', 'T', $attempt['started_at'])) ?>).getTime();
-              var limitMs = <?= (int)$item['time_limit_minutes'] ?> * 60 * 1000;
-              var deadline = startedAt + limitMs;
-              var el = document.getElementById('tqTimer');
-              var submitted = false;
-              function tick() {
-                var remaining = deadline - Date.now();
-                if (remaining <= 0) {
-                  el.textContent = "Time's up — submitting...";
-                  if (!submitted) { submitted = true; document.getElementById('tqForm').submit(); }
-                  return;
-                }
-                var m = Math.floor(remaining / 60000);
-                var s = Math.floor((remaining % 60000) / 1000);
-                el.textContent = 'Time remaining: ' + m + ':' + (s < 10 ? '0' : '') + s;
-                setTimeout(tick, 1000);
-              }
-              tick();
-            })();
-          </script>
+              <div class="tq-meter" aria-hidden="true"><i id="tqMeter"></i></div>
+              <div class="tq-progress">
+                <span id="tqPct"><?= (int) round($nsaved / $nq * 100) ?>% complete</span>
+                <span class="tq-save" id="tqSave" aria-live="polite"><?= $nsaved ? 'All answers saved' : 'Answers save as you pick them' ?></span>
+              </div>
+            </div>
+
+            <form method="POST" id="tqForm" data-item="<?= $item_id ?>" data-total="<?= $nq ?>">
+              <input type="hidden" name="item_id" value="<?= $item_id ?>">
+              <input type="hidden" name="submit_quiz" value="1">
+              <?php foreach ($questions as $i => $q): $qid = (int) $q['question_id']; ?>
+                <fieldset class="tq-q" id="q<?= $i + 1 ?>" data-qid="<?= $qid ?>">
+                  <legend class="tq-sr">Question <?= $i + 1 ?> of <?= $nq ?></legend>
+                  <div class="tq-q-head" aria-hidden="true">
+                    <span class="tq-q-num">Question <?= str_pad((string) ($i + 1), 2, '0', STR_PAD_LEFT) ?> / <?= str_pad((string) $nq, 2, '0', STR_PAD_LEFT) ?></span>
+                    <span class="tq-q-pts"><?= $num($q['points']) ?> <?= (float) $q['points'] === 1.0 ? 'pt' : 'pts' ?></span>
+                  </div>
+                  <p class="tq-q-text" id="q<?= $i + 1 ?>-text"><?= htmlspecialchars($q['question_text']) ?></p>
+                  <div class="tq-opts" role="radiogroup" aria-labelledby="q<?= $i + 1 ?>-text">
+                    <?php foreach ($q['choices'] as $k => $c): $cid = (int) $c['choice_id']; ?>
+                      <label class="tq-opt">
+                        <input type="radio" name="answer[<?= $qid ?>]" value="<?= $cid ?>" <?= ($saved[$qid] ?? 0) === $cid ? 'checked' : '' ?>>
+                        <span class="tq-opt-text"><?= htmlspecialchars($c['choice_text']) ?></span>
+                        <span class="tq-opt-key" aria-hidden="true"><?= $letters[$k] ?? '' ?></span>
+                      </label>
+                    <?php endforeach; ?>
+                  </div>
+                </fieldset>
+              <?php endforeach; ?>
+
+              <div class="tq-foot">
+                <span class="tq-foot-note" id="tqLeft"></span>
+                <div class="tq-foot-actions">
+                  <a class="tq-btn tq-btn-ghost" href="<?= $back_url ?>">Back</a>
+                  <button type="submit" class="tq-btn tq-btn-primary" id="tqSubmit">Submit quiz</button>
+                </div>
+              </div>
+            </form>
+          <?php endif; ?>
         <?php endif; ?>
-      <?php endif; ?>
+      </div>
     </div>
   </div>
+
+  <?php if ($item && $attempt && $attempt['submitted_at'] === null && $questions): ?>
+  <script>
+  (function () {
+    var form    = document.getElementById('tqForm');
+    var total   = parseInt(form.dataset.total, 10);
+    var saveEl  = document.getElementById('tqSave');
+    var submitB = document.getElementById('tqSubmit');
+    var submitting = false;
+
+    /* ── Progress ── */
+    function answeredCount() { return form.querySelectorAll('.tq-q input:checked').length; }
+    function syncProgress() {
+      var n = answeredCount(), left = total - n, pct = Math.round(n / total * 100);
+      document.getElementById('tqAnswered').textContent = n;
+      document.getElementById('tqPct').textContent = pct + '% complete';
+      document.getElementById('tqMeter').style.width = pct + '%';
+      document.getElementById('tqLeft').textContent = left ? left + (left === 1 ? ' question' : ' questions') + ' unanswered' : 'All questions answered';
+    }
+
+    /* ── Autosave: one request per pick; the latest pick per question wins.
+          Failed saves retry, and every answer also rides along with Submit. ── */
+    var pending = {}, inflight = 0, failed = false;
+    function status() {
+      if (failed)        { saveEl.textContent = 'Not saved — check your connection (retrying)'; saveEl.classList.add('is-error'); }
+      else if (inflight) { saveEl.textContent = 'Saving…'; saveEl.classList.remove('is-error'); }
+      else               { saveEl.textContent = 'All answers saved'; saveEl.classList.remove('is-error'); }
+    }
+    function save(qid, cid) {
+      pending[qid] = cid; inflight++; status();
+      var body = new URLSearchParams({ item_id: form.dataset.item, question_id: qid, choice_id: cid });
+      fetch('<?= APP_URL ?>/ajax/quiz_autosave', { method: 'POST', body: body, credentials: 'same-origin' })
+        .then(function (r) { return r.json().catch(function () { return { ok: false }; }).then(function (j) { j.status = r.status; return j; }); })
+        .then(function (j) {
+          inflight--;
+          if (j.ok) { if (pending[qid] === cid) delete pending[qid]; failed = Object.keys(pending).length > 0 && failed; }
+          else if (j.error === 'time_up' || j.error === 'submitted') { finish(); return; }
+          else { failed = true; setTimeout(function () { if (pending[qid] === cid) save(qid, cid); }, 3000); }
+          status();
+        })
+        .catch(function () {
+          inflight--; failed = true; status();
+          setTimeout(function () { if (pending[qid] === cid) save(qid, cid); }, 3000);
+        });
+    }
+    form.addEventListener('change', function (e) {
+      if (!e.target.matches('.tq-q input[type="radio"]')) return;
+      syncProgress();
+      save(e.target.closest('.tq-q').dataset.qid, e.target.value);
+    });
+
+    /* ── Submit: one attempt only, so always confirm (and say what's unanswered). ── */
+    function finish() { if (submitting) return; submitting = true; submitB.disabled = true; submitB.textContent = 'Submitting…'; form.submit(); }
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (submitting) return;
+      var left = total - answeredCount();
+      var msg = left
+        ? 'You have ' + left + (left === 1 ? ' unanswered question' : ' unanswered questions') + '. Submit anyway? You only get one attempt.'
+        : 'Submit your answers? You only get one attempt.';
+      if (typeof Swal === 'undefined') { if (window.confirm(msg)) finish(); return; }
+      Swal.fire({ title: 'Submit quiz?', text: msg, icon: left ? 'warning' : 'question', showCancelButton: true,
+                  confirmButtonText: 'Submit', cancelButtonText: 'Keep answering', confirmButtonColor: '#1C2628' })
+        .then(function (r) { if (r.isConfirmed) finish(); });
+    });
+
+    /* ── Timer: counts down the server's seconds_left (never the device clock);
+          submits automatically at 0:00. ── */
+    var clock = document.getElementById('tqClock');
+    if (clock) {
+      var bar = document.getElementById('tqBar');
+      var endAt = performance.now() + parseInt(clock.dataset.seconds, 10) * 1000;
+      var lastAnnounced = null;
+      (function tick() {
+        var s = Math.max(0, Math.ceil((endAt - performance.now()) / 1000));
+        var m = Math.floor(s / 60), r = s % 60;
+        clock.textContent = (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r;
+        bar.classList.toggle('is-low', s <= 60);
+        // Screen readers: announce at 5 min and 1 min left, not every second.
+        if ((s === 300 || s === 60) && lastAnnounced !== s) { lastAnnounced = s; saveEl.textContent = (s / 60) + (s === 60 ? ' minute' : ' minutes') + ' left'; }
+        if (s === 0) { clock.textContent = '00:00'; finish(); return; }
+        setTimeout(tick, 250);
+      })();
+    }
+
+    /* ── The LMS nav is itself sticky: pin the timer bar just under it. ── */
+    var nav = document.getElementById('lmsFolderNav'), tqBar = document.getElementById('tqBar');
+    function pinBar() {
+      var h = nav ? Math.round(nav.getBoundingClientRect().height) : 0;
+      tqBar.style.top = h + 'px';
+      document.querySelectorAll('.tq-q').forEach(function (q) { q.style.scrollMarginTop = (h + tqBar.offsetHeight + 12) + 'px'; });
+    }
+    window.addEventListener('resize', pinBar);
+    pinBar();
+
+    syncProgress();
+  })();
+  </script>
+  <?php endif; ?>
 <?php endif; ?>
 </body>
 </html>

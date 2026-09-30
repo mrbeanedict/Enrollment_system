@@ -131,7 +131,8 @@ notify_student_users(
     $conn,
     [(int) ($_SESSION['user_student_id'] ?? 0)],
     'Your online payment of ₱' . number_format($amount, 2) . ' is pending Treasury verification.',
-    'roles/student/portal/student_pay_online'
+    'roles/student/portal/student_pay_online',
+    'highlight'
 );
 
 // Best-effort — same pattern as submit_online_payment in
@@ -141,6 +142,22 @@ mysqli_stmt_bind_param($stu_stmt, "i", $student_id);
 mysqli_stmt_execute($stu_stmt);
 $stu = mysqli_stmt_get_result($stu_stmt)->fetch_assoc();
 mysqli_stmt_close($stu_stmt);
+
+// Tell Treasury there is a submission waiting for confirmation. Same
+// best-effort stance as the email below: a failure here must never undo
+// or fail a payment that is already recorded.
+try {
+    $payer = trim(($stu['given_name'] ?? '') . ' ' . ($stu['family_name'] ?? '')) ?: 'A student';
+    notify_department(
+        $conn,
+        'treasury',
+        'Online payment of ₱' . number_format($amount, 2) . ' from ' . $payer . ' awaits confirmation.',
+        'roles/staff/treasury/online_payments',
+        'approval'
+    );
+} catch (Throwable $e) {
+    error_log('[paymongo_confirm_return] treasury notification failed: ' . $e->getMessage());
+}
 
 if (!empty($stu['email'])) {
     try {

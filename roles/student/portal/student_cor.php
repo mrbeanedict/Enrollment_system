@@ -99,6 +99,11 @@ $subjects_sql = "
     SELECT subj.subject_name,
            ss.day, ss.start_time, ss.end_time,
            ss.room AS specialized_room,
+           -- Every weekly class of the subject (it can meet several times).
+           (SELECT GROUP_CONCAT(CONCAT(m.day, ' ', TIME_FORMAT(m.start_time, '%l:%i %p'), '–', TIME_FORMAT(m.end_time, '%l:%i %p'))
+                                ORDER BY FIELD(m.day, 'Mon','Tue','Wed','Thu','Fri'), m.start_time SEPARATOR ', ')
+              FROM section_subject_meetings m
+             WHERE m.section_id = ss.section_id AND m.subject_id = ss.subject_id AND m.semester = ss.semester) AS meetings_text,
            CONCAT(t.given_name, ' ', t.family_name) AS teacher_name
     FROM enrollment_subjects es
     JOIN subjects subj ON subj.subject_id = es.subject_id
@@ -115,13 +120,7 @@ $subj_stmt->bind_param('iii', $enrollment_id, $displaySemester, $enrollment_id);
 $subj_stmt->execute();
 $subj_res = $subj_stmt->get_result();
 while ($subj_res && ($sr = mysqli_fetch_assoc($subj_res))) {
-    if (!empty($sr['day']) && !empty($sr['start_time']) && !empty($sr['end_time'])) {
-        $sr['schedule_display'] = $sr['day'] . ' '
-            . date('g:i A', strtotime($sr['start_time'])) . '–'
-            . date('g:i A', strtotime($sr['end_time']));
-    } else {
-        $sr['schedule_display'] = null;
-    }
+    $sr['schedule_display'] = !empty($sr['meetings_text']) ? $sr['meetings_text'] : null;
     $sr['room_display'] = !empty($sr['specialized_room']) ? $sr['specialized_room'] : ($row['room'] ?? null);
     $subjects[] = $sr;
 }

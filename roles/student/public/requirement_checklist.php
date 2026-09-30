@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../../../bootstrap.php';
 header("Cache-Control: no-store, no-cache, must-revalidate");
 header("Pragma: no-cache");
 ?>
@@ -12,8 +13,11 @@ header("Pragma: no-cache");
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,560;9..144,650&display=swap" rel="stylesheet">
 <!-- Uses the same shared stylesheet as students/index.php -->
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="<?= APP_URL ?>/assets/css/styles.css?v=<?= filemtime(BASE_PATH . '/assets/css/styles.css') ?>">
 <style>
+  /* shared top bar is sticky, not fixed — drop styles.css's fixed-nav offset */
+  body{padding-top:0;}
+
   /* ---------- page-only additions (checklist section) ---------- */
   .page-hero{background:var(--color-dark);padding:64px 0 40px;}
   .page-hero .wrap{text-align:center;}
@@ -43,48 +47,7 @@ header("Pragma: no-cache");
 <body>
 
 <!-- ==================== NAVIGATION ==================== -->
-<nav>
-  <div class="wrap">
-    <a href="index.php" class="brand">
-      <img src="/Enrollment_system/assets/images/logo_mini2.png" alt="Greenfield Senior High School">
-    </a>
-
-    <div class="nav-links">
-      <a href="index.php">Home</a>
-      <a href="index.php#why">About</a>
-      <a href="index.php#strands">Strands</a>
-      <div class="nav-dropdown">
-        <a href="index.php#enroll" class="nav-dropdown-toggle active">Admissions</a>
-        <div class="nav-dropdown-menu">
-          <a href="application_form.php">Application Form</a>
-          <a href="requirement_checklist.php" class="active">Requirements Checklist</a>
-          <a href="track_status.php">Track Application Status</a>
-          <a href="faq.php">Enrollment FAQs</a>
-        </div>
-      </div>
-    </div>
-
-    <div class="nav-right">
-      <a href="/Enrollment_system/login" class="nav-portal-link">Student Portal</a>
-      <a href="application_form.php" class="btn btn-primary nav-cta">Apply Now</a>
-    </div>
-  </div>
-</nav>
-
-<!-- minimal dropdown styling (kept local so it doesn't have to be
-     merged into the shared stylesheet) -->
-<style>
-  .nav-dropdown{position:relative;}
-  .nav-dropdown-menu{
-    display:none;position:absolute;top:calc(100% + 10px);left:50%;transform:translateX(-50%);
-    background:var(--dark);border-radius:14px;padding:8px;min-width:220px;
-    box-shadow:0 16px 34px rgba(28,38,40,0.28);
-  }
-  .nav-dropdown-menu a{display:block;padding:10px 14px;border-radius:9px;font-size:0.86rem;color:rgba(255,255,255,0.78);}
-  .nav-dropdown-menu a:hover,.nav-dropdown-menu a.active{background:rgba(255,255,255,0.1);color:#fff;}
-  .nav-dropdown:hover .nav-dropdown-menu,
-  .nav-dropdown:focus-within .nav-dropdown-menu{display:block;}
-</style>
+<?php $topbar_active = 'requirements'; include BASE_PATH . '/shared/includes/public_topbar.php'; ?>
 
 <!-- ==================== PAGE HERO ==================== -->
 <header class="page-hero">
@@ -149,7 +112,7 @@ header("Pragma: no-cache");
 
     <div class="checklist-cta">
       <p>Have all your documents ready?</p>
-      <a href="application_form.php" class="btn btn-primary">Start Your Application →</a>
+      <a href="admission" class="btn btn-primary">Start Your Application →</a>
     </div>
 
   </div>

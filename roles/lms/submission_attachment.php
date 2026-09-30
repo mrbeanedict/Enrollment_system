@@ -19,14 +19,21 @@ if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true || ($_SESS
 }
 
 $student_id = (int) ($_SESSION['student_id'] ?? 0);
-$item_id    = (int) ($_GET['item_id'] ?? 0);
-if ($item_id <= 0) {
+$file_id    = (int) ($_GET['file_id'] ?? 0);
+if ($file_id <= 0) {
     http_response_code(404);
     exit('Not found.');
 }
 
-$stmt = $conn->prepare("SELECT file_path, original_filename FROM gradebook_submissions WHERE item_id = ? AND student_id = ?");
-$stmt->bind_param('ii', $item_id, $student_id);
+// One attached file (gradebook_submission_files) — only from the student's
+// own submission, draft or turned in.
+$stmt = $conn->prepare("
+    SELECT f.file_path, f.original_filename
+    FROM gradebook_submission_files f
+    JOIN gradebook_submissions gs ON gs.submission_id = f.submission_id
+    WHERE f.file_id = ? AND gs.student_id = ?
+");
+$stmt->bind_param('ii', $file_id, $student_id);
 $stmt->execute();
 $row = $stmt->get_result()->fetch_assoc();
 $stmt->close();

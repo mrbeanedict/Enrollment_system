@@ -28,6 +28,7 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
 
 <!-- SweetAlert2 -->
 <script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
+<?php require_once __DIR__ . '/ui_modal_css.php'; ?>
 <script src="<?= APP_URL ?>/assets/js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="<?= APP_URL ?>/logout"></script>
 
 <div class="page-loader" id="pageLoader"><div class="page-loader-spinner"></div></div>
@@ -54,7 +55,7 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
     <span class="nav-section-label">Overview</span>
 
     <?php navLink('dashboard', 'Dashboard',
-      '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>',
+      '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13h4v7H3zm7-9h4v16h-4zm7 5h4v11h-4z"/></svg>',
       $current, 'dashboard.php'); ?>
 
     <span class="nav-section-label">Enrollment</span>
@@ -207,10 +208,11 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
       }
       Swal.fire({
         title: 'Log out?',
+        customClass: { popup: 'ui-swal-logout' },
         text: 'You will be returned to the login page.',
         icon: 'question',
         showCancelButton: true,
-        confirmButtonColor: '#386641',
+        confirmButtonColor: '#1E4D3B',
         cancelButtonColor: '#aaa',
         confirmButtonText: 'Yes, log out',
         cancelButtonText: 'Cancel'
@@ -248,7 +250,6 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
           // Disable the trigger and show the full-page loader before the
           // (possibly slow — e.g. a synchronous email send) POST goes out,
           // so a second click can't fire the same action twice.
-          if (lastSubmitter) { lastSubmitter.disabled = true; }
           var loader = document.getElementById('pageLoader');
           if (loader) loader.classList.add('show');
           if (lastSubmitter && typeof self.requestSubmit === 'function') {
@@ -256,6 +257,11 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
           } else {
             HTMLFormElement.prototype.submit.call(self);
           }
+          // Disable only AFTER the form data has been captured: a disabled
+          // submitter's name/value is left out of the POST, so handlers keyed
+          // on the button (isset($_POST['edit_staff']), 'toggle_active', …)
+          // saw an empty submission and silently did nothing.
+          if (lastSubmitter) { lastSubmitter.disabled = true; }
         }
 
         if (typeof Swal === 'undefined') {
@@ -267,7 +273,7 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
           text: msg,
           icon: icon,
           showCancelButton: true,
-          confirmButtonColor: '#386641',
+          confirmButtonColor: '#1E4D3B',
           cancelButtonColor: '#aaa',
           confirmButtonText: 'Yes, proceed',
           cancelButtonText: 'Cancel'
@@ -292,7 +298,7 @@ function navLink($href, $label, $icon_svg, $current_page, $match) {
           text: msg,
           icon: 'question',
           showCancelButton: true,
-          confirmButtonColor: '#386641',
+          confirmButtonColor: '#1E4D3B',
           cancelButtonColor: '#aaa',
           confirmButtonText: 'Yes',
           cancelButtonText: 'Cancel'

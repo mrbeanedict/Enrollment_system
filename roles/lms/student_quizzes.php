@@ -7,6 +7,8 @@
 session_name('STUDENT_LMS_SESSID');
 session_start();
 require_once __DIR__ . '/../../bootstrap.php';
+require_once BASE_PATH . '/shared/helpers/lms_subject_icon.php';
+require_once BASE_PATH . '/shared/helpers/lms_tasks.php';
 
 $is_student = require_login('student', null, 'ignore', 'bool');
 $student_id = $is_student ? (int) ($_SESSION['student_id'] ?? 0) : 0;
@@ -19,29 +21,6 @@ $student_id = $is_student ? (int) ($_SESSION['student_id'] ?? 0) : 0;
     <title>Quizzes — SHS Enrollment</title>
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_student.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_student.css') ?>">
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_lms.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_lms.css') ?>">
-    <style>
-      .as-picker { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
-      .as-picker select {
-        appearance: none; -webkit-appearance: none;
-        height:36px; border:1px solid var(--lms-border, #DCE5DE); border-radius:8px;
-        background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 24 16'%3E%3Cpolygon points='2,3 22,3 12,15' fill='%230A3925'/%3E%3C/svg%3E") no-repeat right 12px center;
-        background-size: 12px;
-        padding:0 34px 0 12px; font-size:13px; font-family:inherit; color:#1A1A2E;
-        cursor: pointer; transition: border-color .15s ease;
-      }
-      .as-picker select:hover, .as-picker select:focus {
-        outline: none; border-color: var(--lms-ink, #0A3925);
-      }
-      .as-subject-title { font-size:13px; font-weight:700; color:var(--lms-ink); text-transform:uppercase; letter-spacing:.04em; margin:1rem 0 .5rem; }
-      .as-subject-title:first-child { margin-top:0; }
-      .as-item { border-bottom:1px solid var(--lms-border-2); padding:12px 0; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
-      .as-item:last-child { border-bottom:none; }
-      .as-item-title { font-weight:600; font-size:14px; color:#1A1A2E; }
-      .as-item-meta { font-size:11px; color:#8A8A9A; margin-top:2px; }
-      .btn-sm { height:32px; padding:0 12px; border:1px solid var(--lms-border); border-radius:6px; background:#fff; font-size:12px; font-family:inherit; cursor:pointer; color:#5A5A72; text-decoration:none; display:inline-block; line-height:32px; }
-      .btn-sm:hover { border-color:var(--lms-ink); color:var(--lms-ink); }
-      .as-submitted { font-size:12px; color:#1A6B4A; background:#EBF7F2; border:0.5px solid #A8D9C5; border-radius:6px; padding:6px 10px; }
-    </style>
 </head>
 <body class="student-layout lms-layout lms-warm-bg">
 <?php if (!$is_student): ?>
@@ -90,28 +69,28 @@ $student_id = $is_student ? (int) ($_SESSION['student_id'] ?? 0) : 0;
 
         if ($subject_id > 0) {
             $it_stmt = mysqli_prepare($conn, "
-                SELECT gi.item_id, gi.title, gi.time_limit_minutes, gi.max_score,
+                SELECT gi.item_id, gi.title, gi.time_limit_minutes, gi.max_score, gi.due_date, gi.category, gi.is_quiz,
                        sub.subject_name,
-                       qa.submitted_at, qa.score
+                       qa.attempt_id, qa.submitted_at, qa.score
                 FROM gradebook_items gi
                 JOIN subjects sub ON sub.subject_id = gi.subject_id
                 JOIN section_subjects ss ON ss.section_id = gi.section_id AND ss.subject_id = gi.subject_id AND ss.semester = ?
                 LEFT JOIN quiz_attempts qa ON qa.item_id = gi.item_id AND qa.student_id = ?
                 WHERE gi.section_id = ? AND gi.school_year = ? AND gi.is_quiz = 1 AND gi.subject_id = ?
-                ORDER BY gi.item_id
+                ORDER BY gi.due_date IS NULL, gi.due_date, gi.item_id
             ");
             mysqli_stmt_bind_param($it_stmt, "iiisi", $selected_sem, $student_id, $sec_id, $selected_sy, $subject_id);
         } else {
             $it_stmt = mysqli_prepare($conn, "
-                SELECT gi.item_id, gi.title, gi.time_limit_minutes, gi.max_score,
+                SELECT gi.item_id, gi.title, gi.time_limit_minutes, gi.max_score, gi.due_date, gi.category, gi.is_quiz,
                        sub.subject_name,
-                       qa.submitted_at, qa.score
+                       qa.attempt_id, qa.submitted_at, qa.score
                 FROM gradebook_items gi
                 JOIN subjects sub ON sub.subject_id = gi.subject_id
                 JOIN section_subjects ss ON ss.section_id = gi.section_id AND ss.subject_id = gi.subject_id AND ss.semester = ?
                 LEFT JOIN quiz_attempts qa ON qa.item_id = gi.item_id AND qa.student_id = ?
                 WHERE gi.section_id = ? AND gi.school_year = ? AND gi.is_quiz = 1
-                ORDER BY sub.subject_name, gi.item_id
+                ORDER BY sub.subject_name, gi.due_date IS NULL, gi.due_date, gi.item_id
             ");
             mysqli_stmt_bind_param($it_stmt, "iiis", $selected_sem, $student_id, $sec_id, $selected_sy);
         }
@@ -157,7 +136,7 @@ $student_id = $is_student ? (int) ($_SESSION['student_id'] ?? 0) : 0;
         <?php if (empty($sy_list)): ?>
           <p class="empty-state">No enrollment record found yet.</p>
         <?php else: ?>
-          <form method="GET" class="as-picker">
+          <form method="GET" class="lms-picker">
             <?php if ($subject_id > 0): ?><input type="hidden" name="subject_id" value="<?= $subject_id ?>"><?php endif; ?>
             <select name="sy" onchange="this.form.submit()">
               <?php foreach ($sy_list as $y): ?>
@@ -172,30 +151,60 @@ $student_id = $is_student ? (int) ($_SESSION['student_id'] ?? 0) : 0;
 
           <?php if (empty($items_by_subject)): ?>
             <p class="empty-state">No quizzes available this semester.</p>
-          <?php else: ?>
+          <?php else:
+            $all   = array_merge(...array_values($items_by_subject));
+            $nDone = count(array_filter($all, fn($r) => $r['submitted_at']));
+            $num   = fn($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
+          ?>
+            <div class="lms-summary">
+              <span class="lms-summary-count"><?= $nDone ?> of <?= count($all) ?> done</span>
+              <div class="hm-chips" role="group" aria-label="Filter quizzes" data-filter-list="qzList">
+                <button type="button" class="hm-chip is-on" data-filter="all" aria-pressed="true">All</button>
+                <button type="button" class="hm-chip" data-filter="todo" aria-pressed="false">To take</button>
+                <button type="button" class="hm-chip" data-filter="done" aria-pressed="false">Done</button>
+              </div>
+            </div>
+            <div class="hm-progress" aria-hidden="true"><span style="transform:scaleX(<?= count($all) ? $nDone / count($all) : 0 ?>)"></span></div>
+
+            <div id="qzList">
             <?php foreach ($items_by_subject as $grp_subject_name => $subj_items): ?>
               <?php if ($subject_id <= 0): ?>
-                <div class="as-subject-title"><?= htmlspecialchars($grp_subject_name) ?></div>
+                <h3 class="lms-group-title" data-filter-group><span class="hm-tile" aria-hidden="true"><?= subject_banner_icon($grp_subject_name) ?></span><?= htmlspecialchars($grp_subject_name) ?><span class="count"><?= count($subj_items) ?></span></h3>
               <?php endif; ?>
-              <?php foreach ($subj_items as $it): ?>
-                <div class="as-item">
-                  <div>
-                    <div class="as-item-title"><?= htmlspecialchars($it['title']) ?></div>
-                    <div class="as-item-meta"><?= $it['time_limit_minutes'] ? $it['time_limit_minutes'] . ' minute time limit' : 'No time limit' ?></div>
+              <ul class="hm-cal-list">
+              <?php foreach ($subj_items as $it):
+                $kind = lms_task_kind($it);
+                $done = (bool) $it['submitted_at'];
+                $dl   = (!$done && $it['due_date']) ? lms_due_short($it['due_date']) : '';
+              ?>
+                <li class="hm-cal-item <?= lms_kind_class($kind) ?><?= $done ? ' is-done' : '' ?>" data-status="<?= $done ? 'done' : 'todo' ?>">
+                  <div class="hm-cal-item-main">
+                    <b><?= htmlspecialchars($it['title']) ?></b>
+                    <span>
+                      <?= $it['time_limit_minutes'] ? (int) $it['time_limit_minutes'] . '-minute time limit' : 'No time limit' ?>
+                      <?php if ($it['due_date']): ?> · Due <?= date('M j, g:i A', strtotime($it['due_date'])) ?><?php endif; ?>
+                    </span>
                   </div>
-                  <?php if ($it['submitted_at']): ?>
-                    <div class="as-submitted">✓ Score: <?= rtrim(rtrim(number_format((float)$it['score'], 2), '0'), '.') ?> / <?= rtrim(rtrim(number_format((float)$it['max_score'], 2), '0'), '.') ?></div>
+                  <span class="hm-kind <?= lms_kind_class($kind) ?>"><?= $kind ?></span>
+                  <?php if ($done): ?>
+                    <span class="lms-score">✓ <?= $num($it['score']) ?> / <?= $num($it['max_score']) ?></span>
+                    <a class="hm-open-btn is-quiet" href="take_quiz?item_id=<?= (int) $it['item_id'] ?>">View<span class="hm-sr"> result for <?= htmlspecialchars($it['title']) ?></span></a>
                   <?php else: ?>
-                    <a class="btn-sm" href="take_quiz?item_id=<?= (int)$it['item_id'] ?>">Start Quiz</a>
+                    <?php if ($dl): ?><span class="hm-todo-due<?= lms_due_tone($dl) ?>"><?= $dl ?></span><?php endif; ?>
+                    <a class="hm-open-btn" href="take_quiz?item_id=<?= (int) $it['item_id'] ?>"><?= $it['attempt_id'] ? 'Resume' : 'Start' ?><span class="hm-sr"> <?= htmlspecialchars($it['title']) ?></span></a>
                   <?php endif; ?>
-                </div>
+                </li>
               <?php endforeach; ?>
+              </ul>
             <?php endforeach; ?>
+            </div>
+            <p class="hm-empty lms-filter-none" hidden>Nothing in this filter.</p>
           <?php endif; ?>
         <?php endif; ?>
       </div>
     </div>
   </div>
+  <script src="<?= APP_URL ?>/assets/js/lms_filter.js?v=<?= filemtime(BASE_PATH . '/assets/js/lms_filter.js') ?>"></script>
 <?php endif; ?>
 </body>
 </html>

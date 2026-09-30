@@ -65,6 +65,7 @@ $sb_display_name = trim(($sb_given_name ?? '') . ' ' . ($sb_family_name ?? '')) 
 
 <!-- SweetAlert2 -->
 <script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
+<?php require_once __DIR__ . '/ui_modal_css.php'; ?>
 <script src="<?= APP_URL ?>/assets/js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-logout-url="<?= APP_URL ?>/roles/teacher/teacher_logout"></script>
 
 <div class="page-loader" id="pageLoader"><div class="page-loader-spinner"></div></div>
@@ -171,6 +172,7 @@ $sb_display_name = trim(($sb_given_name ?? '') . ' ' . ($sb_family_name ?? '')) 
         }
         Swal.fire({
           title: 'Log out?',
+          customClass: { popup: 'ui-swal-logout' },
           text: 'You will be returned to the login page.',
           icon: 'question',
           showCancelButton: true,

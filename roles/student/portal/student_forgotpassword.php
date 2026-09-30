@@ -196,6 +196,7 @@ $conn->close();
 </div>
 
 <script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
+<?php require_once __DIR__ . '/../../../shared/includes/ui_modal_css.php'; ?>
 <script>
   // Global SweetAlert for data-confirm forms (falls back to native confirm())
   // — same pattern as shared/includes/student_sidebar.php's, copied here since

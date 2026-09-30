@@ -1,6 +1,8 @@
 <?php
-// Second-tier tab strip — Lessons / Discussions / Assignments / Quizzes,
-// scoped to one subject. Included by all four academics pages right below
+// Second-tier tab strip — Stream / Lessons / Discussions / Assignments /
+// Quizzes / People, scoped to one subject. Stream is the subject's home
+// (class announcements); People lists its teacher(s) and classmates.
+// Included by every subject-scoped academics page right below
 // the main topbar, but only renders when a subject_id is present (i.e. the
 // student arrived here from a My Courses card rather than the main nav's
 // Academics dropdown, which still browses every subject grouped together).
@@ -19,10 +21,12 @@ if (!empty($subject_id)) {
 
     $lst_current = basename($_SERVER['PHP_SELF']);
     $lst_tabs = [
+        'student_stream.php'      => ['Stream',      'student_stream',      $lst_qs_base],
         'student_lessons.php'     => ['Lessons',     'student_lessons',     $lst_qs_with_sem],
         'student_discussions.php' => ['Discussions', 'student_discussions', $lst_qs_base],
         'student_assignments.php' => ['Assignments', 'student_assignments', $lst_qs_with_sem],
         'student_quizzes.php'     => ['Quizzes',      'student_quizzes',    $lst_qs_with_sem],
+        'student_people.php'      => ['People',      'student_people',      $lst_qs_base],
     ];
     ?>
     <div class="subj-tabstrip">

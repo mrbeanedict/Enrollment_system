@@ -299,7 +299,7 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
     <div class="teacher-content">
       <a class="qb-back" href="teacher_gradebook?<?= htmlspecialchars($return_qs) ?>">&larr; Back to Assessment</a>
 
-      <?php if ($flash): ?><div class="notice notice-<?= htmlspecialchars($flash_type) ?>"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+      <?php if ($flash): ?><div class="notice notice-<?= htmlspecialchars($flash_type) ?>" data-ui-toast><?= htmlspecialchars($flash) ?></div><?php endif; ?>
 
       <?php if (!$item): ?>
         <div class="notice notice-info">That quiz was not found among your assignments.</div>

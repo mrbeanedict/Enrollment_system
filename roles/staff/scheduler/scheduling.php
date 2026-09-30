@@ -1,26 +1,32 @@
 <?php
 /* ============================================================
-   scheduling.php — Class Scheduling
+   scheduling.php — Class Scheduling (the schedule builder)
    ------------------------------------------------------------
-   Access model:
-     - role='admin'                     -> reviewer (Class Scheduling
-                                            Approvals table), same as
-                                            coordinator
-     - staff, department='coordinator'  -> reviewer
-     - staff, department='scheduler'    -> builder: section picker +
-                                            per-subject schedule editor,
-                                            submits the whole section's
-                                            schedule for approval as one unit
+   Scheduler-only. The one place a section's weekly class schedule is
+   built, for either semester:
 
-   Approval is per SECTION, not per subject row. A scheduler fills in every
-   subject for the section (one schedule, good for the whole school year),
-   then submits once; a reviewer approves or rejects the whole package.
-   Editing an already-approved schedule immediately reverts it to 'pending'
-   so the coordinator re-reviews the change.
+     - Sections rail (left): every active section with its progress and
+       schedule status; search + status chips.
+     - Builder (right): the selected section's subjects on a Mon–Fri
+       timetable AND as an editable list — both views edit the same
+       in-memory schedule. A side panel edits one subject at a time.
+       Teacher/room clashes against every other section (same semester)
+       and overlaps inside the section show live, before saving.
+     - One "Save draft" posts the whole schedule; it's saved in a single
+       transaction (all or nothing) and re-checked on the server with
+       row locks — the browser checks are a convenience only.
+     - "Submit for approval" saves (if needed) then submits.
+
+   Coordinators/admins review schedules in coordinator/approvals.php
+   (Schedule tab, per semester) and are redirected there. The old
+   create_schedule.php guided page now redirects here too.
+
+   Shared logic (clash checks, save, submit, busy map): _schedule_lib.php
    ============================================================ */
 
 session_start();
 require_once __DIR__ . '/../../../bootstrap.php';
+require_once __DIR__ . '/_schedule_lib.php';
 
 require_login();
 guard_password_change(APP_URL . '/roles/staff/change_password');
@@ -28,7 +34,6 @@ guard_password_change(APP_URL . '/roles/staff/change_password');
 $role    = $_SESSION['role'] ?? '';
 $user_id = (int)($_SESSION['user_id'] ?? 0);
 
-// ── Resolve department up front (same pattern as curriculum.php) ───────────
 $department = $_SESSION['department'] ?? null;
 if ($department === null) {
     $dept_stmt = mysqli_prepare($conn, "
@@ -51,740 +56,434 @@ $department = $department ?? '';
 $is_reviewer  = ($role === 'admin') || ($role === 'staff' && $department === 'coordinator');
 $is_scheduler = ($role === 'staff' && $department === 'scheduler');
 
-if (!$is_reviewer && !$is_scheduler) {
+$semester = (int)($_POST['semester'] ?? $_GET['semester'] ?? 1) === 2 ? 2 : 1;
+
+// Reviewers approve schedules on the Approvals page (Schedule tab).
+if ($is_reviewer) {
+    header('Location: ' . APP_URL . '/roles/staff/coordinator/approvals?type=schedule' . ($semester === 2 ? '&sem=2' : ''));
+    exit();
+}
+if (!$is_scheduler) {
     header("Location: " . APP_URL . "/roles/staff/dashboard"); exit();
 }
 
 header("Cache-Control: no-store, no-cache, must-revalidate");
 header("Pragma: no-cache");
 
-$success = '';
-$error   = '';
-
-$valid_days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-
-// Hourly business-block boundaries, 7:30 AM – 4:30 PM (matches sections.php's
-// weekly_slots(), so a schedule built here lines up with the same grid the
-// auto-generator uses).
-$time_bounds = [];
-for ($h = 7; $h <= 16; $h++) { $time_bounds[] = sprintf('%02d:30:00', $h); }
-$start_options = array_slice($time_bounds, 0, -1); // 07:30 .. 15:30
-$end_options   = array_slice($time_bounds, 1);     // 08:30 .. 16:30
-
-function format_time_label($t) {
-    if (!$t) { return ''; }
-    return date('g:i A', strtotime($t));
+function strand_badge_class(?string $code): string {
+    $map = ['STEM' => 'stem', 'HUMSS' => 'humss', 'ABM' => 'abm', 'GAS' => 'gas', 'TVL-ICT' => 'tvl', 'TVL' => 'tvl', 'CORE' => 'core'];
+    return $map[$code] ?? 'none';
 }
 
-// Semester 1 keeps its original sections columns/prefix; Semester 2 uses its
-// own shadow columns and tracking-ID prefix so the two lifecycles never
-// collide (see plan: sections.schedule_*_sem2).
-function sched_col(string $base, int $semester): string {
-    return $semester === 2 ? $base . '_sem2' : $base;
-}
+$error      = '';
+$failed_row = null;
+$posted     = null;   // what was typed, re-shown after a failed save
 
-$semester = (int)($_GET['semester'] ?? $_POST['semester'] ?? 1);
-if (!in_array($semester, [1, 2], true)) { $semester = 1; }
+$flash = $_SESSION['sched_flash'] ?? null;
+unset($_SESSION['sched_flash']);
 
-// ── Coordinator table: filters / pagination ─────────────────────────────────
-$valid_status = ['', 'pending', 'approved', 'rejected'];
-$status_param = $_GET['status'] ?? '';
-$f_status = in_array($status_param, $valid_status, true) ? $status_param : 'pending';
-$q        = trim($_GET['q'] ?? '');
-$page     = max(1, (int)($_GET['page'] ?? 1));
-$per_page = 10;
-
-$return_qs = http_build_query(array_filter([
-    'status' => $f_status !== '' ? $f_status : null,
-    'q'      => $q !== '' ? $q : null,
-    'page'   => $page > 1 ? $page : null,
-]));
-
-// ── Update one subject's schedule for one section (SCHEDULER-ONLY, while editable) ─
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_schedule'])) {
+// ── Save (and optionally submit) the whole schedule ─────────────────────────
+// Posted as one row per subject (subject_id[], teacher_id[]) plus one row per
+// class meeting (m_subject[], m_day[], m_start[], m_end[], m_room[]).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_schedule'])) {
     $section_id = (int)($_POST['section_id'] ?? 0);
-    $subject_id = (int)($_POST['subject_id'] ?? 0);
-    $teacher_id = $_POST['teacher_id'] !== '' ? (int)$_POST['teacher_id'] : null;
-    $day        = $_POST['day'] ?? '';
-    $start_time = $_POST['start_time'] ?? '';
-    $end_time   = $_POST['end_time'] ?? '';
-    $room_in    = trim($_POST['room'] ?? '');
+    $then_submit = ($_POST['then_submit'] ?? '') === '1';
 
-    if (!$is_scheduler) {
-        $error = 'Only a scheduler can edit a class schedule.';
-    } elseif (!$section_id || !$subject_id) {
-        $error = 'Invalid section or subject.';
-    } elseif (!$day || !$start_time || !$end_time) {
-        $error = 'Day, start time, and end time are required to save a schedule slot.';
-    } elseif (!in_array($day, $valid_days, true)) {
-        $error = 'Invalid day.';
-    } elseif ($start_time >= $end_time) {
-        $error = 'End time must be after start time.';
+    $posted = [];
+    foreach ((array)($_POST['subject_id'] ?? []) as $i => $sid) {
+        $posted[(int)$sid] = [
+            'subject_id' => (int)$sid,
+            'teacher_id' => ($_POST['teacher_id'][$i] ?? '') !== '' ? (int)$_POST['teacher_id'][$i] : null,
+            'meetings'   => [],
+        ];
+    }
+    foreach ((array)($_POST['m_subject'] ?? []) as $j => $sid) {
+        if (!isset($posted[(int)$sid])) continue;
+        $posted[(int)$sid]['meetings'][] = [
+            'day'        => (string)($_POST['m_day'][$j] ?? ''),
+            'start_time' => (string)($_POST['m_start'][$j] ?? ''),
+            'end_time'   => (string)($_POST['m_end'][$j] ?? ''),
+            'room'       => (string)($_POST['m_room'][$j] ?? ''),
+        ];
+    }
+    $posted = array_values($posted);
+
+    $res = sched_save_slots($conn, $section_id, $semester, $posted, $user_id);
+    if (!$res['ok']) {
+        $error      = $res['error'];
+        $failed_row = $res['row'];
     } else {
-        $status_col = sched_col('schedule_status', $semester);
-        $sec_stmt = $conn->prepare("SELECT room, $status_col AS schedule_status, section_name, school_year FROM sections WHERE section_id = ?");
-        $sec_stmt->bind_param('i', $section_id);
-        $sec_stmt->execute();
-        $sec_row = $sec_stmt->get_result()->fetch_assoc();
-        $sec_stmt->close();
-
-        if (!$sec_row) {
-            $error = 'Section not found.';
-        } elseif (!in_array($sec_row['schedule_status'], ['unscheduled', 'rejected', 'approved'], true)) {
-            $error = 'This section\'s schedule is locked while it is pending review.';
-        } else {
-            $effective_room = $room_in !== '' ? $room_in : ($sec_row['room'] ?? null);
-
-            $conn->begin_transaction();
-            $conflict = null;
-
-            if ($teacher_id) {
-                $tc = $conn->prepare("
-                    SELECT sec2.section_name, sub2.subject_name
-                    FROM section_subjects ss2
-                    JOIN sections sec2 ON sec2.section_id = ss2.section_id
-                    JOIN subjects sub2 ON sub2.subject_id = ss2.subject_id
-                    WHERE ss2.teacher_id = ? AND ss2.day = ?
-                      AND NOT (ss2.section_id = ? AND ss2.subject_id = ?)
-                      AND ss2.start_time < ? AND ss2.end_time > ?
-                    FOR UPDATE
-                ");
-                $tc->bind_param('isiiss', $teacher_id, $day, $section_id, $subject_id, $end_time, $start_time);
-                $tc->execute();
-                $trow = $tc->get_result()->fetch_assoc();
-                $tc->close();
-                if ($trow) {
-                    $conflict = "This teacher is already scheduled for \"{$trow['subject_name']}\" in {$trow['section_name']} at that day/time.";
-                }
-            }
-
-            if (!$conflict && $effective_room) {
-                $rc = $conn->prepare("
-                    SELECT sec2.section_name, sub2.subject_name
-                    FROM section_subjects ss2
-                    JOIN sections sec2 ON sec2.section_id = ss2.section_id
-                    JOIN subjects sub2 ON sub2.subject_id = ss2.subject_id
-                    WHERE COALESCE(ss2.room, sec2.room) = ? AND ss2.day = ?
-                      AND NOT (ss2.section_id = ? AND ss2.subject_id = ?)
-                      AND ss2.start_time < ? AND ss2.end_time > ?
-                    FOR UPDATE
-                ");
-                $rc->bind_param('ssiiss', $effective_room, $day, $section_id, $subject_id, $end_time, $start_time);
-                $rc->execute();
-                $rrow = $rc->get_result()->fetch_assoc();
-                $rc->close();
-                if ($rrow) {
-                    $conflict = "Room \"{$effective_room}\" is already booked for \"{$rrow['subject_name']}\" ({$rrow['section_name']}) at that day/time.";
-                }
-            }
-
-            if ($conflict) {
-                $conn->rollback();
-                $error = $conflict;
+        $msg = !$res['changed'] ? 'No changes to save.'
+             : ($res['reverted'] ? 'Saved. Because this schedule was approved, it went back to the coordinator for re-approval.'
+                                 : 'Draft saved.');
+        if ($then_submit) {
+            $sub = sched_submit($conn, $section_id, $semester, $user_id);
+            if ($sub['ok']) {
+                $msg = 'Submitted for coordinator approval. Editing is locked until it\'s reviewed.';
             } else {
-                $room_param = $room_in !== '' ? $room_in : null;
-                $up = $conn->prepare("
-                    UPDATE section_subjects
-                    SET teacher_id = ?, day = ?, start_time = ?, end_time = ?, room = ?
-                    WHERE section_id = ? AND subject_id = ? AND semester = ?
-                ");
-                $up->bind_param('issssiii', $teacher_id, $day, $start_time, $end_time, $room_param, $section_id, $subject_id, $semester);
-                $up->execute();
-                $up->close();
-
-                // Keep teacher_assignments (what the teacher portal actually
-                // reads) in sync with section_subjects.teacher_id — no
-                // unique key on this table, so clear any stale row for this
-                // slot first, then insert the current teacher (if any).
-                // Scoped by semester so Sem1 and Sem2 each keep their own
-                // assignment row even when they share a teacher_id.
-                //
-                // Read the prior teacher first — this delete+insert re-runs
-                // on every save even when nothing changed, so a "you've been
-                // assigned" notification below only fires when the teacher
-                // on this slot is actually new/different.
-                $prev_ta = $conn->prepare(
-                    "SELECT teacher_id FROM teacher_assignments WHERE subject_id = ? AND section_id = ? AND school_year = ? AND semester = ?"
-                );
-                $prev_ta->bind_param('iisi', $subject_id, $section_id, $sec_row['school_year'], $semester);
-                $prev_ta->execute();
-                $prev_teacher_id = (int) ($prev_ta->get_result()->fetch_assoc()['teacher_id'] ?? 0);
-                $prev_ta->close();
-
-                $del_ta = $conn->prepare(
-                    "DELETE FROM teacher_assignments WHERE subject_id = ? AND section_id = ? AND school_year = ? AND semester = ?"
-                );
-                $del_ta->bind_param('iisi', $subject_id, $section_id, $sec_row['school_year'], $semester);
-                $del_ta->execute();
-                $del_ta->close();
-
-                if ($teacher_id) {
-                    $ins_ta = $conn->prepare(
-                        "INSERT INTO teacher_assignments (teacher_id, subject_id, section_id, school_year, semester) VALUES (?, ?, ?, ?, ?)"
-                    );
-                    $ins_ta->bind_param('iiisi', $teacher_id, $subject_id, $section_id, $sec_row['school_year'], $semester);
-                    $ins_ta->execute();
-                    $ins_ta->close();
-
-                    if ($teacher_id !== $prev_teacher_id) {
-                        $subj_stmt = $conn->prepare("SELECT subject_name FROM subjects WHERE subject_id = ?");
-                        $subj_stmt->bind_param('i', $subject_id);
-                        $subj_stmt->execute();
-                        $subject_name = $subj_stmt->get_result()->fetch_assoc()['subject_name'] ?? '';
-                        $subj_stmt->close();
-
-                        $tu_stmt = $conn->prepare("SELECT user_id FROM teachers WHERE teacher_id = ?");
-                        $tu_stmt->bind_param('i', $teacher_id);
-                        $tu_stmt->execute();
-                        $tu_row = $tu_stmt->get_result()->fetch_assoc();
-                        $tu_stmt->close();
-                        notify_teacher_users(
-                            $conn,
-                            [(int) ($tu_row['user_id'] ?? 0)],
-                            "You've been assigned to teach \"$subject_name\" — {$sec_row['section_name']}.",
-                            'roles/teacher/teacher_schedule'
-                        );
-                    }
-                }
-
-                // Editing an already-approved schedule un-approves it — the
-                // coordinator needs to review the change before it's live
-                // again, same mechanics as a first-time submission.
-                if ($sec_row['schedule_status'] === 'approved') {
-                    $sub_by_col = sched_col('schedule_submitted_by', $semester);
-                    $sub_at_col = sched_col('schedule_submitted_at', $semester);
-                    $rev_by_col = sched_col('schedule_reviewed_by', $semester);
-                    $rev_at_col = sched_col('schedule_reviewed_at', $semester);
-                    $rej_col    = sched_col('schedule_rejection_reason', $semester);
-                    $revert = $conn->prepare(
-                        "UPDATE sections SET $status_col='pending', $sub_by_col=?, $sub_at_col=NOW(),
-                         $rev_by_col=NULL, $rev_at_col=NULL, $rej_col=NULL
-                         WHERE section_id=?"
-                    );
-                    $revert->bind_param('ii', $user_id, $section_id);
-                    $revert->execute();
-                    $revert->close();
-                }
-
-                $conn->commit();
-
-                if ($sec_row['schedule_status'] === 'approved') {
-                    notify_coordinators($conn, "Schedule for section \"{$sec_row['section_name']}\" was edited and needs re-approval.", 'scheduler/scheduling?status=pending');
-                }
-
-                header("Location: scheduling?section_id=" . $section_id . "&semester=" . $semester); exit();
+                $msg = ($res['changed'] ? 'Draft saved, but it wasn\'t submitted: ' : 'Not submitted: ') . $sub['error'];
             }
         }
+        $_SESSION['sched_flash'] = $msg;
+        header("Location: scheduling?section_id=$section_id&semester=$semester"); exit();
     }
 }
 
-// ── Submit a section's schedule for approval (SCHEDULER-ONLY) ──────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_schedule'])) {
-    $section_id = (int)($_POST['section_id'] ?? 0);
-    if (!$is_scheduler) {
-        $error = 'Only a scheduler can submit a section schedule for approval.';
-    } else {
-        $status_col = sched_col('schedule_status', $semester);
-        $req_id_col = sched_col('schedule_request_id', $semester);
-        $sec_stmt = $conn->prepare("SELECT $status_col AS schedule_status, $req_id_col AS schedule_request_id, section_name FROM sections WHERE section_id = ?");
-        $sec_stmt->bind_param('i', $section_id);
-        $sec_stmt->execute();
-        $sec_row = $sec_stmt->get_result()->fetch_assoc();
-        $sec_stmt->close();
+// ── Sections rail ───────────────────────────────────────────────────────────
+// "Ready" = has a teacher and at least one class meeting.
+$status_col = sched_col('schedule_status', $semester);
+$rail_stmt = $conn->prepare("
+    SELECT sec.section_id, sec.section_name, sec.grade_level, st.strand_code AS strand, sec.room, sec.school_year,
+           sec.$status_col AS schedule_status,
+           COUNT(ss.subject_id) AS subject_count,
+           SUM(ss.teacher_id IS NOT NULL AND EXISTS (SELECT 1 FROM section_subject_meetings m
+                 WHERE m.section_id = ss.section_id AND m.subject_id = ss.subject_id AND m.semester = ss.semester)) AS ready_count,
+           (SELECT COUNT(*) FROM section_subject_meetings m WHERE m.section_id = sec.section_id AND m.semester = ?) AS timed_count
+    FROM sections sec
+    JOIN strands st ON st.strand_id = sec.strand
+    LEFT JOIN section_subjects ss ON ss.section_id = sec.section_id AND ss.semester = ?
+    WHERE sec.is_active = 1 AND sec.approval_status = 'approved'
+    GROUP BY sec.section_id
+    ORDER BY sec.grade_level ASC, st.strand_code ASC, sec.section_name ASC");
+$rail_stmt->bind_param('ii', $semester, $semester);
+$rail_stmt->execute();
+$rail = $rail_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$rail_stmt->close();
 
-        if (!$sec_row) {
-            $error = 'Section not found.';
-        } elseif (!in_array($sec_row['schedule_status'], ['unscheduled', 'rejected'], true)) {
-            $error = 'This schedule has already been submitted or approved.';
-        } else {
-            // Completeness check across every subject row for this section —
-            // one schedule, good for the whole semester.
-            $chk = $conn->prepare("
-                SELECT COUNT(*) AS c FROM section_subjects ss
-                WHERE ss.section_id = ? AND ss.semester = ?
-                  AND (ss.teacher_id IS NULL OR ss.day IS NULL OR ss.start_time IS NULL OR ss.end_time IS NULL)
-            ");
-            $chk->bind_param('ii', $section_id, $semester);
-            $chk->execute();
-            $incomplete = (int)$chk->get_result()->fetch_assoc()['c'];
-            $chk->close();
-
-            $total_chk = $conn->prepare("SELECT COUNT(*) AS c FROM section_subjects ss WHERE ss.section_id = ? AND ss.semester = ?");
-            $total_chk->bind_param('ii', $section_id, $semester);
-            $total_chk->execute();
-            $total = (int)$total_chk->get_result()->fetch_assoc()['c'];
-            $total_chk->close();
-
-            if ($total === 0) {
-                $error = 'This section has no subjects to schedule yet.';
-            } elseif ($incomplete > 0) {
-                $error = "$incomplete of $total subjects still need a teacher, day, and time before you can submit.";
-            } else {
-                // A tracking ID is generated once and stays stable across
-                // reject-then-resubmit cycles — only assign one if this
-                // section doesn't already have one. Semester 2 uses its own
-                // "SCH2-" prefix so the two sequences never collide.
-                $request_id = $sec_row['schedule_request_id'];
-                if (!$request_id) {
-                    $cn_year   = date('Y');
-                    $cn_prefix = $semester === 2 ? "SCH2-$cn_year-" : "SCH-$cn_year-";
-                    $cn_like   = $cn_prefix . '%';
-
-                    $seq_stmt = $conn->prepare(
-                        "SELECT $req_id_col AS rid FROM sections
-                         WHERE $req_id_col LIKE ?
-                         ORDER BY $req_id_col DESC LIMIT 1 FOR UPDATE"
-                    );
-                    $seq_stmt->bind_param('s', $cn_like);
-                    $seq_stmt->execute();
-                    $last_row = $seq_stmt->get_result()->fetch_assoc();
-                    $seq_stmt->close();
-
-                    $next_seq = 1;
-                    if ($last_row) {
-                        $parts    = explode('-', $last_row['rid']);
-                        $next_seq = ((int) end($parts)) + 1;
-                    }
-
-                    $attempts = 0;
-                    $saved    = false;
-                    while (!$saved && $attempts < 3) {
-                        $attempts++;
-                        $request_id = $cn_prefix . str_pad((string)$next_seq, 4, '0', STR_PAD_LEFT);
-                        $rid_stmt = $conn->prepare("UPDATE sections SET $req_id_col=? WHERE section_id=?");
-                        $rid_stmt->bind_param('si', $request_id, $section_id);
-                        if ($rid_stmt->execute()) {
-                            $saved = true;
-                        } elseif ($conn->errno === 1062) {
-                            $next_seq++;
-                        }
-                        $rid_stmt->close();
-                    }
-                }
-
-                $sub_by_col = sched_col('schedule_submitted_by', $semester);
-                $sub_at_col = sched_col('schedule_submitted_at', $semester);
-                $rej_col    = sched_col('schedule_rejection_reason', $semester);
-                $upd = $conn->prepare(
-                    "UPDATE sections SET $status_col='pending', $sub_by_col=?, $sub_at_col=NOW(), $rej_col=NULL WHERE section_id=?"
-                );
-                $upd->bind_param('ii', $user_id, $section_id);
-                $upd->execute();
-                $upd->close();
-                notify_coordinators($conn, "Schedule for section \"{$sec_row['section_name']}\" awaiting approval.", 'scheduler/scheduling?status=pending');
-                header("Location: scheduling?section_id=" . $section_id . "&semester=" . $semester); exit();
-            }
-        }
-    }
+// Human status for a schedule: unscheduled splits into "Not started" / "Draft".
+function sched_status_view(string $status, int $timed): array {
+    return match ($status) {
+        'pending'  => ['pending',  'Pending review'],
+        'approved' => ['approved', 'Approved'],
+        'rejected' => ['rejected', 'Needs changes'],
+        default    => $timed > 0 ? ['draft', 'Draft'] : ['empty', 'Not started'],
+    };
 }
 
-// ── Approve a submitted schedule, whole section at once (REVIEWER-ONLY) ────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_schedule'])) {
-    $section_id = (int)($_POST['section_id'] ?? 0);
-    if (!$is_reviewer) {
-        $error = 'Only a coordinator or admin can approve a section schedule.';
-    } else {
-        $status_col = sched_col('schedule_status', $semester);
-        $sub_by_col = sched_col('schedule_submitted_by', $semester);
-        $rev_by_col = sched_col('schedule_reviewed_by', $semester);
-        $rev_at_col = sched_col('schedule_reviewed_at', $semester);
+// ── Selected section ────────────────────────────────────────────────────────
+$sel_id   = (int)($_POST['section_id'] ?? $_GET['section_id'] ?? 0);
+$selected = $sel_id ? sched_fetch_section($conn, $sel_id, $semester) : null;
+if ($selected && (!$selected['is_active'] || $selected['approval_status'] !== 'approved')) $selected = null;
 
-        $info_stmt = $conn->prepare("SELECT section_name, $sub_by_col AS schedule_submitted_by FROM sections WHERE section_id = ?");
-        $info_stmt->bind_param('i', $section_id);
-        $info_stmt->execute();
-        $sched_row = $info_stmt->get_result()->fetch_assoc();
-        $info_stmt->close();
-
-        $stmt = $conn->prepare(
-            "UPDATE sections SET $status_col='approved', $rev_by_col=?, $rev_at_col=NOW()
-             WHERE section_id=? AND $status_col='pending'"
-        );
-        $stmt->bind_param('ii', $user_id, $section_id);
-        $stmt->execute();
-        $affected = $stmt->affected_rows;
-        $stmt->close();
-        if ($affected > 0) {
-            if ($sched_row && $sched_row['schedule_submitted_by']) {
-                notify_users($conn, [$sched_row['schedule_submitted_by']], "Schedule for section \"{$sched_row['section_name']}\" was approved.", 'scheduler/scheduling');
-            }
-            header("Location: scheduling?" . $return_qs); exit();
-        }
-        $error = 'Could not approve — this schedule may have already been reviewed.';
-    }
-}
-
-// ── Reject a submitted schedule, whole section at once (REVIEWER-ONLY) ─────
-// Also used for "Deactivate" on an already-approved schedule — same effect
-// (revert to rejected, scheduler can revise and resubmit), just an
-// auto-filled reason and a different entry point (guard below allows it).
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_schedule'])) {
-    $section_id = (int)($_POST['section_id'] ?? 0);
-    $reason     = trim($_POST['rejection_reason'] ?? '');
-    if (!$is_reviewer) {
-        $error = 'Only a coordinator or admin can reject a section schedule.';
-    } elseif (!$reason) {
-        $error = 'Please provide a reason for rejecting this schedule.';
-    } else {
-        $status_col = sched_col('schedule_status', $semester);
-        $sub_by_col = sched_col('schedule_submitted_by', $semester);
-        $rev_by_col = sched_col('schedule_reviewed_by', $semester);
-        $rev_at_col = sched_col('schedule_reviewed_at', $semester);
-        $rej_col    = sched_col('schedule_rejection_reason', $semester);
-
-        $info_stmt = $conn->prepare("SELECT section_name, $sub_by_col AS schedule_submitted_by FROM sections WHERE section_id = ?");
-        $info_stmt->bind_param('i', $section_id);
-        $info_stmt->execute();
-        $sched_row = $info_stmt->get_result()->fetch_assoc();
-        $info_stmt->close();
-
-        $stmt = $conn->prepare(
-            "UPDATE sections SET $status_col='rejected', $rev_by_col=?, $rev_at_col=NOW(), $rej_col=?
-             WHERE section_id=? AND $status_col IN ('pending','approved')"
-        );
-        $stmt->bind_param('isi', $user_id, $reason, $section_id);
-        $stmt->execute();
-        $affected = $stmt->affected_rows;
-        $stmt->close();
-        if ($affected > 0) {
-            if ($sched_row && $sched_row['schedule_submitted_by']) {
-                notify_users($conn, [$sched_row['schedule_submitted_by']], "Schedule for section \"{$sched_row['section_name']}\" was rejected: $reason", 'scheduler/scheduling');
-            }
-            header("Location: scheduling?" . $return_qs); exit();
-        }
-        $error = 'Could not reject — this schedule may have already been reviewed.';
-    }
-}
-
-// ── Coordinator table: schedule requests (filtered/paginated) ──────────────
-// Merges Semester 1 and Semester 2 requests (each tracked in its own shadow
-// columns) into one list, tagged per row with which semester it belongs to
-// so "View"/Approve/Reject links carry the right &semester= through.
-$status_value_map = ['pending' => 'pending', 'approved' => 'approved', 'rejected' => 'rejected'];
-
-$requests = [];
-$total_count = 0;
-$total_pages = 1;
-$pending_count = 0;
-if ($is_reviewer) {
-    $pc = mysqli_query($conn, "SELECT
-        (SELECT COUNT(*) FROM sections WHERE schedule_status = 'pending') +
-        (SELECT COUNT(*) FROM sections WHERE schedule_status_sem2 = 'pending') AS c");
-    $pending_count = $pc ? (int)mysqli_fetch_assoc($pc)['c'] : 0;
-
-    $all_requests = [];
-    foreach ([1, 2] as $sem) {
-        $status_col = sched_col('schedule_status', $sem);
-        $req_id_col = sched_col('schedule_request_id', $sem);
-        $sub_at_col = sched_col('schedule_submitted_at', $sem);
-
-        $where  = ["sec.$status_col != 'unscheduled'"];
-        $types  = '';
-        $params = [];
-        if ($f_status !== '' && isset($status_value_map[$f_status])) {
-            $where[] = "sec.$status_col = ?";
-            $types  .= 's';
-            $params[] = $status_value_map[$f_status];
-        }
-        if ($q !== '') {
-            $like = '%' . $q . '%';
-            $where[] = '(sec.section_name LIKE ? OR req.family_name LIKE ? OR req.given_name LIKE ?)';
-            $types  .= 'sss';
-            array_push($params, $like, $like, $like);
-        }
-        $where_sql = implode(' AND ', $where);
-        $sub_by_col = sched_col('schedule_submitted_by', $sem);
-
-        $sql = "
-            SELECT sec.section_id, sec.section_name, sec.grade_level, st.strand_code AS strand, sec.school_year,
-                   sec.$status_col AS schedule_status, sec.$req_id_col AS schedule_request_id, sec.$sub_at_col AS schedule_submitted_at,
-                   req.family_name AS req_family, req.given_name AS req_given
-            FROM sections sec
-            JOIN strands st ON st.strand_id = sec.strand
-            LEFT JOIN staff req ON req.user_id = sec.$sub_by_col
-            WHERE $where_sql
-        ";
-
-        $stmt = $conn->prepare($sql);
-        if ($types !== '') { $stmt->bind_param($types, ...$params); }
-        $stmt->execute();
-        foreach ($stmt->get_result()->fetch_all(MYSQLI_ASSOC) as $row) {
-            $row['semester'] = $sem;
-            $all_requests[] = $row;
-        }
-        $stmt->close();
-    }
-
-    usort($all_requests, function ($a, $b) {
-        $ap = $a['schedule_status'] === 'pending' ? 1 : 0;
-        $bp = $b['schedule_status'] === 'pending' ? 1 : 0;
-        if ($ap !== $bp) { return $bp - $ap; }
-        return strcmp((string)$b['schedule_submitted_at'], (string)$a['schedule_submitted_at']);
-    });
-
-    $total_count = count($all_requests);
-    $total_pages = max(1, (int)ceil($total_count / $per_page));
-    if ($page > $total_pages) { $page = $total_pages; }
-    $offset = ($page - 1) * $per_page;
-    $requests = array_slice($all_requests, $offset, $per_page);
-}
-
-$status_labels = ['' => 'All', 'pending' => 'Pending', 'approved' => 'Approved', 'rejected' => 'Rejected'];
-
-// ── Scheduler view: sections list, with scheduling progress per section ────
-$sections = [];
-if ($is_scheduler) {
-    $status_col = sched_col('schedule_status', $semester);
-    $rej_col    = sched_col('schedule_rejection_reason', $semester);
-    $sql = "
-        SELECT sec.section_id, sec.section_name, sec.grade_level, st.strand_code AS strand,
-               sec.room, sec.school_year, sec.$status_col AS schedule_status, sec.$rej_col AS schedule_rejection_reason,
-               COUNT(DISTINCT ss.subject_id) AS subject_count,
-               COUNT(DISTINCT CASE WHEN ss.day IS NOT NULL AND ss.start_time IS NOT NULL
-                    AND ss.end_time IS NOT NULL AND ss.teacher_id IS NOT NULL
-                    THEN ss.subject_id END) AS scheduled_count
-        FROM sections sec
-        JOIN strands st ON st.strand_id = sec.strand
-        LEFT JOIN section_subjects ss ON ss.section_id = sec.section_id AND ss.semester = ?
-        WHERE sec.is_active = 1
-        GROUP BY sec.section_id
-        ORDER BY sec.grade_level ASC, sec.strand ASC, sec.section_name ASC
-    ";
-    $sec_stmt2 = $conn->prepare($sql);
-    $sec_stmt2->bind_param('i', $semester);
-    $sec_stmt2->execute();
-    $sections = $sec_stmt2->get_result()->fetch_all(MYSQLI_ASSOC);
-    $sec_stmt2->close();
-}
-
-// ── Selected section detail (used by both roles: scheduler's editor, and
-//    the reviewer's "View" drill-down from the requests table) ─────────────
-$selected = null;
-$subject_rows = [];
-$can_edit = false;
-
-$sel_id = (int)($_GET['section_id'] ?? 0);
-if ($sel_id) {
-    $status_col = sched_col('schedule_status', $semester);
-    $req_id_col = sched_col('schedule_request_id', $semester);
-    $rej_col    = sched_col('schedule_rejection_reason', $semester);
-    $sel_stmt = $conn->prepare("
-        SELECT sec.section_id, sec.section_name, sec.grade_level, st.strand_code AS strand, sec.room, sec.school_year,
-               sec.$status_col AS schedule_status, sec.$req_id_col AS schedule_request_id, sec.$rej_col AS schedule_rejection_reason
-        FROM sections sec
-        JOIN strands st ON st.strand_id = sec.strand
-        WHERE sec.section_id = ?
-    ");
-    $sel_stmt->bind_param('i', $sel_id);
-    $sel_stmt->execute();
-    $selected = $sel_stmt->get_result()->fetch_assoc() ?: null;
-    $sel_stmt->close();
-}
-
+$payload = null;
 if ($selected) {
-    $can_edit = $is_scheduler && in_array($selected['schedule_status'], ['unscheduled', 'rejected', 'approved'], true);
-
-    $ss_stmt = $conn->prepare("
-        SELECT ss.subject_id, sub.subject_name, ss.day, ss.start_time, ss.end_time,
-               ss.room, ss.teacher_id, CONCAT(t.given_name, ' ', t.family_name) AS teacher_name
-        FROM section_subjects ss
-        JOIN subjects sub ON sub.subject_id = ss.subject_id
-        LEFT JOIN teachers t ON t.teacher_id = ss.teacher_id
-        WHERE ss.section_id = ? AND ss.semester = ?
-        ORDER BY sub.subject_name
-    ");
-    $ss_stmt->bind_param('ii', $selected['section_id'], $semester);
-    $ss_stmt->execute();
-    $subject_rows = $ss_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-    $ss_stmt->close();
-
-    // Existing-conflict scan (read-only) — surfaces any teacher/room clash
-    // regardless of who caused it, so nothing hides once a schedule is set.
-    foreach ($subject_rows as &$row) {
-        $row['conflict'] = null;
-        if ($row['day'] && $row['start_time'] && $row['end_time']) {
-            if ($row['teacher_id']) {
-                $tc = $conn->prepare("
-                    SELECT sec2.section_name, sub2.subject_name
-                    FROM section_subjects ss2
-                    JOIN sections sec2 ON sec2.section_id = ss2.section_id
-                    JOIN subjects sub2 ON sub2.subject_id = ss2.subject_id
-                    WHERE ss2.teacher_id = ? AND ss2.day = ?
-                      AND NOT (ss2.section_id = ? AND ss2.subject_id = ?)
-                      AND ss2.start_time < ? AND ss2.end_time > ?
-                    LIMIT 1
-                ");
-                $tc->bind_param('isiiss', $row['teacher_id'], $row['day'], $selected['section_id'], $row['subject_id'], $row['end_time'], $row['start_time']);
-                $tc->execute();
-                $trow = $tc->get_result()->fetch_assoc();
-                $tc->close();
-                if ($trow) { $row['conflict'] = "Teacher double-booked with \"{$trow['subject_name']}\" ({$trow['section_name']})"; }
-            }
-            if (!$row['conflict']) {
-                $eff_room = $row['room'] ?: $selected['room'];
-                if ($eff_room) {
-                    $rc = $conn->prepare("
-                        SELECT sec2.section_name, sub2.subject_name
-                        FROM section_subjects ss2
-                        JOIN sections sec2 ON sec2.section_id = ss2.section_id
-                        JOIN subjects sub2 ON sub2.subject_id = ss2.subject_id
-                        WHERE COALESCE(ss2.room, sec2.room) = ? AND ss2.day = ?
-                          AND NOT (ss2.section_id = ? AND ss2.subject_id = ?)
-                          AND ss2.start_time < ? AND ss2.end_time > ?
-                        LIMIT 1
-                    ");
-                    $rc->bind_param('ssiiss', $eff_room, $row['day'], $selected['section_id'], $row['subject_id'], $row['end_time'], $row['start_time']);
-                    $rc->execute();
-                    $rrow = $rc->get_result()->fetch_assoc();
-                    $rc->close();
-                    if ($rrow) { $row['conflict'] = "Room double-booked with \"{$rrow['subject_name']}\" ({$rrow['section_name']})"; }
-                }
+    $db_rows = sched_fetch_rows($conn, $sel_id, $semester);
+    $seeding = false;
+    $s1_by_id = [];
+    if ($semester === 2) {
+        foreach (sched_fetch_rows($conn, $sel_id, 1) as $r) $s1_by_id[(int)$r['subject_id']] = $r;
+        if (!$db_rows && $s1_by_id) {
+            // Semester 2 not set up yet: start from Semester 1's subjects,
+            // teachers kept as a starting point, no classes yet.
+            $seeding = true;
+            foreach ($s1_by_id as $r) {
+                $db_rows[] = ['subject_id' => $r['subject_id'], 'subject_name' => $r['subject_name'], 'teacher_id' => $r['teacher_id'], 'meetings' => []];
             }
         }
     }
-    unset($row);
+
+    $js_m = fn(array $ms) => array_map(fn($m) => ['d' => $m['day'], 's' => $m['start_time'], 'e' => $m['end_time'], 'r' => $m['room'] ?? ''], $ms);
+    $to_js = function (array $r) use ($s1_by_id, $seeding, $js_m): array {
+        $s1 = $s1_by_id[(int)$r['subject_id']] ?? null;
+        return [
+            'id'   => (int)$r['subject_id'],
+            'name' => $r['subject_name'],
+            't'    => $r['teacher_id'] ? (int)$r['teacher_id'] : null,
+            'm'    => $js_m($r['meetings']),
+            's1'   => $seeding && $s1 ? $js_m($s1['meetings']) : null,
+        ];
+    };
+    $original = array_map($to_js, $db_rows);
+    $current  = $original;
+
+    // After a failed save, show exactly what was typed (by subject).
+    if ($posted !== null) {
+        $by_id = [];
+        foreach ($posted as $p) $by_id[$p['subject_id']] = $p;
+        foreach ($current as &$c) {
+            if (!isset($by_id[$c['id']])) continue;
+            $c['t'] = $by_id[$c['id']]['teacher_id'];
+            $c['m'] = $js_m($by_id[$c['id']]['meetings']);
+        }
+        unset($c);
+    }
+
+    $timed_now = array_sum(array_map(fn($r) => count($r['m']), $original));
+    [$st_key, $st_label] = sched_status_view($selected['schedule_status'], $timed_now);
+
+    $teachers = mysqli_query($conn, "SELECT teacher_id, CONCAT(given_name, ' ', family_name) AS name FROM teachers WHERE is_active = 1 ORDER BY family_name, given_name")->fetch_all(MYSQLI_ASSOC);
+
+    $payload = [
+        'sem'      => $semester,
+        'section'  => [
+            'id'        => (int)$selected['section_id'],
+            'label'     => sched_section_label($selected['section_name'], $selected['strand']),
+            'room'      => $selected['room'] ?: '',
+            'status'    => $selected['schedule_status'],
+            'editable'  => in_array($selected['schedule_status'], ['unscheduled', 'rejected', 'approved'], true) && $original,
+            'seeding'   => $seeding,
+        ],
+        'rows'      => $current,
+        'original'  => $original,
+        'failedRow' => $failed_row,
+        'teachers'  => array_map(fn($t) => [(int)$t['teacher_id'], $t['name']], $teachers),
+        'busy'      => sched_busy_map($conn, $semester, $sel_id),
+        'bounds'    => sched_time_bounds(),
+    ];
 }
 
-$teachers = mysqli_query($conn, "SELECT teacher_id, CONCAT(given_name, ' ', family_name) AS name FROM teachers WHERE is_active = 1 ORDER BY family_name, given_name")->fetch_all(MYSQLI_ASSOC);
 
-// NOTE: do NOT close $conn here — staff_sidebar.php (included below, in the
-// HTML body) runs its own queries for nav badges/status and needs the
-// connection still open. Let PHP close it automatically at script end.
+$e = fn($s) => htmlspecialchars((string)$s, ENT_QUOTES);
+
+// NOTE: $conn stays open — staff_sidebar.php (included below) queries it.
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Class Scheduling <?= $is_reviewer ? 'Approvals — Coordinator' : '— Scheduler' ?></title>
+  <title>Class Scheduling — Scheduler</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_staff.css') ?>">
   <style>
-    .staff-content .panel { max-width:none; margin-left:0; margin-right:0; width:100%; }
-    .two-col { display:grid; grid-template-columns:280px 1fr; gap:14px; align-items:start; }
-    @media (max-width: 900px) { .two-col { grid-template-columns:1fr; } }
+    /* The `hidden` attribute is how this page opens/closes the side panel,
+       scrim, views and filtered rail rows — but any element with its own
+       display rule (the panel is display:flex, rail rows display:block)
+       would otherwise ignore it and stay visible. */
+    [hidden] { display:none !important; }
 
-    tr.clickable { cursor:pointer; }
-    tr.clickable:hover td { background:#FAFAFC; }
-    tr.sec-selected td { background: var(--brand-tint); }
+    .sb { --sb-line:#E6EAE8; --sb-line-2:#F0F2F1; --sb-muted:#66717A; --sb-ink:#17211C; --sb-bg:#F7F9F8;
+          --sb-bad:#B3261E; --sb-bad-bg:#FDEEEC; --sb-warn:#8A5A00; --sb-warn-bg:#FFF5E0; --sb-ok:#1A6B4A; --sb-ok-bg:#E6F4EC;
+          --sb-row-h:52px; }
 
-    .prog-bar { height:5px; border-radius:3px; background:#EBEBF0; margin-top:4px; overflow:hidden; width:100%; }
-    .prog-fill { height:100%; border-radius:3px; }
-    .prog-done    { background:#2ECC71; }
-    .prog-partial { background:#E67E22; }
-    .prog-none    { background:#C0392B; }
+    /* Header */
+    .sb-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:1rem; }
+    .sb-head .page-sub { margin-bottom:0; }
+    .sb-seg { display:inline-flex; padding:3px; background:var(--sb-bg); border:1px solid var(--sb-line); border-radius:9px; }
+    .sb-seg a { padding:7px 16px; border-radius:7px; font-size:13px; font-weight:500; color:var(--sb-muted); text-decoration:none; }
+    .sb-seg a:hover { color:var(--sb-ink); }
+    .sb-seg a[aria-current="true"] { background:#fff; color:var(--sb-ink); font-weight:600; box-shadow:0 1px 2px rgba(20,40,30,.14); }
 
-    .sched-table { width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; }
-    .sched-table th {
-      text-align:left; font-size:11px; font-weight:500; text-transform:uppercase;
-      letter-spacing:.05em; color:#8A8A9A; padding:8px 8px 8px 0; border-bottom:0.5px solid #EBEBF0;
-    }
-    .sched-table td { padding:10px 8px 10px 0; border-bottom:0.5px solid #F5F5F7; vertical-align:middle; }
-    .sched-table tr:last-child td { border-bottom:none; }
-    .sched-table select, .sched-table input[type=text] {
-      height:36px; font-size:12px; width:100%; box-sizing:border-box;
-      border:0.5px solid #D4D4E0; border-radius:6px; background:#FAFAFC; padding:0 8px;
-    }
-    .sched-table-scroll { overflow-x:auto; }
-    @media (max-width: 900px) { .sched-table { min-width:760px; } }
-    .sched-subject { font-size:13px; font-weight:500; color:#1A1A2E; }
-    .conflict-tag {
-      display:inline-block; font-size:10px; font-weight:600; color:#C0392B;
-      background:#FDF0EF; border-radius:20px; padding:2px 8px; margin-top:3px;
-    }
-    .btn-save-row {
-      height:30px; padding:0 12px; background:var(--brand-primary); border:none;
-      border-radius:6px; color:#fff; font-size:11px; font-weight:500; cursor:pointer;
-      font-family:inherit; white-space:nowrap;
-    }
-    .btn-save-row:hover { background:var(--brand-primary-hover); }
+    .sb-layout { display:grid; grid-template-columns:290px minmax(0,1fr); gap:16px; align-items:start; }
 
-    .empty-hint { color:#8A8A9A; font-size:13px; padding:2rem 0; text-align:center; }
+    /* Sections rail */
+    .sb-rail { background:#fff; border:1px solid var(--sb-line); border-radius:14px; overflow:hidden; position:sticky; top:12px;
+               max-height:calc(100vh - 110px); display:flex; flex-direction:column; }
+    .sb-rail-top { padding:12px; border-bottom:1px solid var(--sb-line); display:flex; flex-direction:column; gap:9px; }
+    .sb-search { position:relative; }
+    .sb-search svg { position:absolute; left:10px; top:50%; width:15px; height:15px; transform:translateY(-50%); color:#8A8A9A; pointer-events:none; }
+    .sb-search input { width:100%; height:34px; padding:0 10px 0 31px; border:1px solid #D4D9D6; border-radius:8px; font-size:13px; font-family:inherit; background:#fff; outline:none; }
+    .sb-search input:focus { border-color:var(--brand-accent); box-shadow:0 0 0 3px rgba(47,107,79,.14); }
+    .sb-chips { display:flex; flex-wrap:wrap; gap:5px; }
+    .sb-chip { height:26px; padding:0 10px; border:1px solid #D4D9D6; border-radius:20px; background:#fff; font:500 11.5px/1 inherit; font-family:inherit; color:#3A4A42; cursor:pointer; }
+    .sb-chip:hover { border-color:var(--brand-accent); }
+    .sb-chip.is-on { background:var(--brand-primary); border-color:var(--brand-primary); color:#fff; }
+    .sb-rail-list { overflow-y:auto; padding:4px 0 8px; }
+    .sb-grade { padding:10px 14px 4px; font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:#8A8A9A; }
+    .sb-sec { display:block; padding:9px 14px; text-decoration:none; color:inherit; border-left:3px solid transparent; }
+    .sb-sec:hover { background:var(--sb-bg); }
+    .sb-sec[aria-current="page"] { background:var(--brand-tint); border-left-color:var(--brand-primary); }
+    .sb-sec-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .sb-sec-name { font-size:13px; font-weight:600; color:var(--sb-ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sb-sec-meta { display:flex; align-items:center; gap:8px; margin-top:5px; font-size:11px; color:var(--sb-muted); }
+    .sb-prog { flex:1; height:4px; border-radius:3px; background:#E6EAE8; overflow:hidden; }
+    .sb-prog i { display:block; height:100%; background:#2E9E6B; border-radius:3px; }
+    .sb-rail-empty { padding:24px 14px; font-size:12.5px; color:var(--sb-muted); text-align:center; }
+    .sb-rail-select { display:none; }
 
-    /* Approvals table (coordinator view) */
-    .filter-row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:.75rem; }
-    .filter-tab {
-      display:inline-flex; align-items:center; justify-content:center;
-      height:28px; box-sizing:border-box; line-height:1; text-transform:none;
-      font-size:12px; font-weight:500; padding:0 12px; border-radius:20px;
-      border:0.5px solid #D4D4E0; background:#fff; color:#5A5A72;
-      text-decoration:none; white-space:nowrap; transition:all .12s;
-    }
-    .filter-tab:hover { border-color:var(--brand-accent); color:var(--brand-primary); }
-    .filter-tab.active { background:var(--brand-primary); border-color:var(--brand-primary); color:#fff; }
-    .filter-tab .cnt { opacity:.85; }
+    /* Status pills */
+    .sb-pill { display:inline-flex; align-items:center; gap:5px; flex-shrink:0; height:20px; padding:0 8px; border-radius:20px; font-size:10.5px; font-weight:600; white-space:nowrap; }
+    .sb-pill::before { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; }
+    .sb-pill--empty    { background:#EEF0EF; color:#66717A; }
+    .sb-pill--draft    { background:#E8EEF8; color:#2F5591; }
+    .sb-pill--pending  { background:var(--sb-warn-bg); color:var(--sb-warn); }
+    .sb-pill--approved { background:var(--sb-ok-bg); color:var(--sb-ok); }
+    .sb-pill--rejected { background:var(--sb-bad-bg); color:var(--sb-bad); }
 
-    .toolbar { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:1rem; flex-wrap:wrap; }
-    .search-box { position:relative; flex:0 0 260px; }
-    .search-box input {
-      width:100%; height:36px; border:0.5px solid #D4D4E0; border-radius:8px;
-      background:#FAFAFC; padding:0 12px 0 34px; font-size:13px; font-family:inherit; color:#1A1A2E; outline:none;
-      box-sizing:border-box;
-    }
-    .search-box svg { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:#8A8A9A; }
+    /* Main card */
+    .sb-main { background:#fff; border:1px solid var(--sb-line); border-radius:14px; min-width:0; }
+    .sb-main-head { padding:18px 20px 14px; border-bottom:1px solid var(--sb-line); }
+    .sb-title-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .sb-title { font-size:19px; font-weight:650; color:var(--sb-ink); margin:0; }
+    .sb-facts { display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:6px; font-size:12.5px; color:var(--sb-muted); }
+    .sb-facts b { color:var(--sb-ink); font-weight:600; }
+    .strand-badge { display:inline-flex; align-items:center; padding:1px 7px; border-radius:5px; font-size:10.5px; font-weight:700; }
+    .strand-badge--stem  { background:#E1ECEA; color:#1F5E57; }
+    .strand-badge--humss { background:#E6ECF2; color:#34526E; }
+    .strand-badge--abm   { background:#EFEEE2; color:#5E5A2A; }
+    .strand-badge--gas   { background:#E4F0E8; color:#2D6547; }
+    .strand-badge--tvl   { background:#F1EBE3; color:#6B4E2E; }
+    .strand-badge--core  { background:#E9ECEB; color:#44524B; }
+    .strand-badge--none  { background:#EDEDF0; color:#4A5560; }
+    .sb-stats { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+    .sb-stat { display:flex; align-items:center; gap:8px; padding:7px 11px; border:1px solid var(--sb-line); border-radius:9px; font-size:12.5px; color:var(--sb-muted); }
+    .sb-stat b { font-size:14px; color:var(--sb-ink); font-variant-numeric:tabular-nums; }
+    .sb-stat.is-bad { border-color:#F0C4BF; background:var(--sb-bad-bg); color:var(--sb-bad); }
+    .sb-stat.is-bad b { color:var(--sb-bad); }
+    .sb-stat .sb-prog { width:70px; flex:none; }
 
-    .data-table { width:100%; border-collapse:collapse; font-size:13px; }
-    .data-table th {
-      text-align:left; font-size:11px; font-weight:600; text-transform:uppercase;
-      letter-spacing:.05em; color:#8A8A9A; padding:8px 12px; border-bottom:0.5px solid #EBEBF0;
-    }
-    .data-table td { padding:10px 12px; border-bottom:0.5px solid #F5F5F7; vertical-align:top; }
-    .data-table th:first-child, .data-table td:first-child { padding-left:0; }
-    .data-table th:last-child,  .data-table td:last-child  { padding-right:0; }
-    .data-table tr:last-child td { border-bottom:none; }
-    .td-name { font-weight:500; color:#1A1A2E; }
-    .td-meta { font-size:11px; color:#8A8A9A; margin-top:2px; }
-    .req-id  { font-family:monospace; font-size:12px; color:var(--brand-primary); font-weight:600; }
+    .sb-banner { display:flex; gap:10px; align-items:flex-start; margin:14px 20px 0; padding:10px 12px; border-radius:9px; font-size:13px; line-height:1.45; }
+    .sb-banner svg { width:16px; height:16px; flex-shrink:0; margin-top:1px; }
+    .sb-banner--info { background:#EEF3FB; color:#27466F; }
+    .sb-banner--warn { background:var(--sb-warn-bg); color:#6B4A00; }
+    .sb-banner--bad  { background:var(--sb-bad-bg); color:#8C1D17; }
+    .sb-banner .sb-link { margin-left:auto; }
 
-    .badge { display:inline-block; font-size:10px; font-weight:600; text-transform:uppercase;
-      letter-spacing:.03em; border-radius:20px; padding:2px 9px; margin:1px 4px 1px 0; white-space:nowrap; }
-    .badge-unscheduled { background:#F5F5F7; color:#8A8A9A; }
-    .badge-pending     { background:#FFF4E6; color:#C06A10; }
-    .badge-approved    { background:#EAF3EE; color:var(--brand-primary); }
-    .badge-rejected    { background:#FDF0EF; color:#C0392B; }
+    .sb-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:14px 20px 10px; }
+    .sb-view { display:inline-flex; padding:2px; background:var(--sb-bg); border:1px solid var(--sb-line); border-radius:8px; }
+    .sb-view button { height:28px; padding:0 12px; border:0; border-radius:6px; background:none; font:500 12.5px inherit; font-family:inherit; color:var(--sb-muted); cursor:pointer; }
+    .sb-view button[aria-pressed="true"] { background:#fff; color:var(--sb-ink); font-weight:600; box-shadow:0 1px 2px rgba(20,40,30,.14); }
+    .sb-hint { font-size:12px; color:var(--sb-muted); }
+    .sb-link { background:none; border:0; padding:4px 6px; border-radius:6px; font:600 12.5px inherit; font-family:inherit; color:var(--brand-primary); cursor:pointer; white-space:nowrap; }
+    .sb-link:hover { background:var(--brand-tint); }
 
-    .btn-toggle {
-      height:26px; padding:0 10px; border:0.5px solid #D4D4E0; border-radius:6px;
-      background:#fff; font-size:11px; font-weight:500; cursor:pointer; font-family:inherit;
-      color:#5A5A72; margin:2px 4px 2px 0; text-decoration:none;
-      display:inline-flex; align-items:center; justify-content:center;
-      box-sizing:border-box; line-height:1; white-space:nowrap; vertical-align:middle;
-      -webkit-appearance:none; appearance:none;
-    }
-    .btn-toggle:hover { border-color:var(--brand-accent); color:var(--brand-primary); }
+    /* Timetable */
+    .sb-tt-wrap { padding:0 20px; overflow-x:auto; }
+    .sb-tt { display:grid; grid-template-columns:58px repeat(5, minmax(110px, 1fr)); min-width:640px; user-select:none; -webkit-user-select:none; }
+    .sb-tt-dh { padding:6px 0 8px; text-align:center; font-size:11.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--sb-muted); }
+    .sb-tt-axis { position:relative; }
+    .sb-tt-axis span { position:absolute; right:8px; font-size:10.5px; color:#8A8A9A; transform:translateY(-50%); white-space:nowrap; font-variant-numeric:tabular-nums; }
+    /* Hour lines solid, half-hour lines faint (52px per hour). */
+    .sb-tt-day { position:relative; border-left:1px solid var(--sb-line); border-top:1px solid var(--sb-line);
+                 background-image:linear-gradient(#E3E8E5 1px, transparent 1px), linear-gradient(#F4F6F5 1px, transparent 1px);
+                 background-size:100% 52px, 100% 26px; }
+    .sb-tt-day:last-child { border-right:1px solid var(--sb-line); }
+    .sb-tt-day::after { content:''; position:absolute; left:0; right:0; bottom:0; border-bottom:1px solid var(--sb-line); }
+    .sb-cell { position:absolute; left:0; right:0; height:26px; border:0; background:none; padding:0; cursor:default; }
+    .sb-placing .sb-cell { cursor:pointer; }
+    .sb-placing .sb-cell:hover { background:rgba(47,107,79,.10); box-shadow:inset 0 0 0 2px rgba(47,107,79,.45); }
+    .sb-placing .sb-cell:hover::after { content:'Place here'; font-size:10.5px; font-weight:600; color:var(--brand-primary); }
+    /* Tinted block + accent bar (colour set inline per subject); text stays one ink colour. */
+    .sb-block { position:absolute; z-index:2; padding:5px 7px 5px 8px; border-radius:6px; border:1px solid rgba(23,33,28,.08); border-left:3px solid; color:var(--sb-ink); text-align:left;
+                overflow:hidden; cursor:pointer; font-family:inherit; display:flex; flex-direction:column; gap:1px; box-sizing:border-box; }
+    .sb-block:hover { filter:brightness(.97); box-shadow:0 2px 8px rgba(20,40,30,.14); }
+    .sb-block:focus-visible { outline:2px solid var(--brand-accent); outline-offset:1px; }
+    .sb-block .n { font-size:12px; font-weight:600; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sb-block .m { font-size:10.5px; color:var(--sb-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sb-block.is-clash { border-color:#E7A59E !important; border-left-color:var(--sb-bad) !important; background:#FDF1EF !important; }
+    .sb-block.is-clash .n::before { content:'⚠ '; color:var(--sb-bad); }
+    .sb-block.is-active { outline:2px solid var(--sb-ink); outline-offset:1px; }
+    .sb-placing .sb-block { pointer-events:none; opacity:.55; }
+    .sb-tt-day.is-used { background-color:#F3F4F3; background-image:repeating-linear-gradient(135deg, transparent 0 8px, rgba(0,0,0,.035) 8px 16px); }
 
-    .app-pagination { display:flex; justify-content:space-between; align-items:center; margin-top:1rem; font-size:12px; color:#8A8A9A; }
-    .app-pagination .pages { display:flex; gap:4px; }
-    .app-pagination .pages a, .app-pagination .pages span {
-      display:inline-flex; align-items:center; justify-content:center; min-width:26px; height:26px;
-      border-radius:6px; text-decoration:none; color:#5A5A72; font-size:12px;
-    }
-    .app-pagination .pages a:hover { background:#F5F5F7; }
-    .app-pagination .pages span.current { background:var(--brand-primary); color:#fff; font-weight:600; }
+    .sb-tray { margin:12px 20px 0; padding:10px 12px; border:1px dashed #CBD3CE; border-radius:10px; background:var(--sb-bg); }
+    .sb-tray-head { font-size:12px; color:var(--sb-muted); margin-bottom:7px; }
+    .sb-tray-head b { color:var(--sb-ink); }
+    .sb-tray-list { display:flex; flex-wrap:wrap; gap:6px; }
+    .sb-tray-chip { max-width:260px; height:30px; padding:0 11px; border-radius:7px; border:1px solid rgba(23,33,28,.1); border-left:3px solid; color:var(--sb-ink); font:600 12px inherit; font-family:inherit;
+                    cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sb-tray-chip.is-on { outline:2px solid var(--sb-ink); outline-offset:1px; }
+    .sb-tray-done { font-size:12.5px; color:var(--sb-ok); font-weight:600; }
 
-    /* View-schedule modal (coordinator "View" drill-down) */
-    .modal-overlay {
-      position:fixed; inset:0; background:rgba(26,26,46,0.45);
-      display:flex; align-items:flex-start; justify-content:center;
-      padding:5vh 20px; z-index:500; overflow-y:auto;
+    /* List view: one expandable card per subject, its classes inside */
+    .sb-cards-wrap { padding:0 20px; display:flex; flex-direction:column; gap:8px; }
+    .sb-card { border:1px solid var(--sb-line); border-radius:11px; background:#fff; }
+    .sb-card.is-bad { border-color:#F0C4BF; }
+    .sb-card.is-failed { box-shadow:0 0 0 3px rgba(179,38,30,.14); }
+    .sb-card-head { display:flex; align-items:center; gap:10px; padding:10px 12px; min-height:52px; }
+    .sb-ic { width:22px; height:22px; flex-shrink:0; border-radius:6px; display:grid; place-items:center; font-size:12px; font-weight:700; }
+    .sb-ic--ok   { background:var(--sb-ok-bg); color:var(--sb-ok); }
+    .sb-ic--warn { background:var(--sb-warn-bg); color:var(--sb-warn); }
+    .sb-ic--bad  { background:var(--sb-bad-bg); color:var(--sb-bad); }
+    .sb-card-name { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:2px; background:none; border:0; padding:0;
+                    font-family:inherit; text-align:left; cursor:pointer; }
+    .sb-card-name .n { max-width:100%; font-size:13.5px; font-weight:600; color:var(--sb-ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sb-card-name .s { max-width:100%; font-size:11.5px; color:var(--sb-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-variant-numeric:tabular-nums; }
+    .sb-card-head select { width:190px; flex-shrink:0; height:34px; padding:0 8px; border:1px solid #D4D9D6; border-radius:7px; background:#fff; font-size:12.5px; font-family:inherit; color:var(--sb-ink); }
+    .sb-count { flex-shrink:0; min-width:64px; text-align:right; font-size:11.5px; color:var(--sb-muted); font-variant-numeric:tabular-nums; }
+    .sb-tog { width:30px; height:30px; flex-shrink:0; border:0; background:none; border-radius:7px; color:var(--sb-muted); cursor:pointer; display:grid; place-items:center; }
+    .sb-tog:hover { background:var(--sb-bg); color:var(--sb-ink); }
+    .sb-tog svg { width:15px; height:15px; transition:transform .15s; }
+    .sb-card.is-open .sb-tog svg { transform:rotate(180deg); }
+    .sb-card-body { padding:4px 12px 12px 44px; border-top:1px solid var(--sb-line-2); }
+    .sb-card:not(.is-open) .sb-card-body { display:none; }
+    .sb-dot { width:9px; height:9px; border-radius:3px; flex-shrink:0; }
+
+    /* One class meeting row (list cards + side panel) */
+    .sb-mrow { padding:8px 0; border-bottom:1px dashed var(--sb-line); }
+    .sb-mrow:last-of-type { border-bottom:0; }
+    .sb-mrow.is-focus { background:linear-gradient(90deg, var(--brand-tint), transparent 70%); margin:0 -8px; padding-left:8px; padding-right:8px; border-radius:8px; }
+    .sb-mgrid { display:grid; grid-template-columns:78px 1fr auto 1fr minmax(80px, .9fr) 30px; align-items:center; gap:6px; }
+    .sb-mgrid select, .sb-mgrid input { width:100%; min-width:0; height:34px; padding:0 7px; border:1px solid #D4D9D6; border-radius:7px; background:#fff; font-size:12.5px; font-family:inherit; color:var(--sb-ink); }
+    .sb-mgrid select:disabled, .sb-mgrid input:disabled, .sb-card-head select:disabled { background:var(--sb-bg); color:var(--sb-muted); }
+    .sb-mrow.is-bad .sb-mgrid select, .sb-mrow.is-bad .sb-mgrid input { border-color:#E7A59E; }
+    .sb-dash { color:var(--sb-muted); font-size:12px; }
+    .sb-mdel { width:30px; height:30px; border:0; background:none; border-radius:7px; color:#8A8A9A; font-size:16px; cursor:pointer; }
+    .sb-mdel:hover { background:var(--sb-bad-bg); color:var(--sb-bad); }
+    .sb-issue { margin-top:4px; font-size:11.5px; line-height:1.35; color:var(--sb-bad); font-weight:500; }
+    .sb-issue--warn { color:var(--sb-warn); }
+    .sb-add { margin-top:8px; display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border:1px dashed #B9C4BE; border-radius:8px;
+              background:#fff; font:600 12px inherit; font-family:inherit; color:var(--brand-primary); cursor:pointer; }
+    .sb-add:hover { border-style:solid; border-color:var(--brand-accent); background:var(--brand-tint); }
+    .sb-add:disabled { opacity:.5; cursor:not-allowed; }
+    .sb-panel .sb-mgrid { grid-template-columns:70px 1fr auto 1fr 30px; }
+    .sb-panel .sb-mgrid input { grid-column:1 / 5; }
+    .sb-empty-note { font-size:12.5px; color:var(--sb-muted); padding:6px 0; }
+    @media (max-width: 760px) {
+      .sb-card-head { flex-wrap:wrap; }
+      .sb-card-head select { order:5; width:100%; }
+      .sb-card-body { padding-left:12px; }
+      .sb-mgrid { grid-template-columns:1fr 1fr auto 1fr 30px; }
+      .sb-mgrid input { grid-column:1 / 5; }
     }
-    .modal-box {
-      background:#fff; border-radius:12px; max-width:760px; width:100%;
-      padding:1.5rem; box-shadow:0 20px 60px rgba(20,20,30,.25);
-      animation: modal-pop .15s ease-out;
+
+    /* Sticky action bar */
+    .sb-bar { position:sticky; bottom:0; z-index:5; display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:16px;
+              padding:12px 20px; border-top:1px solid var(--sb-line); background:rgba(255,255,255,.96); backdrop-filter:blur(4px);
+              border-radius:0 0 14px 14px; }
+    .sb-bar-state { margin-right:auto; display:flex; align-items:center; gap:8px; font-size:13px; color:var(--sb-muted); }
+    .sb-bar-state .dot { width:8px; height:8px; border-radius:50%; background:#B8C2BC; }
+    .sb-bar-state.is-dirty { color:var(--sb-ink); font-weight:600; }
+    .sb-bar-state.is-dirty .dot { background:#D98A00; }
+
+    /* Side panel */
+    .sb-scrim { position:fixed; inset:0; z-index:900; background:rgba(18,32,26,.18); }
+    .sb-panel { position:fixed; top:0; right:0; bottom:0; z-index:901; width:min(380px, 100vw); background:#fff; box-shadow:-12px 0 40px rgba(18,32,26,.16);
+                display:flex; flex-direction:column; }
+    .sb-panel-head { display:flex; align-items:flex-start; gap:10px; padding:18px 18px 12px; border-bottom:1px solid var(--sb-line); }
+    .sb-panel-head h2 { margin:0; font-size:16px; font-weight:650; color:var(--sb-ink); line-height:1.3; }
+    .sb-panel-head p { margin:3px 0 0; font-size:12px; color:var(--sb-muted); }
+    .sb-x { margin-left:auto; width:30px; height:30px; flex-shrink:0; border:0; background:none; border-radius:8px; font-size:20px; color:var(--sb-muted); cursor:pointer; }
+    .sb-x:hover { background:#EEF2F0; color:var(--sb-ink); }
+    .sb-panel-body { flex:1; overflow-y:auto; padding:16px 18px; display:flex; flex-direction:column; gap:14px; }
+    .sb-f label { display:block; margin-bottom:5px; font-size:12px; font-weight:600; text-transform:none; letter-spacing:0; color:var(--sb-ink); }
+    .sb-f select, .sb-f input { width:100%; height:38px; padding:0 10px; border:1px solid #D4D9D6; border-radius:8px; background:#fff; font-size:13px; font-family:inherit; color:var(--sb-ink); }
+    .sb-f select:disabled, .sb-f input:disabled { background:var(--sb-bg); color:var(--sb-muted); }
+    .sb-f-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+    .sb-f-help { margin:5px 0 0; font-size:11.5px; color:var(--sb-muted); }
+    .sb-checks { display:flex; flex-direction:column; gap:6px; }
+    .sb-check { padding:9px 11px; border-radius:8px; font-size:12.5px; line-height:1.4; }
+    .sb-check--bad  { background:var(--sb-bad-bg); color:#8C1D17; }
+    .sb-check--warn { background:var(--sb-warn-bg); color:#6B4A00; }
+    .sb-check--ok   { background:var(--sb-ok-bg); color:var(--sb-ok); font-weight:600; }
+    .sb-panel-foot { display:flex; gap:8px; padding:12px 18px; border-top:1px solid var(--sb-line); }
+    .sb-panel-foot .sch-btn:last-child { margin-left:auto; }
+
+    .sb-empty { padding:64px 24px; text-align:center; color:var(--sb-muted); }
+    .sb-empty svg { width:40px; height:40px; color:#B8C2BC; margin-bottom:10px; }
+    .sb-empty h2 { margin:0 0 4px; font-size:15px; color:var(--sb-ink); }
+    .sb-empty p { margin:0; font-size:13px; }
+
+    .sch-btn--danger-ghost { background:#fff; border-color:#F0C4BF; color:var(--sb-bad); }
+    .sch-btn--danger-ghost:hover { background:var(--sb-bad-bg); }
+
+    @media (max-width: 1000px) {
+      .sb-layout { grid-template-columns:1fr; }
+      .sb-rail { display:none; }
+      .sb-rail-select { display:block; margin-bottom:12px; }
+      .sb-rail-select select { width:100%; height:40px; border:1px solid #D4D9D6; border-radius:9px; padding:0 10px; font-size:13.5px; font-family:inherit; background:#fff; }
     }
-    @keyframes modal-pop { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
-    .modal-header {
-      display:flex; justify-content:space-between; align-items:flex-start;
-      gap:12px; margin-bottom:.9rem;
+    @media (max-width: 560px) {
+      .sb-main-head, .sb-toolbar, .sb-tt-wrap, .sb-cards-wrap, .sb-bar { padding-left:14px; padding-right:14px; }
+      .sb-banner, .sb-tray { margin-left:14px; margin-right:14px; }
+      .sb-panel { top:auto; width:100vw; max-height:88vh; border-radius:16px 16px 0 0; }
+      .sb-f-row { grid-template-columns:1fr; }
     }
-    .modal-header-main { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-    .modal-close {
-      flex-shrink:0; width:28px; height:28px; display:flex; align-items:center; justify-content:center;
-      font-size:20px; line-height:1; color:#8A8A9A; text-decoration:none; border-radius:7px;
-      transition:background .12s, color .12s;
+    @media (prefers-reduced-motion: no-preference) {
+      .sb-panel { animation:sbIn .16s ease-out; }
+      @keyframes sbIn { from { transform:translateX(24px); opacity:.4; } to { transform:none; opacity:1; } }
     }
-    .modal-close:hover { background:#F5F5F7; color:#1A1A2E; }
   </style>
 </head>
 <body class="staff-layout">
@@ -793,417 +492,700 @@ $teachers = mysqli_query($conn, "SELECT teacher_id, CONCAT(given_name, ' ', fami
 
   <div class="staff-main">
     <div class="staff-topbar">
-      <div class="staff-topbar-left">
-        <button class="btn-sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
-          <span></span><span></span><span></span>
-        </button>
-        <div class="staff-topbar-title">
-          Class Scheduling<?= $is_reviewer ? ' Approvals' : '' ?>
-          <span class="staff-topbar-subtitle"><?= $is_reviewer ? 'Review and approve scheduling requests' : 'Assign teachers, rooms, and time slots' ?></span>
-        </div>
-      </div>
+      <div class="staff-topbar-left"></div>
       <div style="display:flex; align-items:center; gap:14px;">
         <?php include_once BASE_PATH . '/shared/includes/staff_notifications.php'; ?>
         <span class="staff-topbar-date"><?= date('F j, Y') ?></span>
       </div>
     </div>
 
-    <div class="staff-content">
+    <div class="staff-content sb">
 
-      <p class="page-eyebrow"><?= $is_reviewer ? 'Coordinator Portal' : 'Scheduler Portal' ?></p>
-      <h1 class="page-title">Class Scheduling<?= $is_reviewer ? ' Approvals' : '' ?></h1>
-      <p class="page-sub">
-        <?= $is_reviewer
-            ? 'Review schedule sets submitted by schedulers. View details and approve or reject requests.'
-            : 'Pick a section to assign teachers, rooms, and time slots for its subjects. Saves are checked for teacher and room clashes against every other section.' ?>
-      </p>
+      <div class="sb-head">
+        <div>
+          <p class="page-eyebrow">Scheduler Portal</p>
+          <h1 class="page-title">Class Scheduling</h1>
+          <p class="page-sub">Build each section's weekly timetable, then submit it for coordinator approval.</p>
+        </div>
+        <nav class="sb-seg" aria-label="Semester">
+          <?php foreach ([1, 2] as $sm): ?>
+            <a href="?semester=<?= $sm ?><?= $selected ? '&section_id=' . (int)$selected['section_id'] : '' ?>" <?= $semester === $sm ? 'aria-current="true"' : '' ?>>Semester <?= $sm ?></a>
+          <?php endforeach; ?>
+        </nav>
+      </div>
 
-      <?php if ($success): ?><div class="notice notice-info"><?= htmlspecialchars($success) ?></div><?php endif; ?>
-      <?php if ($error):   ?><div class="notice notice-error"><?= htmlspecialchars($error) ?></div><?php endif; ?>
+      <?php if ($flash): ?><div class="notice notice-success" role="status" data-ui-toast><?= $e($flash) ?></div><?php endif; ?>
+      <?php if ($error): ?><div class="notice notice-error" role="alert" data-ui-toast><?= $e($error) ?> Nothing was saved — your changes are still below.</div><?php endif; ?>
 
-      <?php if ($is_reviewer): ?>
+      <!-- Phone / narrow: the rail collapses into this picker -->
+      <div class="sb-rail-select">
+        <label class="ap-sr" for="sbRailSelect" style="position:absolute;left:-9999px;">Section</label>
+        <select id="sbRailSelect" onchange="if(this.value) location.href='?semester=<?= $semester ?>&section_id=' + this.value">
+          <option value="">Choose a section…</option>
+          <?php foreach ($rail as $s): [$k, $l] = sched_status_view($s['schedule_status'], (int)$s['timed_count']); ?>
+            <option value="<?= (int)$s['section_id'] ?>" <?= $selected && (int)$selected['section_id'] === (int)$s['section_id'] ? 'selected' : '' ?>>
+              <?= $e(sched_section_label($s['section_name'], $s['strand'])) ?> — <?= (int)$s['ready_count'] ?>/<?= (int)$s['subject_count'] ?> · <?= $e($l) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
 
-        <!-- ═══════════════ Coordinator: Class Scheduling Approvals ═══════════════ -->
-        <div class="panel">
-          <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.9rem;">
-            <span class="card-title" style="font-size:13px;font-weight:600;color:#1A1A2E;">Schedule Requests (<?= $total_count ?>)</span>
-          </div>
+      <div class="sb-layout">
 
-          <div class="toolbar">
-            <div class="filter-row" style="margin-bottom:0;">
-              <?php foreach ($status_labels as $skey => $slabel): ?>
-                <a class="filter-tab <?= $f_status === $skey ? 'active' : '' ?>"
-                   href="?<?= http_build_query(array_filter(['status' => $skey, 'q' => $q !== '' ? $q : null])) ?>">
-                  <?= $slabel ?><?php if ($skey === 'pending' && $pending_count > 0): ?> <span class="cnt">(<?= $pending_count ?>)</span><?php endif; ?>
-                </a>
-              <?php endforeach; ?>
+        <!-- Sections rail -->
+        <aside class="sb-rail" aria-label="Sections">
+          <div class="sb-rail-top">
+            <div class="sb-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              <input type="search" id="sbRailSearch" placeholder="Search sections" aria-label="Search sections" autocomplete="off">
             </div>
-            <form method="GET" class="search-box">
-              <input type="hidden" name="status" value="<?= htmlspecialchars($f_status) ?>">
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M19 11a8 8 0 11-16 0 8 8 0 0116 0z"/>
-              </svg>
-              <input type="text" name="q" placeholder="Search section or scheduler…" value="<?= htmlspecialchars($q) ?>">
-            </form>
-          </div>
-
-          <?php if (!$requests): ?>
-            <div class="empty-hint">No schedule requests found for this filter.</div>
-          <?php else: ?>
-            <div class="sched-table-scroll">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Request ID</th>
-                  <th>Section</th>
-                  <th>Sem.</th>
-                  <th>S.Y.</th>
-                  <th>Submitted By</th>
-                  <th>Submitted On</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                <?php foreach ($requests as $r): ?>
-                  <tr>
-                    <td class="req-id"><?= htmlspecialchars($r['schedule_request_id'] ?: '—') ?></td>
-                    <td>
-                      <div class="td-name"><?= htmlspecialchars($r['section_name']) ?></div>
-                      <div class="td-meta">G<?= htmlspecialchars($r['grade_level']) ?> &middot; <?= htmlspecialchars($r['strand']) ?></div>
-                    </td>
-                    <td class="td-meta">Sem <?= (int)$r['semester'] ?></td>
-                    <td class="td-meta"><?= htmlspecialchars($r['school_year']) ?></td>
-                    <td>
-                      <?php if ($r['req_family']): ?>
-                        <div class="td-name"><?= htmlspecialchars($r['req_given'] . ' ' . $r['req_family']) ?></div>
-                        <div class="td-meta">Scheduler</div>
-                      <?php else: ?>
-                        <span class="td-meta">&mdash;</span>
-                      <?php endif; ?>
-                    </td>
-                    <td class="td-meta"><?= $r['schedule_submitted_at'] ? date('M j, Y g:i A', strtotime($r['schedule_submitted_at'])) : '—' ?></td>
-                    <td>
-                      <span class="badge badge-<?= $r['schedule_status'] ?>"><?= ucfirst($r['schedule_status']) ?></span>
-                    </td>
-                    <td onclick="event.stopPropagation()">
-                      <a href="?section_id=<?= (int)$r['section_id'] ?>&semester=<?= (int)$r['semester'] ?>&<?= $return_qs ?>" class="btn-toggle">View</a>
-                      <?php if ($r['schedule_status'] === 'pending'): ?>
-                        <form method="POST" style="display:inline;" data-confirm="Approve the schedule for &quot;<?= htmlspecialchars($r['section_name'], ENT_QUOTES) ?>&quot;?" data-icon="question">
-                          <input type="hidden" name="section_id" value="<?= (int)$r['section_id'] ?>">
-                          <input type="hidden" name="semester" value="<?= (int)$r['semester'] ?>">
-                          <button type="submit" name="approve_schedule" class="btn-toggle" style="color:#1A7A5E;border-color:#A8D9C5;">Approve</button>
-                        </form>
-                        <form method="POST" style="display:inline;" class="reject-form">
-                          <input type="hidden" name="section_id" value="<?= (int)$r['section_id'] ?>">
-                          <input type="hidden" name="semester" value="<?= (int)$r['semester'] ?>">
-                          <input type="hidden" name="rejection_reason" value="">
-                          <button type="button" class="btn-toggle js-reject" style="color:#C0392B;border-color:#F5C6C2;"
-                                  data-name="<?= htmlspecialchars($r['section_name'], ENT_QUOTES) ?>">Reject</button>
-                        </form>
-                      <?php elseif ($r['schedule_status'] === 'approved'): ?>
-                        <form method="POST" style="display:inline;"
-                              data-confirm="Deactivate the approved schedule for &quot;<?= htmlspecialchars($r['section_name'], ENT_QUOTES) ?>&quot;? The scheduler will need to revise and resubmit it." data-icon="warning">
-                          <input type="hidden" name="section_id" value="<?= (int)$r['section_id'] ?>">
-                          <input type="hidden" name="semester" value="<?= (int)$r['semester'] ?>">
-                          <input type="hidden" name="rejection_reason" value="Deactivated by coordinator">
-                          <button type="submit" name="reject_schedule" class="btn-toggle" style="color:#C0392B;border-color:#F5C6C2;">Deactivate</button>
-                        </form>
-                      <?php endif; ?>
-                    </td>
-                  </tr>
-                <?php endforeach; ?>
-              </tbody>
-            </table>
+            <div class="sb-chips" role="group" aria-label="Filter by status">
+              <button type="button" class="sb-chip is-on" data-filter="" aria-pressed="true">All</button>
+              <button type="button" class="sb-chip" data-filter="todo" aria-pressed="false">To do</button>
+              <button type="button" class="sb-chip" data-filter="pending" aria-pressed="false">Pending</button>
+              <button type="button" class="sb-chip" data-filter="approved" aria-pressed="false">Approved</button>
             </div>
-
-            <?php if ($total_pages > 1):
-              $base_params = array_filter(['status' => $f_status !== '' ? $f_status : null, 'q' => $q !== '' ? $q : null]);
-            ?>
-              <div class="app-pagination">
-                <span>Page <?= $page ?> of <?= $total_pages ?> &middot; <?= $total_count ?> total</span>
-                <div class="pages">
-                  <?php if ($page > 1): ?><a href="?<?= http_build_query(array_merge($base_params, ['page' => $page - 1])) ?>">&larr;</a><?php endif; ?>
-                  <?php for ($p = max(1, $page - 2); $p <= min($total_pages, $page + 2); $p++): ?>
-                    <?php if ($p === $page): ?><span class="current"><?= $p ?></span>
-                    <?php else: ?><a href="?<?= http_build_query(array_merge($base_params, ['page' => $p])) ?>"><?= $p ?></a><?php endif; ?>
-                  <?php endfor; ?>
-                  <?php if ($page < $total_pages): ?><a href="?<?= http_build_query(array_merge($base_params, ['page' => $page + 1])) ?>">&rarr;</a><?php endif; ?>
+          </div>
+          <div class="sb-rail-list" id="sbRailList">
+            <?php $last_grade = null; foreach ($rail as $s):
+              [$k, $l] = sched_status_view($s['schedule_status'], (int)$s['timed_count']);
+              $tot = (int)$s['subject_count']; $rdy = (int)$s['ready_count'];
+              $group = in_array($k, ['pending', 'approved'], true) ? $k : 'todo';
+              $label = sched_section_label($s['section_name'], $s['strand']);
+              if ($s['grade_level'] !== $last_grade): $last_grade = $s['grade_level']; ?>
+                <div class="sb-grade" data-grade="<?= $e($last_grade) ?>">Grade <?= $e($last_grade) ?></div>
+              <?php endif; ?>
+              <a class="sb-sec" href="?semester=<?= $semester ?>&section_id=<?= (int)$s['section_id'] ?>"
+                 data-grade="<?= $e($s['grade_level']) ?>" data-group="<?= $group ?>" data-name="<?= $e(strtolower($label . ' ' . $s['room'])) ?>"
+                 <?= $selected && (int)$selected['section_id'] === (int)$s['section_id'] ? 'aria-current="page"' : '' ?>>
+                <div class="sb-sec-top">
+                  <span class="sb-sec-name" title="<?= $e($label) ?>"><?= $e($label) ?></span>
+                  <span class="sb-pill sb-pill--<?= $k ?>"><?= $e($l) ?></span>
                 </div>
+                <div class="sb-sec-meta">
+                  <span class="sb-prog" aria-hidden="true"><i style="width:<?= $tot ? round($rdy / $tot * 100) : 0 ?>%"></i></span>
+                  <span><?= $tot ? "$rdy/$tot ready" : 'No subjects' ?></span>
+                </div>
+              </a>
+            <?php endforeach; ?>
+            <p class="sb-rail-empty" id="sbRailEmpty" <?= $rail ? 'hidden' : '' ?>><?= $rail ? 'No sections match.' : 'No approved sections yet.' ?></p>
+          </div>
+        </aside>
+
+        <!-- Builder -->
+        <section class="sb-main" aria-label="Schedule builder">
+          <?php if (!$selected): ?>
+            <div class="sb-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v3m8-3v3M4 8h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z"/></svg>
+              <h2>Pick a section to start</h2>
+              <p>Choose a section from the list to build its Semester <?= $semester ?> timetable.</p>
+            </div>
+          <?php else:
+            $sec_label = sched_section_label($selected['section_name'], $selected['strand']);
+          ?>
+            <div class="sb-main-head">
+              <div class="sb-title-row">
+                <h2 class="sb-title"><?= $e($sec_label) ?></h2>
+                <span class="sb-pill sb-pill--<?= $st_key ?>" id="sbStatusPill"><?= $e($st_label) ?></span>
               </div>
+              <div class="sb-facts">
+                <span>Grade <b><?= $e($selected['grade_level']) ?></b></span>
+                <span><span class="strand-badge strand-badge--<?= strand_badge_class($selected['strand']) ?>"><?= $e($selected['strand']) ?></span></span>
+                <span>SY <b><?= $e($selected['school_year']) ?></b></span>
+                <span>Homeroom <b><?= $e($selected['room'] ?: '—') ?></b></span>
+                <span>Semester <b><?= $semester ?></b></span>
+                <?php if ($selected['schedule_request_id']): ?><span>Request <b><?= $e($selected['schedule_request_id']) ?></b></span><?php endif; ?>
+              </div>
+              <?php if ($payload['rows']): ?>
+                <div class="sb-stats" aria-live="polite">
+                  <div class="sb-stat"><b id="sbReady">0/0</b> ready <span class="sb-prog"><i id="sbReadyBar" style="width:0"></i></span></div>
+                  <div class="sb-stat" id="sbClashStat"><b id="sbClashes">0</b> <span id="sbClashWord">clashes</span></div>
+                  <div class="sb-stat"><b id="sbHours">0</b> hrs / week</div>
+                </div>
+              <?php endif; ?>
+            </div>
+
+            <?php if ($selected['schedule_status'] === 'rejected' && $selected['schedule_rejection_reason']): ?>
+              <div class="sb-banner sb-banner--bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5m0 3h.01"/></svg>
+                <div><b>Returned by the coordinator:</b> <?= $e($selected['schedule_rejection_reason']) ?> Make the changes, then submit again.</div></div>
+            <?php elseif ($selected['schedule_status'] === 'pending'): ?>
+              <div class="sb-banner sb-banner--warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 118 0v4"/></svg>
+                <div>Submitted and waiting for coordinator review. Editing is locked until it's approved or returned.</div></div>
+            <?php elseif ($selected['schedule_status'] === 'approved'): ?>
+              <div class="sb-banner sb-banner--info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v5h1"/></svg>
+                <div>This schedule is approved. Saving any change sends it back to the coordinator for re-approval.</div></div>
+            <?php endif; ?>
+            <?php if ($payload['section']['seeding']): ?>
+              <div class="sb-banner sb-banner--info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v5h1"/></svg>
+                <div>Semester 2 hasn't been set up yet. The subjects and teachers below come from Semester 1 — place them on the timetable, or copy Semester 1's times as a starting point.</div>
+                <button type="button" class="sb-link" id="sbCopyS1">Copy Semester 1 times</button></div>
+            <?php endif; ?>
+
+            <?php if (!$payload['rows']): ?>
+              <div class="sb-empty">
+                <h2>No subjects for this section yet</h2>
+                <p><?= $semester === 2 ? 'Set up Semester 1 first — Semester 2 starts from its subjects.' : 'Subjects are added when the section is approved. Check that the curriculum for this grade and strand is approved.' ?></p>
+              </div>
+            <?php else: ?>
+              <div class="sb-toolbar">
+                <div class="sb-view" role="group" aria-label="View">
+                  <button type="button" data-view="grid" aria-pressed="true">Timetable</button>
+                  <button type="button" data-view="list" aria-pressed="false">List</button>
+                </div>
+                <span class="sb-hint" id="sbHint"></span>
+              </div>
+
+              <div id="sbGridView">
+                <div class="sb-tt-wrap"><div class="sb-tt" id="sbTT"></div></div>
+                <div class="sb-tray" id="sbTray"></div>
+              </div>
+              <div id="sbListView" hidden>
+                <div class="sb-cards-wrap" id="sbList"></div>
+              </div>
+
+              <noscript><p class="sb-empty">The schedule builder needs JavaScript turned on.</p></noscript>
+
+              <?php if ($payload['section']['editable']): ?>
+                <div class="sb-bar">
+                  <div class="sb-bar-state" id="sbState"><span class="dot"></span><span id="sbStateText">All changes saved</span></div>
+                  <button type="button" class="sch-btn sch-btn--ghost" id="sbDiscard" disabled>Discard</button>
+                  <button type="button" class="sch-btn sch-btn--ghost" id="sbSave" disabled>Save draft</button>
+                  <?php if ($selected['schedule_status'] !== 'approved'): ?>
+                    <button type="button" class="sch-btn sch-btn--primary" id="sbSubmit" disabled>Submit for approval</button>
+                  <?php endif; ?>
+                </div>
+                <form method="POST" id="sbForm" hidden>
+                  <input type="hidden" name="section_id" value="<?= (int)$selected['section_id'] ?>">
+                  <input type="hidden" name="semester" value="<?= $semester ?>">
+                  <input type="hidden" name="save_schedule" value="1">
+                  <input type="hidden" name="then_submit" id="sbThenSubmit" value="0">
+                  <div id="sbFields"></div>
+                </form>
+              <?php endif; ?>
             <?php endif; ?>
           <?php endif; ?>
-        </div>
-
-        <?php if ($selected):
-          $close_href = '?' . $return_qs;
-        ?>
-          <!-- Read-only detail (coordinator "View") — shown as a modal -->
-          <div class="modal-overlay" id="viewScheduleModal" onclick="if(event.target===this) window.location.href='<?= htmlspecialchars($close_href) ?>';">
-            <div class="modal-box">
-              <div class="modal-header">
-                <div class="modal-header-main">
-                  <span class="card-title" style="font-size:14px;font-weight:600;color:#1A1A2E;">
-                    <?= htmlspecialchars($selected['section_name']) ?> &middot; <?= htmlspecialchars($selected['school_year']) ?> &middot; Semester <?= $semester ?>
-                    <?php if ($selected['schedule_request_id']): ?> &middot; <span class="req-id"><?= htmlspecialchars($selected['schedule_request_id']) ?></span><?php endif; ?>
-                  </span>
-                  <span class="badge badge-<?= $selected['schedule_status'] ?>"><?= ucfirst($selected['schedule_status']) ?></span>
-                </div>
-                <a href="<?= htmlspecialchars($close_href) ?>" class="modal-close" aria-label="Close">&times;</a>
-              </div>
-              <?php if ($selected['schedule_status'] === 'rejected' && $selected['schedule_rejection_reason']): ?>
-                <div class="notice notice-error" style="margin-left:0;margin-right:0;">Rejected: <?= htmlspecialchars($selected['schedule_rejection_reason']) ?></div>
-              <?php endif; ?>
-              <?php if (empty($subject_rows)): ?>
-                <p class="empty-hint">No subjects assigned to this section yet.</p>
-              <?php else: ?>
-                <div class="sched-table-scroll">
-                <table class="sched-table">
-                  <thead><tr><th>Subject</th><th>Teacher</th><th>Day</th><th>Start</th><th>End</th><th>Room</th></tr></thead>
-                  <tbody>
-                    <?php foreach ($subject_rows as $row): ?>
-                      <tr>
-                        <td>
-                          <div class="sched-subject"><?= htmlspecialchars($row['subject_name']) ?></div>
-                          <?php if ($row['conflict']): ?><div class="conflict-tag">⚠ <?= htmlspecialchars($row['conflict']) ?></div><?php endif; ?>
-                        </td>
-                        <td><?= htmlspecialchars($row['teacher_name'] ?: 'Not set') ?></td>
-                        <td><?= htmlspecialchars($row['day'] ?: 'Not set') ?></td>
-                        <td><?= $row['start_time'] ? format_time_label($row['start_time']) : 'Not set' ?></td>
-                        <td><?= $row['end_time'] ? format_time_label($row['end_time']) : 'Not set' ?></td>
-                        <td><?= htmlspecialchars($row['room'] ?: ($selected['room'] ?: 'Homeroom')) ?></td>
-                      </tr>
-                    <?php endforeach; ?>
-                  </tbody>
-                </table>
-                </div>
-              <?php endif; ?>
-            </div>
-          </div>
-        <?php endif; ?>
-
-      <?php else: ?>
-
-        <!-- ═══════════════ Scheduler: section picker + editor (unchanged) ═══════════════ -->
-        <div class="two-col">
-
-          <!-- Section picker -->
-          <div class="panel">
-            <div class="panel-sub" style="display:flex;flex-direction:column;gap:8px;">
-              <span>Sections</span>
-              <div style="display:flex;gap:6px;">
-                <a class="filter-tab <?= $semester === 1 ? 'active' : '' ?>" href="?semester=1" style="flex:1;">Semester 1</a>
-                <a class="filter-tab <?= $semester === 2 ? 'active' : '' ?>" href="?semester=2" style="flex:1;">Semester 2</a>
-              </div>
-            </div>
-            <table class="sched-table">
-              <thead>
-                <tr><th>Section</th><th>Progress</th><th>Status</th></tr>
-              </thead>
-              <tbody>
-                <?php foreach ($sections as $sec):
-                  $sid   = (int)$sec['section_id'];
-                  $total = (int)$sec['subject_count'];
-                  $done  = (int)$sec['scheduled_count'];
-                  $pct   = $total > 0 ? round($done / $total * 100) : 0;
-                  if ($total === 0)        { $progClass = 'prog-none'; }
-                  elseif ($done < $total)  { $progClass = 'prog-partial'; }
-                  else                     { $progClass = 'prog-done'; }
-                  $rowClass = 'clickable' . ((int)($selected['section_id'] ?? 0) === $sid ? ' sec-selected' : '');
-                ?>
-                  <tr class="<?= $rowClass ?>" onclick="location.href='scheduling?section_id=<?= $sid ?>&semester=<?= $semester ?>'">
-                    <td>
-                      <div class="sched-subject"><?= htmlspecialchars($sec['section_name']) ?></div>
-                      <div style="font-size:11px;color:#8A8A9A;">G<?= htmlspecialchars($sec['grade_level']) ?> &middot; <?= htmlspecialchars($sec['strand']) ?> &middot; <?= htmlspecialchars($sec['school_year']) ?></div>
-                    </td>
-                    <td style="width:90px;">
-                      <div style="font-size:11px;color:#8A8A9A;"><?= $done ?>/<?= $total ?> set</div>
-                      <div class="prog-bar"><div class="prog-fill <?= $progClass ?>" style="width:<?= $pct ?>%"></div></div>
-                    </td>
-                    <td><span class="badge badge-<?= $sec['schedule_status'] ?>"><?= ucfirst($sec['schedule_status']) ?></span></td>
-                  </tr>
-                <?php endforeach; ?>
-                <?php if (empty($sections)): ?>
-                  <tr><td colspan="3" class="empty-hint">No active sections yet.</td></tr>
-                <?php endif; ?>
-              </tbody>
-            </table>
-          </div>
-
-          <!-- Schedule editor -->
-          <div class="panel">
-            <?php if (!$selected): ?>
-              <p class="empty-hint">Select a section on the left to manage its schedule.</p>
-            <?php else: ?>
-              <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.9rem;">
-                <span class="panel-sub" style="margin:0;">
-                  <?= htmlspecialchars($selected['section_name']) ?> &middot; <?= htmlspecialchars($selected['school_year']) ?> &middot; Semester <?= $semester ?>
-                </span>
-                <span class="badge badge-<?= $selected['schedule_status'] ?>"><?= ucfirst($selected['schedule_status']) ?></span>
-              </div>
-
-              <?php if ($selected['schedule_status'] === 'rejected' && $selected['schedule_rejection_reason']): ?>
-                <div class="notice notice-error">Rejected: <?= htmlspecialchars($selected['schedule_rejection_reason']) ?> — make the needed changes and resubmit.</div>
-              <?php elseif ($selected['schedule_status'] === 'pending'): ?>
-                <div class="notice notice-info">Submitted — awaiting coordinator approval. Editing is locked until it's reviewed.</div>
-              <?php elseif ($selected['schedule_status'] === 'approved'): ?>
-                <div class="notice notice-info">This schedule has been approved. Editing any field will send it back to the coordinator for re-approval.</div>
-              <?php endif; ?>
-
-              <?php if (empty($subject_rows)): ?>
-                <p class="empty-hint">
-                  <?= $semester === 2
-                        ? 'No Semester 2 subjects set up yet for this section — use Create Schedule to start Semester 2.'
-                        : 'No subjects assigned to this section yet — check curriculum approval for this grade/strand.' ?>
-                </p>
-              <?php else: ?>
-                <div class="sched-table-scroll">
-                <table class="sched-table">
-                  <colgroup>
-                    <col style="width:22%"><col style="width:22%"><col style="width:10%">
-                    <col style="width:12%"><col style="width:12%"><col style="width:14%">
-                    <?php if ($can_edit): ?><col style="width:8%"><?php endif; ?>
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th>Subject</th><th>Teacher</th><th>Day</th><th>Start</th><th>End</th><th>Room</th>
-                      <?php if ($can_edit): ?><th></th><?php endif; ?>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <?php foreach ($subject_rows as $row):
-                      $fid = 'schedForm_' . $row['subject_id'];
-                    ?>
-                      <tr>
-                        <td>
-                          <div class="sched-subject"><?= htmlspecialchars($row['subject_name']) ?></div>
-                          <?php if ($row['conflict']): ?><div class="conflict-tag">⚠ <?= htmlspecialchars($row['conflict']) ?></div><?php endif; ?>
-                        </td>
-                        <?php if ($can_edit): ?>
-                          <td>
-                            <select name="teacher_id" form="<?= $fid ?>">
-                              <option value="">— Select —</option>
-                              <?php foreach ($teachers as $t): ?>
-                                <option value="<?= (int)$t['teacher_id'] ?>" <?= (int)$row['teacher_id'] === (int)$t['teacher_id'] ? 'selected' : '' ?>><?= htmlspecialchars($t['name']) ?></option>
-                              <?php endforeach; ?>
-                            </select>
-                          </td>
-                          <td>
-                            <select name="day" form="<?= $fid ?>">
-                              <option value="">— Select —</option>
-                              <?php foreach ($valid_days as $d): ?>
-                                <option value="<?= $d ?>" <?= $row['day'] === $d ? 'selected' : '' ?>><?= $d ?></option>
-                              <?php endforeach; ?>
-                            </select>
-                          </td>
-                          <td>
-                            <select name="start_time" form="<?= $fid ?>">
-                              <option value="">— Select —</option>
-                              <?php foreach ($start_options as $t): ?>
-                                <option value="<?= $t ?>" <?= $row['start_time'] === $t ? 'selected' : '' ?>><?= format_time_label($t) ?></option>
-                              <?php endforeach; ?>
-                            </select>
-                          </td>
-                          <td>
-                            <select name="end_time" form="<?= $fid ?>">
-                              <option value="">— Select —</option>
-                              <?php foreach ($end_options as $t): ?>
-                                <option value="<?= $t ?>" <?= $row['end_time'] === $t ? 'selected' : '' ?>><?= format_time_label($t) ?></option>
-                              <?php endforeach; ?>
-                            </select>
-                          </td>
-                          <td>
-                            <input type="text" name="room" form="<?= $fid ?>"
-                                   placeholder="<?= htmlspecialchars($selected['room'] ?: 'Homeroom') ?>"
-                                   value="<?= htmlspecialchars($row['room'] ?? '') ?>">
-                          </td>
-                          <td>
-                            <form id="<?= $fid ?>" method="POST" style="display:inline;">
-                              <input type="hidden" name="section_id" value="<?= (int)$selected['section_id'] ?>">
-                              <input type="hidden" name="subject_id" value="<?= (int)$row['subject_id'] ?>">
-                              <input type="hidden" name="semester" value="<?= $semester ?>">
-                              <button type="submit" name="update_schedule" class="btn-save-row">Save</button>
-                            </form>
-                          </td>
-                        <?php else: ?>
-                          <td><?= htmlspecialchars($row['teacher_name'] ?: 'Not set') ?></td>
-                          <td><?= htmlspecialchars($row['day'] ?: 'Not set') ?></td>
-                          <td><?= $row['start_time'] ? format_time_label($row['start_time']) : 'Not set' ?></td>
-                          <td><?= $row['end_time'] ? format_time_label($row['end_time']) : 'Not set' ?></td>
-                          <td><?= htmlspecialchars($row['room'] ?: ($selected['room'] ?: 'Homeroom')) ?></td>
-                        <?php endif; ?>
-                      </tr>
-                    <?php endforeach; ?>
-                  </tbody>
-                </table>
-                </div>
-
-                <?php if ($can_edit && $selected['schedule_status'] !== 'approved'): ?>
-                  <div style="margin-top:1rem;">
-                    <form method="POST" data-confirm="Submit this section's full schedule for coordinator approval? Editing will be locked until it's reviewed." data-icon="question">
-                      <input type="hidden" name="section_id" value="<?= (int)$selected['section_id'] ?>">
-                      <input type="hidden" name="semester" value="<?= $semester ?>">
-                      <button type="submit" name="submit_schedule" class="btn-save-row" style="height:38px;padding:0 18px;">Submit Schedule for Approval</button>
-                    </form>
-                  </div>
-                <?php endif; ?>
-              <?php endif; ?>
-            <?php endif; ?>
-          </div>
-
-        </div>
-      <?php endif; ?>
-
+        </section>
+      </div>
     </div>
   </div>
 
-<script>
-const sidebarToggle = document.getElementById('sidebarToggle');
-const sidebar = document.getElementById('staffSidebar');
-sidebarToggle?.addEventListener('click', () => sidebar.classList.toggle('open'));
+  <?php if ($payload && $payload['rows']): ?>
+  <!-- Side panel: one subject — its teacher and all of its weekly classes -->
+  <div class="sb-scrim" id="sbScrim" hidden></div>
+  <aside class="sb-panel" id="sbPanel" role="dialog" aria-modal="true" aria-labelledby="sbPanelTitle" hidden>
+    <div class="sb-panel-head">
+      <div>
+        <h2 id="sbPanelTitle">Subject</h2>
+        <p id="sbPanelSub"></p>
+      </div>
+      <button type="button" class="sb-x" id="sbPanelClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="sb-panel-body">
+      <div class="sb-f">
+        <label for="pTeacher">Teacher</label>
+        <select id="pTeacher" data-fk="p-t"></select>
+        <p class="sb-f-help">Teachers already booked during any of these classes are marked busy.</p>
+      </div>
+      <div class="sb-f">
+        <label>Classes this week <span style="font-weight:400;color:var(--sb-muted)">(one per day)</span></label>
+        <div id="pMeetings"></div>
+        <button type="button" class="sb-add" id="pAdd" data-fk="p-add">+ Add class</button>
+        <button type="button" class="sb-link" id="pPlace">Place on timetable</button>
+      </div>
+      <div class="sb-checks" id="pChecks" aria-live="polite"></div>
+    </div>
+    <div class="sb-panel-foot">
+      <button type="button" class="sch-btn sch-btn--primary" id="pDone">Done</button>
+    </div>
+  </aside>
 
-// View-schedule modal: lock scroll while open, close on Escape
-(() => {
-  const modal = document.getElementById('viewScheduleModal');
-  if (!modal) return;
-  document.body.style.overflow = 'hidden';
-  const closeHref = modal.querySelector('.modal-close')?.getAttribute('href');
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && closeHref) window.location.href = closeHref;
-  });
+  <script type="application/json" id="schedData"><?= json_encode($payload, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
+  <?php endif; ?>
+
+<script>
+// ── Sections rail: search + status chips ──────────────────────────────────────
+(function () {
+  const list = document.getElementById('sbRailList');
+  if (!list) return;
+  const search = document.getElementById('sbRailSearch');
+  const chips = [...document.querySelectorAll('.sb-chip')];
+  let group = '';
+  function apply() {
+    const q = search.value.trim().toLowerCase();
+    let shown = 0;
+    const gradeShown = {};
+    list.querySelectorAll('.sb-sec').forEach(a => {
+      const ok = (!q || a.dataset.name.includes(q)) && (!group || a.dataset.group === group);
+      a.hidden = !ok;
+      if (ok) { shown++; gradeShown[a.dataset.grade] = true; }
+    });
+    list.querySelectorAll('.sb-grade').forEach(g => { g.hidden = !gradeShown[g.dataset.grade]; });
+    const empty = document.getElementById('sbRailEmpty');
+    if (empty && list.querySelector('.sb-sec')) empty.hidden = shown > 0;
+  }
+  search.addEventListener('input', apply);
+  chips.forEach(c => c.addEventListener('click', () => {
+    group = c.dataset.filter;
+    chips.forEach(x => { const on = x === c; x.classList.toggle('is-on', on); x.setAttribute('aria-pressed', on); });
+    apply();
+  }));
+  const cur = list.querySelector('[aria-current="page"]');
+  if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest' });
 })();
 
-// Reject-with-reason: SWAL textarea (required), then submit
-document.querySelectorAll('.js-reject').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const form = btn.closest('.reject-form');
-    const name = btn.dataset.name;
-    Swal.fire({
-      title: 'Reject schedule for "' + name + '"?',
-      input: 'textarea',
-      inputPlaceholder: 'Reason (required)',
-      inputAttributes: { style: 'resize:vertical;max-width:100%;box-sizing:border-box;' },
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#C0392B',
-      cancelButtonColor: '#aaa',
-      confirmButtonText: 'Reject',
-      cancelButtonText: 'Cancel',
-      inputValidator: (value) => {
-        if (!value || !value.trim()) return 'A reason is required.';
+// ── Schedule builder ──────────────────────────────────────────────────────────
+// State: one entry per subject — { id, name, t (teacher), m: [{d, s, e, r}], s1 }
+// where m holds that subject's weekly classes (at most one per day). Every
+// change re-renders the timetable, the list, the panel and the summary from
+// this state; focus and caret are restored so typing is never interrupted.
+(function () {
+  const dataEl = document.getElementById('schedData');
+  if (!dataEl) return;
+  const D = JSON.parse(dataEl.textContent);
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+  const BOUNDS = D.bounds;                          // "07:00:00" … "17:00:00", every 30 min
+  const STARTS = BOUNDS.slice(0, -1), ENDS = BOUNDS.slice(1);
+  const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const DAY0 = toMin(BOUNDS[0]), DAY_END = toMin(BOUNDS[BOUNDS.length - 1]);
+  const HOUR_PX = 52, HOURS = (DAY_END - DAY0) / 60;
+  const px = t => (toMin(t) - DAY0) / 60 * HOUR_PX;
+  const label = t => { if (!t) return ''; let [h, m] = t.split(':').map(Number); const ap = h < 12 ? 'AM' : 'PM'; h = h % 12 || 12; return h + ':' + String(m).padStart(2, '0') + ' ' + ap; };
+  const short = t => label(t).replace(':00', '').replace(' ', '');
+  const endFor = (start, dur) => { const want = Math.min(toMin(start) + dur, DAY_END); return ENDS.find(t => toMin(t) >= want) || ENDS[ENDS.length - 1]; };
+  // Subject colours: one cohesive family around the brand green (greens,
+  // teals, sage, slate) — [tint background, accent bar / dark text]. Assigned
+  // by position in the list; close enough to feel calm, distinct enough to
+  // tell neighbouring blocks apart.
+  const PALETTE = [['#E6F2EB','#2F6B4F'],['#E3F0F0','#2A6666'],['#EDF1E4','#56692F'],['#E5ECF2','#3A5A78'],
+                   ['#E1F0EA','#1F6E57'],['#EBEEEA','#4A5C52'],['#E6EFF3','#2E6378'],['#EEF0E8','#65683F']];
+  const TEACHERS = new Map(D.teachers);
+  const editable = !!D.section.editable;
+  const homeroom = D.section.room || '';
+  const roomKey = r => String(r || '').trim().toLowerCase();
+
+  const cloneRows = rs => rs.map(r => ({ ...r, m: (r.m || []).map(x => ({ ...x })) }));
+  const byDay = (a, b) => DAYS.indexOf(a.d) - DAYS.indexOf(b.d) || String(a.s).localeCompare(String(b.s));
+  const ORIGINAL = cloneRows(D.original);
+  let rows = cloneRows(D.rows);
+  const colorize = () => rows.forEach((r, i) => { r.color = PALETTE[i % PALETTE.length]; });
+  colorize();
+
+  let view = 'grid', placing = null, activeId = null, focusMi = null, submitting = false, hintMsg = '';
+  const openCards = new Set();
+  const failedId = D.failedRow != null && D.rows[D.failedRow] ? D.rows[D.failedRow].id : null;
+  const rowById = id => rows.find(x => x.id === id);
+
+  const complete = m => !!(m.d && m.s && m.e);
+  const effRoom = m => (m.r || '').trim() || homeroom;
+  const norm = r => JSON.stringify([r.t || null, [...r.m].sort(byDay).map(m => [m.d || null, m.s || null, m.e || null, (m.r || '').trim()])]);
+  const dirtyIds = () => rows.filter(r => { const o = ORIGINAL.find(x => x.id === r.id); return !o || norm(o) !== norm(r); }).map(r => r.id);
+
+  // Problems with one class meeting (all blocking).
+  function meetingIssues(r, i) {
+    const m = r.m[i], out = [];
+    if (!complete(m)) return ['Pick a day, start and end time.'];
+    const sm = toMin(m.s), em = toMin(m.e);
+    if (em <= sm) out.push('Ends before it starts.');
+    if (r.m.some((o, j) => j !== i && o.d === m.d)) out.push('Already has a class on ' + m.d + ' — one per day.');
+    D.busy.forEach(b => {
+      if (b[2] !== m.d || !(sm < b[4] && b[3] < em)) return;
+      if (r.t && b[0] === r.t) out.push('Teacher is busy — ' + b[5] + '.');
+      if (effRoom(m) && b[1] && roomKey(b[1]) === roomKey(effRoom(m))) out.push('Room ' + effRoom(m) + ' is taken — ' + b[5] + '.');
+    });
+    rows.forEach(o => o.m.forEach((om, j) => {
+      if ((o === r && j === i) || !complete(om) || om.d !== m.d) return;
+      if (toMin(om.s) < em && sm < toMin(om.e)) out.push(o === r ? 'Overlaps its own ' + om.d + ' class.' : 'Overlaps ' + o.name + ' (same section).');
+    }));
+    return [...new Set(out)];
+  }
+  // Subject level: 'bad' (a class has a problem), 'warn' (incomplete), 'ok'.
+  function subjectState(r) {
+    const bad = r.m.some((m, i) => complete(m) && meetingIssues(r, i).length) || r.m.some(m => !complete(m));
+    const warns = [];
+    if (!r.m.length) warns.push('No classes yet.');
+    if (!r.t) warns.push('No teacher assigned.');
+    return { level: bad ? 'bad' : (warns.length ? 'warn' : 'ok'), warns };
+  }
+  const ready = r => !!r.t && r.m.length > 0 && r.m.every(complete);
+  const summaryText = r => r.m.length ? [...r.m].filter(complete).sort(byDay).map(m => m.d + ' ' + short(m.s) + '–' + short(m.e)).join(' · ') || 'Class times not set' : 'No classes yet';
+
+  // ── Render helpers ──────────────────────────────────────────────────────
+  const opt = (v, text, sel, dis) => '<option value="' + esc(v) + '"' + (sel ? ' selected' : '') + (dis ? ' disabled' : '') + '>' + esc(text) + '</option>';
+  const teacherOptions = (r, busyT) => opt('', 'No teacher', !r.t) + D.teachers.map(t =>
+      opt(t[0], t[1] + (busyT && busyT.has(t[0]) ? ' — busy (' + busyT.get(t[0]) + ')' : ''), r.t === t[0])).join('');
+
+  function meetingRow(r, i, fkp) {
+    const m = r.m[i], dis = editable ? '' : ' disabled';
+    const used = new Set(r.m.filter((o, j) => j !== i).map(o => o.d));
+    const iss = meetingIssues(r, i);
+    return '<div class="sb-mrow' + (iss.length ? ' is-bad' : '') + (activeId === r.id && focusMi === i ? ' is-focus' : '') + '" data-id="' + r.id + '" data-mi="' + i + '">'
+      + '<div class="sb-mgrid">'
+      + '<select data-k="d" data-fk="' + fkp + i + '-d" aria-label="Day"' + dis + '>' + opt('', 'Day', !m.d) + DAYS.map(d => opt(d, d, m.d === d, used.has(d))).join('') + '</select>'
+      + '<select data-k="s" data-fk="' + fkp + i + '-s" aria-label="Start"' + dis + '>' + opt('', 'Start', !m.s) + STARTS.map(t => opt(t, label(t), m.s === t)).join('') + '</select>'
+      + '<span class="sb-dash">–</span>'
+      + '<select data-k="e" data-fk="' + fkp + i + '-e" aria-label="End"' + dis + '>' + opt('', 'End', !m.e) + ENDS.map(t => opt(t, label(t), m.e === t)).join('') + '</select>'
+      + '<input type="text" data-k="r" data-fk="' + fkp + i + '-r" maxlength="50" value="' + esc(m.r || '') + '" placeholder="' + esc(homeroom || 'Homeroom') + '" aria-label="Room"' + dis + '>'
+      + (editable ? '<button type="button" class="sb-mdel" data-del data-fk="' + fkp + i + '-x" aria-label="Remove this class" title="Remove this class">✕</button>' : '<span></span>')
+      + '</div>'
+      + iss.map(t => '<div class="sb-issue">⚠ ' + esc(t) + '</div>').join('')
+      + '</div>';
+  }
+
+  // ── Timetable ───────────────────────────────────────────────────────────
+  function renderGrid() {
+    const tt = $('sbTT'), H = HOURS * HOUR_PX;
+    const placingRow = placing ? rowById(placing) : null;
+    const usedDays = new Set(placingRow ? placingRow.m.map(m => m.d) : []);
+    let h = '<div></div>' + DAYS.map(d => '<div class="sb-tt-dh">' + d + '</div>').join('');
+    h += '<div class="sb-tt-axis" style="height:' + H + 'px">';
+    BOUNDS.forEach(t => { if (t.slice(3, 5) === '00') h += '<span style="top:' + px(t) + 'px">' + short(t) + '</span>'; });
+    h += '</div>';
+    DAYS.forEach(day => {
+      h += '<div class="sb-tt-day' + (usedDays.has(day) ? ' is-used' : '') + '" style="height:' + H + 'px" data-day="' + day + '">';
+      if (editable && placing && !usedDays.has(day)) {
+        STARTS.forEach(s => {
+          h += '<button type="button" class="sb-cell" style="top:' + px(s) + 'px" data-day="' + day + '" data-start="' + s + '" data-fk="c-' + day + s + '" aria-label="Place on ' + day + ' at ' + label(s) + '"></button>';
+        });
       }
-    }).then((result) => {
-      if (!result.isConfirmed) return;
-      form.querySelector('input[name="rejection_reason"]').value = result.value.trim();
-      const hidden = document.createElement('input');
-      hidden.type = 'hidden';
-      hidden.name = 'reject_schedule';
-      hidden.value = '1';
-      form.appendChild(hidden);
-      form.submit();
+      // This day's classes, laid out in lanes so overlaps sit side by side.
+      const items = [];
+      rows.forEach(r => r.m.forEach((m, i) => { if (complete(m) && m.d === day) items.push({ r, m, i }); }));
+      items.sort((a, b) => toMin(a.m.s) - toMin(b.m.s));
+      const laneEnd = [];
+      items.forEach(it => {
+        let lane = laneEnd.findIndex(e => e <= toMin(it.m.s));
+        if (lane < 0) { lane = laneEnd.length; laneEnd.push(0); }
+        laneEnd[lane] = toMin(it.m.e); it.lane = lane;
+      });
+      const lanes = Math.max(1, laneEnd.length);
+      items.forEach(({ r, m, i, lane }) => {
+        const top = px(m.s), ht = Math.max(22, (toMin(m.e) - toMin(m.s)) / 60 * HOUR_PX - 3);
+        const clash = meetingIssues(r, i).length > 0;
+        const tname = r.t ? TEACHERS.get(r.t) || '' : 'No teacher';
+        h += '<button type="button" class="sb-block' + (clash ? ' is-clash' : '') + (r.id === activeId && i === focusMi ? ' is-active' : '') + '" data-id="' + r.id + '" data-mi="' + i + '" data-fk="b-' + r.id + '-' + i + '"'
+          + ' style="top:' + (top + 1) + 'px;height:' + ht + 'px;left:calc(' + (lane / lanes * 100) + '% + 3px);width:calc(' + (100 / lanes) + '% - 6px);background:' + r.color[0] + ';border-left-color:' + r.color[1] + '"'
+          + ' title="' + esc(r.name + ' · ' + m.d + ' ' + label(m.s) + '–' + label(m.e) + ' · ' + tname + (effRoom(m) ? ' · ' + effRoom(m) : '')) + '">'
+          + '<span class="n">' + esc(r.name) + '</span>'
+          + (ht > 34 ? '<span class="m">' + esc(short(m.s) + '–' + short(m.e) + ' · ' + tname) + '</span>' : '')
+          + '</button>';
+      });
+      h += '</div>';
+    });
+    tt.innerHTML = h;
+    tt.classList.toggle('sb-placing', !!placing);
+  }
+
+  function renderTray() {
+    const tray = $('sbTray');
+    const un = rows.filter(r => !r.m.length);
+    if (placing) {
+      const r = rowById(placing);
+      tray.innerHTML = '<div class="sb-tray-head"><b>Adding a class for ' + esc(r.name) + '.</b> Click a free time on the grid'
+        + (r.m.length ? ' (days it already meets are greyed out)' : '') + ' — or press Esc to cancel.</div>';
+      return;
+    }
+    if (!un.length) {
+      tray.innerHTML = '<span class="sb-tray-done">✓ Every subject has at least one class. Click a block to edit it or add more classes.</span>';
+      return;
+    }
+    tray.innerHTML = '<div class="sb-tray-head"><b>' + un.length + (un.length === 1 ? ' subject has' : ' subjects have') + ' no classes yet.</b> '
+      + (editable ? 'Pick one, then click a time on the grid.' : '') + '</div>'
+      + '<div class="sb-tray-list">' + un.map(r =>
+        '<button type="button" class="sb-tray-chip" data-id="' + r.id + '" data-fk="t-' + r.id + '"'
+        + ' style="background:' + r.color[0] + ';border-left-color:' + r.color[1] + '" title="' + esc(r.name) + '"' + (editable ? '' : ' disabled') + '>'
+        + esc(r.name) + '</button>').join('') + '</div>';
+  }
+
+  // ── List (expandable subject cards) ─────────────────────────────────────
+  function renderList() {
+    const dis = editable ? '' : ' disabled';
+    $('sbList').innerHTML = rows.map(r => {
+      const st = subjectState(r), open = openCards.has(r.id);
+      const ic = st.level === 'ok' ? '✓' : (st.level === 'bad' ? '⚠' : '!');
+      const n = r.m.length;
+      return '<div class="sb-card' + (open ? ' is-open' : '') + (st.level === 'bad' ? ' is-bad' : '') + (r.id === failedId ? ' is-failed' : '') + '" data-id="' + r.id + '">'
+        + '<div class="sb-card-head">'
+        +   '<span class="sb-ic sb-ic--' + st.level + '" aria-hidden="true">' + ic + '</span>'
+        +   '<button type="button" class="sb-card-name" data-toggle data-fk="lt-' + r.id + '" aria-expanded="' + open + '">'
+        +     '<span class="n" title="' + esc(r.name) + '"><span class="sb-dot" style="display:inline-block;margin-right:7px;background:' + r.color[1] + '"></span>' + esc(r.name) + '</span>'
+        +     '<span class="s">' + esc(summaryText(r)) + '</span></button>'
+        +   '<select data-k="t" data-fk="l-' + r.id + '-t" aria-label="Teacher for ' + esc(r.name) + '"' + dis + '>' + teacherOptions(r) + '</select>'
+        +   '<span class="sb-count">' + n + (n === 1 ? ' class' : ' classes') + '/wk</span>'
+        +   '<button type="button" class="sb-tog" data-toggle aria-label="' + (open ? 'Collapse' : 'Expand') + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>'
+        + '</div>'
+        + '<div class="sb-card-body">'
+        +   (n ? r.m.map((m, i) => meetingRow(r, i, 'l-' + r.id + '-')).join('') : '<div class="sb-empty-note">No classes yet.</div>')
+        +   st.warns.filter(w => w !== 'No classes yet.').map(w => '<div class="sb-issue sb-issue--warn">' + esc(w) + '</div>').join('')
+        +   (editable ? '<button type="button" class="sb-add" data-add data-fk="la-' + r.id + '"' + (r.m.length >= DAYS.length ? ' disabled' : '') + '>+ Add class</button>' : '')
+        + '</div></div>';
+    }).join('');
+  }
+
+  // ── Side panel ──────────────────────────────────────────────────────────
+  const panel = $('sbPanel'), scrim = $('sbScrim');
+  let lastFocus = null;
+  function openPanel(id, mi) {
+    if (!rowById(id)) return;
+    if (panel.hidden) lastFocus = document.activeElement;
+    activeId = id; focusMi = mi == null ? null : mi;
+    panel.hidden = false; scrim.hidden = false;
+    render();
+    const target = focusMi != null ? panel.querySelector('[data-fk="p-' + focusMi + '-d"]') : null;
+    setTimeout(() => (target && editable ? target : (editable ? $('pTeacher') : $('pDone'))).focus(), 20);
+  }
+  function renderPanel() {
+    const r = rowById(activeId); if (!r) return;
+    $('sbPanelTitle').textContent = r.name;
+    $('sbPanelSub').textContent = r.m.length + (r.m.length === 1 ? ' class' : ' classes') + ' a week' + (r.t ? ' · ' + (TEACHERS.get(r.t) || '') : '');
+    // Teachers already booked during any of this subject's classes.
+    const busyT = new Map();
+    r.m.filter(complete).forEach(m => {
+      const sm = toMin(m.s), em = toMin(m.e);
+      D.busy.forEach(b => { if (b[0] && b[2] === m.d && sm < b[4] && b[3] < em) busyT.set(b[0], b[5]); });
+      rows.forEach(o => { if (o !== r && o.t) o.m.forEach(om => { if (complete(om) && om.d === m.d && toMin(om.s) < em && sm < toMin(om.e)) busyT.set(o.t, o.name + ' · this section'); }); });
+    });
+    $('pTeacher').innerHTML = teacherOptions(r, busyT);
+    $('pTeacher').disabled = !editable;
+    $('pMeetings').dataset.id = r.id;
+    $('pMeetings').innerHTML = r.m.length ? r.m.map((m, i) => meetingRow(r, i, 'p-')).join('') : '<div class="sb-empty-note">No classes yet — add one below, or place it on the timetable.</div>';
+    $('pAdd').hidden = $('pPlace').hidden = !editable;
+    $('pAdd').disabled = $('pPlace').disabled = r.m.length >= DAYS.length;
+    const st = subjectState(r);
+    $('pChecks').innerHTML = st.level === 'ok'
+      ? '<div class="sb-check sb-check--ok">✓ Ready — no clashes.</div>'
+      : st.warns.map(w => '<div class="sb-check sb-check--warn">' + esc(w) + '</div>').join('');
+  }
+  function closePanel() {
+    if (panel.hidden) return;
+    panel.hidden = true; scrim.hidden = true; activeId = null; focusMi = null;
+    render();
+    lastFocus?.focus?.();
+  }
+
+  // ── Header stats + action bar ───────────────────────────────────────────
+  function renderSummary() {
+    const total = rows.length, nReady = rows.filter(ready).length;
+    let nClash = 0, mins = 0;
+    rows.forEach(r => r.m.forEach((m, i) => {
+      if (!complete(m)) return;
+      mins += Math.max(0, toMin(m.e) - toMin(m.s));
+      if (meetingIssues(r, i).length) nClash++;
+    }));
+    const incomplete = rows.some(r => r.m.some(m => !complete(m)));
+    $('sbReady').textContent = nReady + '/' + total;
+    $('sbReadyBar').style.width = (total ? nReady / total * 100 : 0) + '%';
+    $('sbClashes').textContent = nClash;
+    $('sbClashWord').textContent = nClash === 1 ? 'clash' : 'clashes';
+    $('sbClashStat').classList.toggle('is-bad', nClash > 0);
+    const hours = mins / 60;
+    $('sbHours').textContent = Number.isInteger(hours) ? hours : hours.toFixed(1);
+
+    $('sbHint').textContent = hintMsg || (!editable ? 'Read-only while this schedule is under review.'
+      : (view === 'grid' ? 'Click a class to edit it. A subject can meet on several days.' : 'Open a subject to add or change its classes.'));
+
+    if (!$('sbState')) return;
+    const n = dirtyIds().length;
+    $('sbState').classList.toggle('is-dirty', n > 0 || (D.section.seeding && rows.some(r => r.m.length)));
+    $('sbStateText').textContent = n ? n + (n === 1 ? ' subject changed' : ' subjects changed') + ' — not saved'
+      : (D.section.seeding ? 'Semester 2 not saved yet' : 'All changes saved');
+    $('sbDiscard').disabled = n === 0;
+    $('sbSave').disabled = !(n > 0 || D.section.seeding) || incomplete;
+    $('sbSave').title = incomplete ? 'Finish or remove the classes that are missing a day or time.' : '';
+    $('sbSave').textContent = D.section.status === 'approved' ? 'Save & send for re-approval' : 'Save draft';
+    const sub = $('sbSubmit');
+    if (sub) {
+      sub.disabled = nReady !== total || nClash > 0 || incomplete;
+      sub.title = nReady !== total || incomplete ? 'Every subject needs a teacher and at least one complete class.' : (nClash ? 'Fix the clashes first.' : '');
+      sub.textContent = n ? 'Save & submit for approval' : 'Submit for approval';
+    }
+  }
+
+  // Re-render everything, keeping keyboard focus (and caret) where it was.
+  function render() {
+    const a = document.activeElement, fk = a && a.dataset ? a.dataset.fk : null;
+    const caret = a && typeof a.selectionStart === 'number' ? [a.selectionStart, a.selectionEnd] : null;
+    renderGrid(); renderTray(); renderList();
+    if (!panel.hidden) renderPanel();
+    renderSummary();
+    if (fk) {
+      const el = document.querySelector('[data-fk="' + fk + '"]');
+      if (el && el !== document.activeElement) {
+        el.focus({ preventScroll: true });
+        if (caret && el.setSelectionRange) try { el.setSelectionRange(caret[0], caret[1]); } catch (_) {}
+      }
+    }
+  }
+  const flash = msg => { hintMsg = msg; renderSummary(); setTimeout(() => { hintMsg = ''; renderSummary(); }, 3500); };
+
+  // ── Mutations ───────────────────────────────────────────────────────────
+  function setMeeting(r, i, k, v) {
+    const m = r.m[i]; if (!m) return;
+    if (k === 's' && v) {
+      // Moving the start keeps the class length; a first start defaults to 1 hour.
+      const dur = m.s && m.e ? toMin(m.e) - toMin(m.s) : 60;
+      m.s = v; m.e = endFor(v, Math.max(30, dur));
+    } else {
+      m[k] = k === 'r' ? v : (v || null);
+    }
+  }
+  // Next day this subject doesn't meet yet, after its last class (wrapping).
+  function nextFreeDay(r) {
+    const used = new Set(r.m.map(m => m.d));
+    const last = r.m.length ? Math.max(...r.m.map(m => DAYS.indexOf(m.d))) : -1;
+    for (let k = 1; k <= DAYS.length; k++) { const d = DAYS[(last + k + DAYS.length) % DAYS.length]; if (!used.has(d)) return d; }
+    return null;
+  }
+  // "+ Add class": same time as the subject's first class, on the next free day.
+  function addMeeting(r) {
+    if (r.m.length >= DAYS.length) return -1;
+    const first = r.m.find(complete);
+    r.m.push({ d: nextFreeDay(r), s: first ? first.s : null, e: first ? first.e : null, r: first ? first.r || '' : '' });
+    return r.m.length - 1;
+  }
+  function placeAt(day, start) {
+    const r = rowById(placing); if (!r) return;
+    if (r.m.some(m => m.d === day)) { flash(r.name + ' already has a class on ' + day + '.'); return; }
+    const first = r.m.find(complete);
+    const dur = first ? toMin(first.e) - toMin(first.s) : 60;
+    r.m.push({ d: day, s: start, e: endFor(start, dur), r: first ? first.r || '' : '' });
+    placing = null;
+    openPanel(r.id, r.m.length - 1);
+  }
+
+  // One handler for meeting rows / teacher selects / add buttons, in the
+  // list cards and the side panel alike.
+  function onChange(e) {
+    const el = e.target;
+    const holder = el.closest('[data-id]'); if (!holder || !el.dataset.k) return;
+    const r = rowById(+holder.dataset.id); if (!r) return;
+    if (el.dataset.k === 't') r.t = el.value ? +el.value : null;
+    else { const mrow = el.closest('[data-mi]'); if (!mrow) return; setMeeting(r, +mrow.dataset.mi, el.dataset.k, el.value); }
+    render();
+  }
+  function onClick(e) {
+    const holder = e.target.closest('[data-id]'); if (!holder) return;
+    const r = rowById(+holder.dataset.id); if (!r) return;
+    if (e.target.closest('[data-del]')) {
+      const mi = +e.target.closest('[data-mi]').dataset.mi;
+      r.m.splice(mi, 1);
+      if (activeId === r.id) focusMi = null;
+      render();
+    } else if (e.target.closest('[data-add]')) {
+      const mi = addMeeting(r); openCards.add(r.id); render();
+      document.querySelector('[data-fk="l-' + r.id + '-' + mi + '-d"]')?.focus();
+    } else if (e.target.closest('[data-toggle]')) {
+      openCards.has(r.id) ? openCards.delete(r.id) : openCards.add(r.id);
+      render();
+    }
+  }
+  $('sbList').addEventListener('change', onChange);
+  $('sbList').addEventListener('input', e => { if (e.target.dataset.k === 'r') onChange(e); });
+  $('sbList').addEventListener('click', onClick);
+  $('pMeetings').addEventListener('change', onChange);
+  $('pMeetings').addEventListener('input', e => { if (e.target.dataset.k === 'r') onChange(e); });
+  $('pMeetings').addEventListener('click', onClick);
+  $('pTeacher').addEventListener('change', e => { const r = rowById(activeId); if (r) { r.t = e.target.value ? +e.target.value : null; render(); } });
+  $('pAdd').addEventListener('click', () => {
+    const r = rowById(activeId); if (!r) return;
+    const mi = addMeeting(r); focusMi = mi; render();
+    panel.querySelector('[data-fk="p-' + mi + '-d"]')?.focus();
+  });
+  $('pPlace').addEventListener('click', () => {
+    const id = activeId; closePanel();
+    placing = id; setView('grid'); render();
+  });
+
+  $('sbTT').addEventListener('click', e => {
+    const cell = e.target.closest('.sb-cell');
+    if (cell && placing) { placeAt(cell.dataset.day, cell.dataset.start); return; }
+    const block = e.target.closest('.sb-block');
+    if (block) openPanel(+block.dataset.id, +block.dataset.mi);
+  });
+  $('sbTray').addEventListener('click', e => {
+    const chip = e.target.closest('.sb-tray-chip'); if (!chip || !editable) return;
+    const id = +chip.dataset.id;
+    placing = placing === id ? null : id;
+    render();
+  });
+  $('pDone').addEventListener('click', closePanel);
+  $('sbPanelClose').addEventListener('click', closePanel);
+  scrim.addEventListener('click', closePanel);
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!panel.hidden) closePanel();
+    else if (placing) { placing = null; render(); }
+  });
+
+  // View toggle (remembered per browser; phones default to the list).
+  const viewBtns = [...document.querySelectorAll('.sb-view button')];
+  function setView(v) {
+    view = v;
+    viewBtns.forEach(b => b.setAttribute('aria-pressed', b.dataset.view === v));
+    $('sbGridView').hidden = v !== 'grid';
+    $('sbListView').hidden = v !== 'list';
+    try { localStorage.setItem('sbView', v); } catch (_) {}
+    renderSummary();
+  }
+  viewBtns.forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+
+  $('sbCopyS1')?.addEventListener('click', () => {
+    rows.forEach(r => { if (r.s1 && r.s1.length) r.m = r.s1.map(x => ({ ...x })); });
+    render();
+  });
+
+  // ── Save / submit ───────────────────────────────────────────────────────
+  function post(thenSubmit) {
+    $('sbThenSubmit').value = thenSubmit ? '1' : '0';
+    let h = '';
+    rows.forEach(r => {
+      h += '<input type="hidden" name="subject_id[]" value="' + r.id + '"><input type="hidden" name="teacher_id[]" value="' + (r.t || '') + '">';
+      r.m.forEach(m => {
+        h += '<input type="hidden" name="m_subject[]" value="' + r.id + '">'
+          + '<input type="hidden" name="m_day[]" value="' + esc(m.d || '') + '">'
+          + '<input type="hidden" name="m_start[]" value="' + esc(m.s || '') + '">'
+          + '<input type="hidden" name="m_end[]" value="' + esc(m.e || '') + '">'
+          + '<input type="hidden" name="m_room[]" value="' + esc((m.r || '').trim()) + '">';
+      });
+    });
+    $('sbFields').innerHTML = h;
+    submitting = true;
+    document.getElementById('pageLoader')?.classList.add('show');
+    $('sbForm').submit();
+  }
+  function confirmThen(title, text, go) {
+    if (typeof Swal === 'undefined') { if (window.confirm(text)) go(); return; }
+    Swal.fire({ title, text, icon: 'question', showCancelButton: true, confirmButtonColor: '#1E4D3B', cancelButtonColor: '#aaa',
+                confirmButtonText: 'Yes, continue', cancelButtonText: 'Cancel' }).then(res => { if (res.isConfirmed) go(); });
+  }
+  $('sbSave')?.addEventListener('click', () => {
+    if (D.section.status === 'approved') {
+      confirmThen('Save changes?', 'This schedule is approved. Saving sends it back to the coordinator for re-approval.', () => post(false));
+    } else post(false);
+  });
+  $('sbSubmit')?.addEventListener('click', () => {
+    confirmThen('Submit for approval?', 'The whole Semester ' + D.sem + ' schedule for ' + D.section.label + ' goes to the coordinator. Editing is locked until it\'s reviewed.', () => post(true));
+  });
+  $('sbDiscard')?.addEventListener('click', () => {
+    confirmThen('Discard changes?', 'Go back to the last saved version of this schedule?', () => {
+      rows = cloneRows(ORIGINAL); colorize();
+      placing = null; closePanel(); render();
     });
   });
-});
+  window.addEventListener('beforeunload', e => {
+    if (!submitting && editable && dirtyIds().length > 0) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  // ── First paint ─────────────────────────────────────────────────────────
+  rows.forEach(r => { if (subjectState(r).level === 'bad' || r.id === failedId) openCards.add(r.id); });
+  let saved = null;
+  try { saved = localStorage.getItem('sbView'); } catch (_) {}
+  render();
+  setView(saved === 'list' || saved === 'grid' ? saved : (window.innerWidth < 720 ? 'list' : 'grid'));
+  if (failedId != null) openPanel(failedId, null);
+})();
 </script>
 
 </body>

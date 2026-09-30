@@ -283,7 +283,7 @@ unset($_SESSION['ls_flash'], $_SESSION['ls_flash_type']);
 
     <div class="teacher-content">
 
-      <?php if ($flash): ?><div class="notice notice-<?= htmlspecialchars($flash_type) ?>"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+      <?php if ($flash): ?><div class="notice notice-<?= htmlspecialchars($flash_type) ?>" data-ui-toast><?= htmlspecialchars($flash) ?></div><?php endif; ?>
 
       <?php if (empty($classes)): ?>
         <div class="notice notice-info">No class assignments found yet.</div>

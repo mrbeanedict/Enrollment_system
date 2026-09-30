@@ -51,31 +51,31 @@ $tbr_ico_chevdown = '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" 
 $tbr_notif_user_id = (int) ($_SESSION['user_student_id'] ?? 0);
 $tbr_mark_read_url = APP_URL . '/ajax/' . ($tbr_is_lms ? 'lms_mark_notifications_read' : 'student_mark_notifications_read');
 
+// Scoped by link prefix to match whichever side this partial is currently
+// rendering for ($tbr_is_lms, set above) — roles/lms/... links belong to
+// the LMS bell, everything else (roles/student/portal/...) belongs here.
+// Keeps a declined-payment notification out of the LMS bell and a
+// new-lesson notification out of this one, even on the handful of pages
+// (student_profile.php etc.) that render this same partial from either side.
+$tbr_link_filter = $tbr_is_lms ? "AND link LIKE 'roles/lms/%'" : "AND link NOT LIKE 'roles/lms/%'";
+
 $tbr_notifs = [];
 $tbr_unread = 0;
 $tbr_n_stmt = mysqli_prepare($conn, "
-    SELECT notification_id, message, link, is_read, created_at
-    FROM notifications WHERE user_id = ? AND recipient_type = 'student' ORDER BY created_at DESC LIMIT 10
+    SELECT notification_id, message, link, type, is_read, created_at, " . notif_group_sql() . "
+    FROM notifications WHERE user_id = ? AND recipient_type = 'student' $tbr_link_filter ORDER BY created_at DESC LIMIT 30
 ");
 mysqli_stmt_bind_param($tbr_n_stmt, "i", $tbr_notif_user_id);
 mysqli_stmt_execute($tbr_n_stmt);
 $tbr_notifs = mysqli_stmt_get_result($tbr_n_stmt)->fetch_all(MYSQLI_ASSOC);
 mysqli_stmt_close($tbr_n_stmt);
 
-$tbr_uc_stmt = mysqli_prepare($conn, "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND recipient_type = 'student' AND is_read = 0");
+$tbr_uc_stmt = mysqli_prepare($conn, "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND recipient_type = 'student' AND is_read = 0 $tbr_link_filter");
 mysqli_stmt_bind_param($tbr_uc_stmt, "i", $tbr_notif_user_id);
 mysqli_stmt_execute($tbr_uc_stmt);
 mysqli_stmt_bind_result($tbr_uc_stmt, $tbr_unread);
 mysqli_stmt_fetch($tbr_uc_stmt);
 mysqli_stmt_close($tbr_uc_stmt);
-
-function tbr_time_ago($dt) {
-    $diff = time() - strtotime($dt);
-    if ($diff < 60) return 'just now';
-    if ($diff < 3600) return floor($diff / 60) . 'm ago';
-    if ($diff < 86400) return floor($diff / 3600) . 'h ago';
-    return floor($diff / 86400) . 'd ago';
-}
 ?>
 <div class="student-topbar-right">
   <div class="student-notif-wrap">
@@ -85,16 +85,7 @@ function tbr_time_ago($dt) {
     </button>
     <div class="student-notif-dropdown" id="studentNotifDropdown">
       <div class="student-notif-header">Notifications</div>
-      <?php if (!$tbr_notifs): ?>
-        <div class="student-notif-empty">No notifications yet.</div>
-      <?php else: ?>
-        <?php foreach ($tbr_notifs as $tbr_n): ?>
-          <a href="<?= APP_URL . '/' . htmlspecialchars($tbr_n['link']) ?>" class="student-notif-item<?= $tbr_n['is_read'] ? '' : ' unread' ?>">
-            <div class="student-notif-msg"><?= htmlspecialchars($tbr_n['message']) ?></div>
-            <div class="student-notif-time"><?= tbr_time_ago($tbr_n['created_at']) ?></div>
-          </a>
-        <?php endforeach; ?>
-      <?php endif; ?>
+      <?php notif_render_list('student', $tbr_notifs); ?>
     </div>
   </div>
   <span class="student-topbar-divider"></span>
@@ -186,6 +177,7 @@ function tbr_time_ago($dt) {
         }
         Swal.fire({
           title: 'Log out?',
+          customClass: { popup: 'ui-swal-logout' },
           text: 'You will be returned to the login page.',
           icon: 'question',
           showCancelButton: true,

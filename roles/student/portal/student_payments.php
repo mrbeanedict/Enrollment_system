@@ -60,7 +60,7 @@ require_once __DIR__ . '/../../../bootstrap.php';
 
     if ($enrollment) {
         $pay_stmt = mysqli_prepare($conn, "
-            SELECT amount, payment_method, paid_at, notes
+            SELECT payment_id, amount, payment_method, paid_at, notes
             FROM payments
             WHERE enrollment_id = ?
             ORDER BY paid_at DESC
@@ -256,6 +256,7 @@ require_once __DIR__ . '/../../../bootstrap.php';
                     <?php if ($has_active_sem2): ?><td><?= htmlspecialchars($pay_sem) ?></td><?php endif; ?>
                     <td>
                       <button type="button" class="receipt-btn"
+                              data-payment-id="<?= (int) $p['payment_id'] ?>"
                               data-date="<?= htmlspecialchars($date_fmt) ?>"
                               data-amount="₱<?= $amt_fmt ?>"
                               data-method="<?= htmlspecialchars($p['payment_method']) ?>">
@@ -405,13 +406,12 @@ require_once __DIR__ . '/../../../bootstrap.php';
           </div>
         </div>
 
-        <!-- ============ RECEIPT MODAL (static preview — download not wired up yet) ============ -->
+        <!-- ============ RECEIPT MODAL ============ -->
         <div class="modal-overlay" id="receiptModal">
           <div class="modal-box">
             <div class="modal-head">
               <div>
                 <h3>Payment Receipt</h3>
-                <p>Preview only</p>
               </div>
               <button type="button" class="modal-close" data-close="receiptModal">
                 <svg viewBox="0 0 24 24" fill="none"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -422,8 +422,7 @@ require_once __DIR__ . '/../../../bootstrap.php';
             <div class="breakdown-row"><span>Amount</span><span id="receiptAmount">—</span></div>
             <div class="breakdown-row"><span>Method</span><span id="receiptMethod">—</span></div>
 
-            <p class="modal-note">Downloadable PDF receipts are coming soon — this is a preview only.</p>
-            <button type="button" class="btn-student-primary modal-note-btn" disabled>Download PDF (Coming Soon)</button>
+            <a href="#" id="receiptDownloadBtn" class="btn-student-primary">Download PDF</a>
           </div>
         </div>
 
@@ -495,11 +494,15 @@ require_once __DIR__ . '/../../../bootstrap.php';
         });
       }
 
+      var receiptDownloadBtn = document.getElementById('receiptDownloadBtn');
       document.querySelectorAll('.receipt-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
           document.getElementById('receiptDate').textContent   = btn.dataset.date;
           document.getElementById('receiptAmount').textContent = btn.dataset.amount;
           document.getElementById('receiptMethod').textContent = btn.dataset.method;
+          if (receiptDownloadBtn) {
+            receiptDownloadBtn.href = '<?= APP_URL ?>/roles/student/portal/download_receipt?payment_id=' + encodeURIComponent(btn.dataset.paymentId);
+          }
           document.getElementById('receiptModal').classList.add('open');
         });
       });

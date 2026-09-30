@@ -72,7 +72,7 @@ $conn->close();
     <div class="content">
 
       <div class="staff-hero">
-        <p class="staff-breadcrumb"><span>Admin Portal</span> / <span class="staff-breadcrumb-current">Dashboard</span></p>
+        <p class="page-eyebrow">Admin Portal</p>
         <h1 class="page-title">Welcome back, <?= htmlspecialchars($_SESSION['username'] ?? 'Admin') ?>!</h1>
         <p class="page-sub">Here's what's happening with enrollment today.</p>
       </div>

@@ -153,6 +153,8 @@ if (in_array($row['status'], ['expired', 'cancelled'], true)) {
       <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_staff.css') ?>">
       <?php if ($is_admin): ?><link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_admin.css') ?>"><?php endif; ?>
       <style>
+        .topbar-crumb { display: inline-flex; align-items: baseline; white-space: nowrap; }
+        .topbar-path { color: #8A9992; font-weight: 500; margin-right: 5px; }
         .pay-wrap { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
         .alert-error { font-size:13px; background:#FDF0EF; border:0.5px solid #F5C6C2; color:#C0392B;
           border-radius:8px; padding:9px 13px; margin-bottom:1rem; }
@@ -165,7 +167,13 @@ if (in_array($row['status'], ['expired', 'cancelled'], true)) {
     <?php else: ?>
       <?php include_once BASE_PATH . '/shared/includes/staff_sidebar.php'; ?>
       <div class="staff-main">
-        <div class="staff-topbar"><div class="staff-topbar-left"><span class="staff-topbar-title">Record Payment</span></div></div>
+        <div class="staff-topbar">
+          <div class="staff-topbar-left"></div>
+          <div style="display:flex; align-items:center; gap:14px;">
+            <?php include_once BASE_PATH . '/shared/includes/staff_notifications.php'; ?>
+            <span class="staff-topbar-date"><?= date('F j, Y') ?></span>
+          </div>
+        </div>
         <div class="staff-content">
     <?php endif; ?>
     <div class="pay-wrap">
@@ -425,6 +433,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$not_ready) {
   <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_staff.css') ?>">
   <?php if ($is_admin): ?><link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../../../assets/css/css_admin.css') ?>"><?php endif; ?>
   <style>
+    .topbar-crumb { display: inline-flex; align-items: baseline; white-space: nowrap; }
+    .topbar-path { color: #8A9992; font-weight: 500; margin-right: 5px; }
     .pay-wrap  { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
     .summary-table { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:0; }
     .summary-table tr { border-bottom:0.5px solid #F0F0F5; }
@@ -464,6 +474,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$not_ready) {
     .quarter-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:.6rem; }
     .quarter-table th, .quarter-table td { text-align:left; padding:4px 0; color:#5A5A72; }
 
+    /* ── Cashier layout: identity → balance → input → summary → confirm ── */
+    .identity-strip { display:flex; flex-wrap:wrap; align-items:baseline; gap:5px 10px;
+      font-size:12.5px; color:#5A5A72; margin-bottom:1rem; padding-bottom:.8rem; border-bottom:0.5px solid #EBEBF0; }
+    .identity-strip strong { font-size:15px; color:#1A1A2E; font-weight:600; }
+
+    .balance-card { text-align:center; padding:1.5rem 1rem 1.3rem; background:#F2FAF7;
+      border:1px solid #CFE9DD; border-radius:14px; margin-bottom:1.1rem; }
+    .balance-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em;
+      color:#4E8873; margin:0 0 6px; }
+    .balance-amount { font-size:38px; font-weight:700; color:#12332A; line-height:1; margin:0; }
+    .balance-sub { font-size:12.5px; color:#5A5A72; margin:6px 0 0; }
+
+    .payment-type-group { display:flex; gap:8px; margin:0 0 1.1rem; flex-wrap:wrap; }
+    .payment-type-option { flex:1 1 130px; }
+    .payment-type-option input { position:absolute; opacity:0; width:1px; height:1px; }
+    .payment-type-option label { display:block; border:1px solid #D4D4E0; border-radius:10px;
+      padding:10px 10px; font-size:12.5px; font-weight:500; color:#5A5A72; cursor:pointer;
+      text-align:center; transition:border-color .12s, background .12s, color .12s; }
+    .payment-type-option input:checked + label { border-color:#1E4D3B; background:#EBF7F2;
+      color:#1E4D3B; font-weight:600; }
+    .payment-type-option input:focus-visible + label { outline:2px solid #1E4D3B; outline-offset:1px; }
+
+    .cash-input-block .form-input { height:50px; font-size:19px; font-weight:600; }
+    .cash-input-block .amount-prefix::before { font-size:19px; }
+    .cash-input-block .amount-prefix .form-input { padding-left:26px; }
+    .partial-hint { font-size:12px; color:#5A5A72; margin:.4rem 0 0; }
+
+    .payment-summary-rows { border-top:1px solid #EBEBF0; padding-top:.7rem; margin:.8rem 0 1.1rem; }
+    .payment-summary-row { display:flex; justify-content:space-between; font-size:13px; color:#5A5A72; padding:3px 0; }
+    .payment-summary-row strong { color:#1A1A2E; font-weight:600; }
+
+    .secondary-fields { opacity:.88; }
+    .secondary-fields .form-label { color:#9A9AA8; }
+
+    .details-toggle { margin-top:1.2rem; }
+    .details-toggle summary { cursor:pointer; font-size:12.5px; font-weight:500; color:#5A5A72; padding:.4rem 0; list-style:none; }
+    .details-toggle summary::-webkit-details-marker { display:none; }
+    .details-toggle summary:before { content:'\25B8 '; }
+    .details-toggle[open] summary:before { content:'\25BE '; }
+    .details-toggle summary:hover { color:#1A1A2E; }
+    .details-toggle-body { padding-top:.8rem; }
+
     /* GCash/Bank Transfer confirmation modal — for these two methods this
        IS the real submit path (validates Amount Given, animates, then
        requestSubmit()s the form). Cash keeps the plain bottom button. */
@@ -491,10 +543,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$not_ready) {
   <?php include_once BASE_PATH . '/shared/includes/staff_sidebar.php'; ?>
   <div class="staff-main">
     <div class="staff-topbar">
-      <div class="staff-topbar-left">
-        <span class="staff-topbar-title">Record Payment</span>
+      <div class="staff-topbar-left"></div>
+      <div style="display:flex; align-items:center; gap:14px;">
+        <?php include_once BASE_PATH . '/shared/includes/staff_notifications.php'; ?>
+        <span class="staff-topbar-date"><?= date('F j, Y') ?></span>
       </div>
-      <span class="staff-topbar-date"><?= date('F j, Y') ?></span>
     </div>
     <div class="staff-content">
 <?php endif; ?>
@@ -508,21 +561,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$not_ready) {
     <div class="alert-error"><?= htmlspecialchars($error) ?></div>
   <?php endif; ?>
 
-  <!-- Enrollment summary -->
-  <div class="panel" style="margin-bottom:1rem;">
-    <p class="panel-sub">Enrollment Summary
-      <span class="status-chip">Pending Payment</span>
-      <?php if (in_array($row['semester2_status'] ?? null, ['pending', 'approved'], true)): ?>
-        <span class="status-chip" style="background:#EAF3EE;color:#1E4D3B;">Semester 2</span>
-      <?php endif; ?>
-    </p>
-    <table class="summary-table">
-      <tr><th>Student</th>      <td><?= htmlspecialchars($row['student_name'] ?? '—') ?></td></tr>
-      <tr><th>Section</th>      <td><?= htmlspecialchars($row['section_name'] ?? '—') ?></td></tr>
-      <tr><th>Grade / Strand</th><td>Grade <?= htmlspecialchars($row['grade_level'] ?? '—') ?> — <?= htmlspecialchars($row['strand'] ?? '—') ?></td></tr>
-      <tr><th>School Year</th>  <td><?= htmlspecialchars($row['school_year'] ?? '—') ?></td></tr>
-      <tr><th>Enrollment #</th> <td>#<?= $enrollment_id ?></td></tr>
-    </table>
+  <!-- Student identity — always leads, whichever branch renders below -->
+  <div class="identity-strip">
+    <strong><?= htmlspecialchars($row['student_name'] ?? '—') ?></strong>
+    <span>Grade <?= htmlspecialchars($row['grade_level'] ?? '—') ?> — <?= htmlspecialchars($row['strand'] ?? '—') ?></span>
+    <span>&middot;</span>
+    <span><?= htmlspecialchars($row['section_name'] ?? '—') ?></span>
+    <span>&middot;</span>
+    <span>SY <?= htmlspecialchars($row['school_year'] ?? '—') ?></span>
+    <?php if (in_array($row['semester2_status'] ?? null, ['pending', 'approved'], true)): ?>
+      <span class="status-chip" style="background:#EAF3EE;color:#1E4D3B;">Semester 2</span>
+    <?php endif; ?>
   </div>
 
   <?php if ($not_ready): ?>
@@ -540,60 +589,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$not_ready) {
   </div>
   <?php else: ?>
 
-  <?php if ($is_first_payment): ?>
-  <!-- Assessment (first payment) — itemized breakdown, shown even at ₱0: the
-       breakdown itself is the fee-transparency requirement, not the balance. -->
-  <div class="panel" style="margin-bottom:1rem;">
-    <p class="panel-sub">Assessment</p>
-    <table class="summary-table">
-      <tr><th>Tuition Fee</th><td>₱<?= number_format($tuition_amount, 2) ?></td></tr>
-      <tr><th>Voucher Subsidy</th><td>&minus;₱<?= number_format($shs_voucher, 2) ?></td></tr>
-      <tr><th>Miscellaneous Fee</th><td>₱<?= number_format($misc_fee, 2) ?></td></tr>
-      <tr><th>Total Assessment</th><td style="font-weight:600;">₱<?= number_format($assessment_total, 2) ?></td></tr>
-    </table>
-    <?php if ($voucher_pending): ?>
-      <p class="field-hint" style="margin-top:.6rem;">Voucher-eligible, pending Records verification (Voucher Eligibility Certificate) &mdash; full assessment applied for now. The subsidy will apply automatically once verified.</p>
-    <?php endif; ?>
-  </div>
-  <?php else: ?>
-  <!-- Account Balance panel (subsequent installments) — while a Semester
-       2 charge is active, the headline figures show Semester 2's OWN
-       assessment/paid/balance (not the lifetime combined total), since
-       this page is explicitly labeled "Semester 2" (see badge above) and
-       a combined figure would silently fold in Sem1's already-settled
-       amount. The breakdown table right below still shows both semesters
-       for the full-year reference. -->
   <?php
+    // Unified headline figures — same "Semester 2 own balance, not the
+    // lifetime combined total" rule the old Account Balance panel used,
+    // just computed up front so the balance-card (rendered before the
+    // fees_missing/zero/main split below) can use it too.
     $display_assessment = ($has_active_sem2 && $sem2) ? $sem2['assessment'] : $total_due;
     $display_paid        = ($has_active_sem2 && $sem2) ? $sem2['paid']       : $amount_paid;
     $display_balance      = ($has_active_sem2 && $sem2) ? $sem2['balance']    : $remaining;
+
+    $headline_balance = $is_first_payment ? $assessment_total : $display_balance;
+    $headline_sub      = $is_first_payment
+      ? ($voucher_pending ? 'Pending voucher verification' : 'Full assessment — first payment')
+      : ($has_active_sem2 ? 'Semester 2' : 'Outstanding balance');
+    $show_installment_option = $is_first_payment || $suggested_amount !== null;
   ?>
-  <div class="panel" style="margin-bottom:1rem;">
-    <p class="panel-sub">Account Balance<?= $has_active_sem2 ? ' — Semester 2' : '' ?></p>
-    <table class="summary-table">
-      <tr><th>Total Assessment</th><td>₱<?= number_format($display_assessment, 2) ?></td></tr>
-      <tr><th>Amount Paid</th>     <td>₱<?= number_format($display_paid, 2) ?></td></tr>
-      <tr><th>Balance Due</th>     <td style="font-weight:600;">₱<?= number_format($display_balance, 2) ?></td></tr>
-    </table>
-    <?php if ($has_active_sem2 && $sem1 && $sem2): ?>
-      <table class="sem-breakdown-table" style="margin-top:.75rem;">
-        <thead><tr><th>Semester</th><th>Due</th><th>Paid</th><th>Balance</th></tr></thead>
-        <tbody>
-          <tr>
-            <td>Semester 1</td>
-            <td>₱<?= number_format($sem1['assessment'], 2) ?></td>
-            <td>₱<?= number_format($sem1['paid'], 2) ?></td>
-            <td>₱<?= number_format($sem1['balance'], 2) ?></td>
-          </tr>
-          <tr>
-            <td>Semester 2</td>
-            <td>₱<?= number_format($sem2['assessment'], 2) ?></td>
-            <td>₱<?= number_format($sem2['paid'], 2) ?></td>
-            <td>₱<?= number_format($sem2['balance'], 2) ?></td>
-          </tr>
-        </tbody>
-      </table>
-    <?php endif; ?>
+
+  <?php if (!$fees_missing): ?>
+  <!-- The focal point: balance due dominates before anything else on the page. -->
+  <div class="balance-card">
+    <p class="balance-label">Balance Due</p>
+    <p class="balance-amount">₱<?= number_format($headline_balance, 2) ?></p>
+    <p class="balance-sub"><?= htmlspecialchars($headline_sub) ?></p>
   </div>
   <?php endif; ?>
 
@@ -616,21 +633,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$not_ready) {
   </div>
   <?php else: ?>
   <div class="panel">
-    <p class="panel-sub">Payment Details</p>
-    <form method="POST" action="payment?enrollment_id=<?= $enrollment_id ?>"
-          data-confirm="Confirm and record this payment? This cannot be undone." data-icon="question">
+    <form method="POST" action="payment?enrollment_id=<?= $enrollment_id ?>" id="cashPaymentForm">
 
-      <label class="form-label" for="amount_given">Amount Given (<span id="amount_given_method">Cash</span>) <span style="color:#C0392B">*</span></label>
-      <div class="amount-prefix">
-        <input class="form-input" type="number" id="amount_given" name="amount_given" min="0.01" step="0.01"
-               placeholder="0.00"
-               value="<?= htmlspecialchars($_POST['amount_given'] ?? '') ?>" required>
+      <!-- Payment type — a plan decision, not a minor toggle, so it gets
+           full-width radio cards instead of a buried checkbox. Selecting
+           one dynamically re-targets the amount owed for THIS transaction
+           (owedNow() in the script below) and prefills Cash Received. -->
+      <div class="payment-type-group" id="paymentTypeGroup">
+        <div class="payment-type-option">
+          <input type="radio" name="payment_type" id="ptFull" value="full" checked>
+          <label for="ptFull">Full payment</label>
+        </div>
+        <div class="payment-type-option">
+          <input type="radio" name="payment_type" id="ptPartial" value="partial">
+          <label for="ptPartial">Partial payment</label>
+        </div>
+        <?php if ($show_installment_option): ?>
+        <div class="payment-type-option">
+          <input type="radio" name="payment_type" id="ptInstallment" value="installment">
+          <label for="ptInstallment">Quarterly installment</label>
+        </div>
+        <?php endif; ?>
       </div>
-      <?php if ($is_first_payment || $suggested_amount !== null): ?>
-      <div class="installment-row">
-        <input type="checkbox" id="installment" name="installment" onchange="toggleInstallment()">
-        <label for="installment">Pay in installments (quarterly)</label>
+
+      <p class="partial-hint hidden" id="partialHint">Partial payments are allowed — enter any amount up to the balance due. The remaining amount stays on the student's balance.</p>
+
+      <div class="cash-input-block">
+        <label class="form-label" for="amount_given" id="amount_given_label">Cash Received <span style="color:#C0392B">*</span></label>
+        <div class="amount-prefix">
+          <input class="form-input" type="number" id="amount_given" name="amount_given" min="0.01" step="0.01"
+                 placeholder="0.00"
+                 value="<?= htmlspecialchars($_POST['amount_given'] ?? '') ?>" required>
+        </div>
       </div>
+
+      <?php if ($show_installment_option): ?>
       <div id="installment-details" class="hidden">
         <table class="quarter-table" id="quarter-breakdown">
           <thead><tr><th><?= $is_first_payment ? 'Quarter' : 'Installment' ?></th><th>Suggested Amount</th></tr></thead>
@@ -653,91 +690,166 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$not_ready) {
             <?php endif; ?>
           </tbody>
         </table>
-        <p class="field-hint" style="margin-top:.3rem;">Enter what the student/parent can afford to pay this quarter in Amount Given above — it doesn't have to be an even split.</p>
+        <p class="field-hint" style="margin-top:.3rem;">Enter what the student/parent can afford to pay this quarter in Cash Received above — it doesn't have to be an even split.</p>
       </div>
       <?php endif; ?>
 
-      <div class="change-row" style="margin-top:.5rem;font-size:13px;color:#1A1A2E;">
-        <span id="change_label">Change:</span> <strong id="change_display">₱0.00</strong>
+      <div class="payment-summary-rows">
+        <div class="payment-summary-row"><span>Payment Amount</span> <strong id="payment_amount_display">₱0.00</strong></div>
+        <div class="payment-summary-row"><span id="change_label">Change</span> <strong id="change_display">₱0.00</strong></div>
       </div>
 
-      <label class="form-label" for="payment_method">Payment Method <span style="color:#C0392B">*</span></label>
-      <select class="form-select" id="payment_method" name="payment_method">
-        <?php foreach (['Cash', 'PayMongo'] as $m): ?>
-          <option value="<?= $m ?>" <?= ($_POST['payment_method'] ?? 'Cash') === $m ? 'selected' : '' ?>><?= $m ?></option>
-        <?php endforeach; ?>
-      </select>
+      <div class="secondary-fields">
+        <label class="form-label" for="payment_method">Payment Method <span style="color:#C0392B">*</span></label>
+        <select class="form-select" id="payment_method" name="payment_method">
+          <?php foreach (['Cash', 'PayMongo'] as $m): ?>
+            <option value="<?= $m ?>" <?= ($_POST['payment_method'] ?? 'Cash') === $m ? 'selected' : '' ?>><?= $m ?></option>
+          <?php endforeach; ?>
+        </select>
 
-      <label class="form-label" for="notes">Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#ADADBD;">(optional)</span></label>
-      <textarea class="form-textarea" id="notes" name="notes" placeholder="e.g. OR No. 12345"><?= htmlspecialchars($_POST['notes'] ?? '') ?></textarea>
+        <label class="form-label" for="notes">Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#ADADBD;">(optional)</span></label>
+        <textarea class="form-textarea" id="notes" name="notes" placeholder="e.g. OR No. 12345"><?= htmlspecialchars($_POST['notes'] ?? '') ?></textarea>
+      </div>
 
-      <button type="submit" class="btn-pay" id="bottomConfirmBtn">Confirm Payment</button>
+      <button type="submit" class="btn-pay" id="bottomConfirmBtn">Record Payment</button>
       <button type="button" class="btn-pay" id="paymongoProceedBtn" style="display:none;">Proceed to PayMongo</button>
-      <p class="field-hint" id="paymongoAmountError" style="display:none;color:#C0392B;margin-top:.5rem;">Enter the Amount Given above before proceeding.</p>
+      <p class="field-hint" id="paymongoAmountError" style="display:none;color:#C0392B;margin-top:.5rem;">Enter the Cash Received amount above before proceeding.</p>
       <div class="field-hint" id="paymongoProcessing" style="display:none;margin-top:.5rem;">Starting secure checkout…</div>
     </form>
   </div>
+
+  <!-- Demoted detail: the itemized breakdown stays available, just no
+       longer competing with the balance card / form above. -->
+  <details class="details-toggle">
+    <summary><?= $is_first_payment ? 'View assessment breakdown' : 'View account balance breakdown' ?></summary>
+    <div class="details-toggle-body">
+      <?php if ($is_first_payment): ?>
+        <table class="summary-table">
+          <tr><th>Tuition Fee</th><td>₱<?= number_format($tuition_amount, 2) ?></td></tr>
+          <tr><th>Voucher Subsidy</th><td>&minus;₱<?= number_format($shs_voucher, 2) ?></td></tr>
+          <tr><th>Miscellaneous Fee</th><td>₱<?= number_format($misc_fee, 2) ?></td></tr>
+          <tr><th>Total Assessment</th><td style="font-weight:600;">₱<?= number_format($assessment_total, 2) ?></td></tr>
+        </table>
+        <?php if ($voucher_pending): ?>
+          <p class="field-hint" style="margin-top:.6rem;">Voucher-eligible, pending Records verification (Voucher Eligibility Certificate) &mdash; full assessment applied for now. The subsidy will apply automatically once verified.</p>
+        <?php endif; ?>
+      <?php else: ?>
+        <table class="summary-table">
+          <tr><th>Total Assessment</th><td>₱<?= number_format($display_assessment, 2) ?></td></tr>
+          <tr><th>Amount Paid</th>     <td>₱<?= number_format($display_paid, 2) ?></td></tr>
+          <tr><th>Balance Due</th>     <td style="font-weight:600;">₱<?= number_format($display_balance, 2) ?></td></tr>
+        </table>
+        <?php if ($has_active_sem2 && $sem1 && $sem2): ?>
+          <table class="sem-breakdown-table" style="margin-top:.75rem;">
+            <thead><tr><th>Semester</th><th>Due</th><th>Paid</th><th>Balance</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>Semester 1</td>
+                <td>₱<?= number_format($sem1['assessment'], 2) ?></td>
+                <td>₱<?= number_format($sem1['paid'], 2) ?></td>
+                <td>₱<?= number_format($sem1['balance'], 2) ?></td>
+              </tr>
+              <tr>
+                <td>Semester 2</td>
+                <td>₱<?= number_format($sem2['assessment'], 2) ?></td>
+                <td>₱<?= number_format($sem2['paid'], 2) ?></td>
+                <td>₱<?= number_format($sem2['balance'], 2) ?></td>
+              </tr>
+            </tbody>
+          </table>
+        <?php endif; ?>
+      <?php endif; ?>
+    </div>
+  </details>
   <?php endif; ?>
 
   <?php endif; ?>
 
 </div>
 
+<!-- Compact confirmation summary — the Cash form's real submit path.
+     Populated from the form's own fields right before it opens, so it
+     can never drift from what's about to be recorded. -->
+<div class="modal-overlay" id="confirmPaymentOverlay" role="dialog" aria-modal="true" aria-labelledby="confirmPaymentTitle">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="confirmPaymentTitle">Confirm Payment</h3>
+      <button type="button" class="modal-close" id="confirmPaymentClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="payment-summary-rows" style="border-top:none;padding-top:0;margin-top:0;">
+      <div class="payment-summary-row"><span>Student</span> <strong id="cf_student">—</strong></div>
+      <div class="payment-summary-row"><span>Payment Type</span> <strong id="cf_type">—</strong></div>
+      <div class="payment-summary-row"><span>Cash Received</span> <strong id="cf_received">₱0.00</strong></div>
+      <div class="payment-summary-row"><span>Payment Amount</span> <strong id="cf_amount">₱0.00</strong></div>
+      <div class="payment-summary-row"><span id="cf_change_label">Change</span> <strong id="cf_change">₱0.00</strong></div>
+      <div class="payment-summary-row"><span>Method</span> <strong id="cf_method">—</strong></div>
+    </div>
+    <button type="button" class="btn-pay" id="confirmPaymentSubmit" style="margin-top:1rem;">Yes, record this payment</button>
+    <button type="button" class="btn-secondary" id="confirmPaymentCancel" style="width:100%;margin-top:.5rem;">Cancel</button>
+  </div>
+</div>
+
 <script>
 (function () {
-  const given     = document.getElementById('amount_given');
-  const disp      = document.getElementById('change_display');
-  const label     = document.getElementById('change_label');
-  const installCb = document.getElementById('installment'); // present on any payment with an installment option
+  const given       = document.getElementById('amount_given');
+  const disp        = document.getElementById('change_display');
+  const label       = document.getElementById('change_label');
+  const paymentAmountDisp = document.getElementById('payment_amount_display');
+  const typeRadios  = document.querySelectorAll('input[name="payment_type"]');
+  const installDetails = document.getElementById('installment-details');
+  const partialHint = document.getElementById('partialHint');
 
   const owedFull    = <?= json_encode(round($installment_full, 2)) ?>;
   const owedQuarter = <?= json_encode(round($installment_quarter, 2)) ?>;
 
-  // What's actually due for THIS transaction — checking the installment box
-  // means "I'm paying one quarter's worth," not the whole remaining/full
-  // balance (comparing against the full balance made a spot-on installment
-  // payment look like a shortfall instead of ₱0). Same logic for a first
-  // payment or a later one — only the underlying full/quarter amounts differ.
+  function selectedType() {
+    for (var i = 0; i < typeRadios.length; i++) { if (typeRadios[i].checked) return typeRadios[i].value; }
+    return 'full';
+  }
+
+  // What's actually due for THIS transaction. "Installment" means "I'm
+  // paying one quarter's worth," not the whole remaining/full balance
+  // (comparing against the full balance made a spot-on installment payment
+  // look like a shortfall instead of ₱0). "Full" and "partial" both still
+  // owe the same full balance — partial just means the amount typed can
+  // legitimately fall short of it without that being an error.
   function owedNow() {
-    if (installCb && installCb.checked) return owedQuarter;
-    return owedFull;
+    return selectedType() === 'installment' ? owedQuarter : owedFull;
   }
 
   function updateChange() {
+    if (paymentAmountDisp) paymentAmountDisp.textContent = '₱' + owedNow().toFixed(2);
+
     if (given.value === '') {
-      label.textContent = 'Change:';
+      label.textContent = 'Change';
       disp.textContent = '₱0.00';
       disp.style.color = '#1A1A2E';
       return;
     }
     const diff = (parseFloat(given.value) || 0) - owedNow();
     if (diff < 0) {
-      label.textContent = 'Balance Due:';
+      label.textContent = 'Balance Due';
       disp.textContent = '₱' + Math.abs(diff).toFixed(2);
       disp.style.color = '#C0392B';
     } else {
-      label.textContent = 'Change:';
+      label.textContent = 'Change';
       disp.textContent = '₱' + diff.toFixed(2);
       disp.style.color = '#1A6B4A';
     }
   }
 
-  window.toggleInstallment = function () {
-    document.getElementById('installment-details').classList.toggle('hidden', !installCb.checked);
+  function applyPaymentType() {
+    const type = selectedType();
+    if (installDetails) installDetails.classList.toggle('hidden', type !== 'installment');
+    if (partialHint) partialHint.classList.toggle('hidden', type !== 'partial');
     updateChange();
-  };
+  }
 
+  typeRadios.forEach(function (r) { r.addEventListener('change', applyPaymentType); });
   given.addEventListener('input', updateChange);
-  if (installCb) installCb.addEventListener('change', updateChange);
-  updateChange();
+  applyPaymentType();
 
   const methodSelect = document.getElementById('payment_method');
-  const methodLabel   = document.getElementById('amount_given_method');
-  if (methodSelect && methodLabel) {
-    methodSelect.addEventListener('change', function () {
-      methodLabel.textContent = methodSelect.value;
-    });
-  }
 
   // ── Live PayMongo checkout ──────────────────────────────────────────────
   // Selecting "PayMongo" replaces the plain Confirm button with "Proceed
@@ -821,6 +933,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$not_ready) {
         });
     });
   }
+
+  // ── Confirmation modal — the real submit path for the Cash form ────────
+  // Don't save on click: show a compact summary first, and only submit once
+  // staff confirms it. Mirrors the "dataset.confirmed" convention the
+  // PayMongo-return flow below already uses to resubmit past this guard.
+  (function () {
+    if (!paymentForm) return;
+    const overlay   = document.getElementById('confirmPaymentOverlay');
+    if (!overlay) return;
+    const typeLabels = { full: 'Full payment', partial: 'Partial payment', installment: 'Quarterly installment' };
+    const studentName = <?= json_encode($row['student_name'] ?? '—') ?>;
+
+    function openConfirm() {
+      const receivedVal = parseFloat(given.value) || 0;
+      const owed = owedNow();
+      const diff = receivedVal - owed;
+
+      document.getElementById('cf_student').textContent = studentName;
+      document.getElementById('cf_type').textContent = typeLabels[selectedType()] || 'Full payment';
+      document.getElementById('cf_received').textContent = '₱' + receivedVal.toFixed(2);
+      document.getElementById('cf_amount').textContent = '₱' + owed.toFixed(2);
+      document.getElementById('cf_change_label').textContent = diff < 0 ? 'Balance Due' : 'Change';
+      document.getElementById('cf_change').textContent = '₱' + Math.abs(diff).toFixed(2);
+      document.getElementById('cf_method').textContent = methodSelect ? methodSelect.value : 'Cash';
+
+      overlay.classList.add('open');
+    }
+    function closeConfirm() { overlay.classList.remove('open'); }
+
+    paymentForm.addEventListener('submit', function (e) {
+      // Resubmitting via requestSubmit() re-fires this listener — let it
+      // through once (same convention the PayMongo-return flow uses below).
+      if (paymentForm.dataset.confirmed === '1') { paymentForm.dataset.confirmed = ''; return; }
+      // PayMongo goes through its own button/fetch flow, never a plain
+      // submit of this form — nothing to intercept for that method.
+      if (methodSelect && methodSelect.value === 'PayMongo') return;
+      e.preventDefault();
+      openConfirm();
+    });
+
+    const confirmSubmitBtn = document.getElementById('confirmPaymentSubmit');
+    if (confirmSubmitBtn) {
+      confirmSubmitBtn.addEventListener('click', function () {
+        closeConfirm();
+        paymentForm.dataset.confirmed = '1';
+        paymentForm.requestSubmit();
+      });
+    }
+    const confirmCancelBtn = document.getElementById('confirmPaymentCancel');
+    if (confirmCancelBtn) confirmCancelBtn.addEventListener('click', closeConfirm);
+    const confirmCloseBtn = document.getElementById('confirmPaymentClose');
+    if (confirmCloseBtn) confirmCloseBtn.addEventListener('click', closeConfirm);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeConfirm(); });
+  })();
 
   // Returning from PayMongo's hosted checkout — verify with our server
   // (which verifies with PayMongo directly), then fill and submit this

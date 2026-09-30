@@ -2,12 +2,7 @@
 session_start();
 require_once __DIR__ . '/../../bootstrap.php';
 
-if (!isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header("Location: " . APP_URL . "/login"); exit();
-}
-if ($_SESSION['role'] !== 'admin') {
-    header("Location: " . APP_URL . "/roles/staff/dashboard"); exit();
-}
+require_login('admin');
 
 // Given-name-only username, lowercase letters only; falls back to
 // appending the teacher_id on a uniqueness collision (none exist today,
@@ -48,26 +43,48 @@ function generate_temp_password() {
 // is only ever the caller's to display once; must_change_password forces
 // the teacher to set their own on first login (see teacher_login.php /
 // teacher_change_password.php, which already gate on this column).
-function provision_teacher_account($conn, $teacher_id, $given_name) {
-    $username = generate_teacher_username($conn, $given_name, $teacher_id);
+// The teacher's name comes from the database, not the request, and a teacher
+// who already has a login is skipped (null) — so refreshing the page after a
+// create can't mint a second account and orphan the first.
+function provision_teacher_account($conn, $teacher_id) {
+    $lookup = mysqli_prepare($conn, "
+        SELECT t.given_name, u.user_id
+        FROM teachers t
+        LEFT JOIN users u ON u.user_id = t.user_id AND u.role = 'teacher'
+        WHERE t.teacher_id = ?
+    ");
+    mysqli_stmt_bind_param($lookup, "i", $teacher_id);
+    mysqli_stmt_execute($lookup);
+    $teacher = mysqli_fetch_assoc(mysqli_stmt_get_result($lookup));
+    mysqli_stmt_close($lookup);
+    if (!$teacher || $teacher['user_id'] !== null) {
+        return null;
+    }
+
+    $username = generate_teacher_username($conn, $teacher['given_name'], $teacher_id);
     $temp_password = generate_temp_password();
     $hash = password_hash($temp_password, PASSWORD_BCRYPT);
 
     mysqli_begin_transaction($conn);
-    $stmt = mysqli_prepare($conn, "
-        INSERT INTO users (username, password_hash, role, is_active, must_change_password, created_at)
-        VALUES (?, ?, 'teacher', 1, 1, CURRENT_TIMESTAMP)
-    ");
-    mysqli_stmt_bind_param($stmt, "ss", $username, $hash);
-    mysqli_stmt_execute($stmt);
-    $new_user_id = mysqli_insert_id($conn);
-    mysqli_stmt_close($stmt);
+    try {
+        $stmt = mysqli_prepare($conn, "
+            INSERT INTO users (username, password_hash, role, is_active, must_change_password, created_at)
+            VALUES (?, ?, 'teacher', 1, 1, CURRENT_TIMESTAMP)
+        ");
+        mysqli_stmt_bind_param($stmt, "ss", $username, $hash);
+        mysqli_stmt_execute($stmt);
+        $new_user_id = mysqli_insert_id($conn);
+        mysqli_stmt_close($stmt);
 
-    $upd = mysqli_prepare($conn, "UPDATE teachers SET user_id = ? WHERE teacher_id = ?");
-    mysqli_stmt_bind_param($upd, "ii", $new_user_id, $teacher_id);
-    mysqli_stmt_execute($upd);
-    mysqli_stmt_close($upd);
-    mysqli_commit($conn);
+        $upd = mysqli_prepare($conn, "UPDATE teachers SET user_id = ? WHERE teacher_id = ?");
+        mysqli_stmt_bind_param($upd, "ii", $new_user_id, $teacher_id);
+        mysqli_stmt_execute($upd);
+        mysqli_stmt_close($upd);
+        mysqli_commit($conn);
+    } catch (\Throwable $e) {
+        mysqli_rollback($conn);
+        return null;
+    }
 
     return ['username' => $username, 'password' => $temp_password];
 }
@@ -75,7 +92,7 @@ function provision_teacher_account($conn, $teacher_id, $given_name) {
 $success = '';
 $error   = '';
 $new_credentials  = null; // single create — one-time reveal, mirrors admin/staff_manage.php
-$bulk_credentials = [];   // create-all-missing — one row per newly provisioned account
+$bulk_credentials = [];   // create-all-missing / create-selected — one row per newly provisioned account
 
 // "Family, Given[ Middle][ Suffix]" -> two-letter avatar initials — same
 // technique as students.php/enrollments.php's name_initials().
@@ -88,16 +105,25 @@ function name_initials(string $commaName): string {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_account'])) {
-    $teacher_id  = (int) ($_POST['teacher_id'] ?? 0);
-    $given_name  = trim($_POST['given_name'] ?? '');
-    if ($teacher_id && $given_name) {
-        $new_credentials = provision_teacher_account($conn, $teacher_id, $given_name);
+    $teacher_id = (int) ($_POST['teacher_id'] ?? 0);
+    if ($teacher_id) {
+        $new_credentials = provision_teacher_account($conn, $teacher_id);
+        if (!$new_credentials) {
+            $error = 'That teacher already has an account, or it could not be created.';
+        }
     }
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_all_missing'])) {
+// Create accounts for every teacher without one ("Create all missing"), or
+// only the checked rows ("Create accounts" in the selection bar). Teachers
+// who already have a login are skipped either way.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['create_all_missing']) || isset($_POST['create_selected']))) {
+    $only_ids = isset($_POST['create_selected'])
+        ? array_values(array_unique(array_filter(array_map('intval', (array)($_POST['teacher_ids'] ?? [])))))
+        : null;
+
     $missing_stmt = mysqli_prepare($conn, "
-        SELECT t.teacher_id, t.given_name
+        SELECT t.teacher_id
         FROM teachers t
         LEFT JOIN users u ON u.user_id = t.user_id AND u.role = 'teacher'
         WHERE u.user_id IS NULL
@@ -107,19 +133,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_all_missing'])
     mysqli_stmt_close($missing_stmt);
 
     foreach ($missing as $m) {
-        $bulk_credentials[] = provision_teacher_account($conn, $m['teacher_id'], $m['given_name']);
+        if ($only_ids !== null && !in_array((int)$m['teacher_id'], $only_ids, true)) {
+            continue;
+        }
+        $cred = provision_teacher_account($conn, (int)$m['teacher_id']);
+        if ($cred) {
+            $bulk_credentials[] = $cred;
+        }
     }
 
     if (!$bulk_credentials) {
-        $success = "All teachers already have accounts.";
+        $success = "No accounts needed creating — every selected teacher already has one.";
     }
 }
 
 // ── Fetch teacher list with account status ─────────────────────────────────
 $list_stmt = mysqli_prepare($conn, "
     SELECT t.teacher_id, t.family_name, t.given_name, t.middle_name, t.suffix,
+           t.email, t.contact_number, t.created_at, s.strand_code,
            u.username, u.is_active
     FROM teachers t
+    LEFT JOIN strands s ON s.strand_id = t.strand
     LEFT JOIN users u ON u.user_id = t.user_id AND u.role = 'teacher'
     ORDER BY t.family_name ASC, t.given_name ASC
 ");
@@ -127,34 +161,61 @@ mysqli_stmt_execute($list_stmt);
 $teachers = mysqli_fetch_all(mysqli_stmt_get_result($list_stmt), MYSQLI_ASSOC);
 mysqli_stmt_close($list_stmt);
 
-$missing_count = count(array_filter($teachers, fn($t) => $t['username'] === null));
-
 $conn->close();
 
+foreach ($teachers as &$t) {
+    $t['full_name'] = trim($t['family_name'] . ', ' . $t['given_name']
+        . ($t['middle_name'] ? ' ' . $t['middle_name'] : '')
+        . ($t['suffix'] ? ' ' . $t['suffix'] : ''));
+    $t['state'] = $t['username'] === null ? 'none' : ($t['is_active'] ? 'active' : 'inactive');
+}
+unset($t);
+
+// "Handled strand" is the teacher's specialty/homeroom assignment, not a
+// cap on what they can teach — same distinction coordinator/teacher_manage.php
+// makes when it lets any teacher be assigned to any strand.
+
+$state_counts  = array_count_values(array_column($teachers, 'state'));
+$missing_count = $state_counts['none'] ?? 0;
+
 // ── Export CSV ───────────────────────────────────────────────────────────
-if (isset($_GET['export']) && $_GET['export'] === 'csv') {
-    $export_teachers = $teachers;
-    if (!empty($_GET['ids'])) {
-        $selected_ids = array_map('intval', explode(',', $_GET['ids']));
-        $export_teachers = array_values(array_filter($teachers, function ($t) use ($selected_ids) {
+// POSTed by the page (see assets/js/admin_table.js); `ids` (comma list of
+// teacher ids) limits it to the checked / filtered rows, none = everyone.
+// Usernames only — passwords are never stored in a recoverable form.
+$req = $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET;
+if (($req['export'] ?? '') === 'csv') {
+    $export_rows = $teachers;
+    if (!empty($req['ids'])) {
+        $selected_ids = array_map('intval', explode(',', (string)$req['ids']));
+        $export_rows = array_values(array_filter($teachers, function ($t) use ($selected_ids) {
             return in_array((int)$t['teacher_id'], $selected_ids, true);
         }));
     }
 
+    $state_labels = ['none' => 'No account', 'active' => 'Active', 'inactive' => 'Inactive'];
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="teacher_accounts_' . date('Y-m-d') . '.csv"');
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['Name', 'Username', 'Status']);
-    foreach ($export_teachers as $t) {
-        $full = trim($t['family_name'] . ', ' . $t['given_name']
-            . ($t['middle_name'] ? ' ' . $t['middle_name'] : '')
-            . ($t['suffix'] ? ' ' . $t['suffix'] : ''));
-        $status = $t['username'] === null ? 'No Account' : ($t['is_active'] ? 'Active' : 'Inactive');
-        fputcsv($out, [$full, $t['username'] ?? '', $status]);
+    fputcsv($out, ['Name', 'Username', 'Email', 'Contact Number', 'Handled Strand', 'Account Status', 'Date Joined']);
+    foreach ($export_rows as $t) {
+        fputcsv($out, [
+            $t['full_name'],
+            $t['username'] ?? '',
+            $t['email'] ?? '',
+            $t['contact_number'] ?? '',
+            $t['strand_code'] ?? '',
+            $state_labels[$t['state']],
+            $t['created_at'] ? date('Y-m-d', strtotime($t['created_at'])) : '',
+        ]);
     }
     fclose($out);
     exit();
 }
+
+$h = fn($v) => htmlspecialchars((string)$v, ENT_QUOTES);
+// Same contact-line icons as admin/students.php's $svg_mail/$svg_phone.
+$svg_mail  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>';
+$svg_phone = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -165,24 +226,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_admin.css') ?>">
-  <style>
-    .alert { font-size:13px; border-radius:8px; padding:9px 13px; margin-bottom:1rem; }
-    .alert-success { background:#EBF7F2; border:0.5px solid #A8D9C5; color:#1A6B4A; }
-    .alert-error   { background:#FDF0EF; border:0.5px solid #F5C6C2; color:#C0392B; }
-    .badge-active   { background:#EBF7F2; color:#1A7A5E; }
-    .badge-inactive { background:#FDF0EF; color:#C0392B; }
-    .btn-toggle { height:28px; padding:0 10px; border:0.5px solid #D4D4E0; border-radius:6px;
-      background:#fff; font-size:11px; font-weight:500; cursor:pointer; font-family:inherit; color:#5A5A72; }
-    .btn-toggle:hover { border-color:#386641; color:#386641; }
-    .btn-add { height:28px; padding:0 10px; border:none; border-radius:6px;
-      background:#386641; color:#fff; font-size:11px; font-weight:500; cursor:pointer; font-family:inherit; }
-    .btn-add:hover { background:#2F5636; }
-    .btn-add-all { height:38px; padding:0 16px; border:none; border-radius:8px;
-      background:#386641; color:#fff; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; }
-    .btn-add-all:hover { background:#2F5636; }
-    .btn-add-all:disabled { background:#ADADBD; cursor:not-allowed; }
-    .card-header-actions { display:flex; align-items:center; justify-content:space-between; }
-  </style>
 </head>
 <body>
 
@@ -194,106 +237,155 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     </div>
     <div class="content">
 
-      <div class="staff-hero">
-        <p class="staff-breadcrumb"><span>Admin Portal</span> / <span class="staff-breadcrumb-current">Teacher Accounts</span></p>
-        <h1 class="page-title">Teacher Account Provisioning</h1>
+      <div class="staff-hero staff-hero--row">
+        <div class="staff-hero-text">
+          <p class="page-eyebrow">Admin Portal</p>
+          <h1 class="page-title">Teacher accounts</h1>
+          <p class="staff-hero-desc">Give teachers a portal login. Each new account gets a temporary password, shown once, that the teacher must change at first sign-in.</p>
+        </div>
+        <?php if ($teachers): ?>
+          <div class="staff-hero-actions">
+            <button type="button" class="btn-export-csv" id="tblExport">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+              <span id="tblExportLabel">Export CSV</span>
+            </button>
+            <?php if ($missing_count > 0): ?>
+              <form method="POST" action="teacher_accounts"
+                    data-confirm="Create accounts for all <?= $missing_count ?> teacher(s) without a login? Each will get a random temporary password (shown once after creation) and must change it on first login.">
+                <button type="submit" name="create_all_missing" class="btn-add-staff">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                  Create all missing (<?= $missing_count ?>)
+                </button>
+              </form>
+            <?php endif; ?>
+          </div>
+        <?php endif; ?>
       </div>
 
       <div class="staff-overlap">
 
       <?php if ($success): ?>
-        <div class="alert alert-success"><?= htmlspecialchars($success) ?></div>
+        <div class="alert alert-success" data-ui-toast><?= $h($success) ?></div>
       <?php endif; ?>
       <?php if ($error): ?>
-        <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
+        <div class="alert alert-error"><?= $h($error) ?></div>
       <?php endif; ?>
 
-      <div class="card">
-        <div class="card-header card-header-actions">
-          <span class="card-title">Teacher Directory <span class="staff-record-count">(<?= count($teachers) ?> records)</span> — <?= $missing_count ?> without a login</span>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button type="button" class="btn-export-csv" id="btnExportCsv">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-              <span id="btnExportCsvLabel">Export CSV</span>
-            </button>
-            <?php if ($missing_count > 0): ?>
-              <form method="POST" action="teacher_accounts"
-                    data-confirm="Create accounts for all <?= $missing_count ?> teacher(s) without a login? Each will get a random temporary password (shown once after creation) and must change it on first login.">
-                <button type="submit" name="create_all_missing" class="btn-add-all">Create All Missing (<?= $missing_count ?>)</button>
-              </form>
-            <?php endif; ?>
-          </div>
-        </div>
-
+      <div class="card staff-panel">
         <?php if (empty($teachers)): ?>
           <p class="empty-state">No teachers found.</p>
         <?php else: ?>
-          <table class="data-table" id="dataTable">
-            <thead>
-              <tr>
-                <th class="staff-table-checkbox-col"><input type="checkbox" id="selectAllRows" aria-label="Select all"></th>
-                <th>Name</th>
-                <th>Username</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php foreach ($teachers as $t):
-                $full = trim($t['family_name'] . ', ' . $t['given_name']
-                    . ($t['middle_name'] ? ' ' . $t['middle_name'] : '')
-                    . ($t['suffix'] ? ' ' . $t['suffix'] : ''));
-              ?>
-                <tr>
-                  <td class="staff-table-checkbox-col"><input type="checkbox" class="staff-row-checkbox" value="<?= (int)$t['teacher_id'] ?>" aria-label="Select row"></td>
-                  <td class="td-name">
-                    <div class="td-name-cell">
-                      <span class="staff-table-avatar"><?= htmlspecialchars(name_initials($full)) ?></span>
-                      <span><?= htmlspecialchars($full) ?></span>
-                    </div>
-                  </td>
-                  <td class="td-meta"><?= $t['username'] ? htmlspecialchars($t['username']) : '—' ?></td>
-                  <td>
-                    <?php if ($t['username'] === null): ?>
-                      <span class="badge badge-inactive">No Account</span>
-                    <?php elseif ($t['is_active']): ?>
-                      <span class="badge badge-active">Active</span>
-                    <?php else: ?>
-                      <span class="badge badge-inactive">Inactive</span>
-                    <?php endif; ?>
-                  </td>
-                  <td>
-                    <?php if ($t['username'] === null): ?>
-                      <form method="POST" action="teacher_accounts" style="display:inline;">
-                        <input type="hidden" name="teacher_id" value="<?= (int)$t['teacher_id'] ?>">
-                        <input type="hidden" name="given_name" value="<?= htmlspecialchars($t['given_name']) ?>">
-                        <button type="submit" name="create_account" class="btn-add">Create Account</button>
-                      </form>
-                    <?php endif; ?>
-                  </td>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
 
-          <div class="staff-table-pagination">
-            <label class="staff-pagination-rows">
-              <select id="rowsPerPage">
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-              </select>
-              Results per page
-            </label>
-
-            <div class="staff-pagination-pages" id="paginationPages">
-              <button type="button" id="paginationPrev" class="staff-page-btn staff-page-arrow" aria-label="Previous page">&lsaquo;</button>
-              <span id="paginationNumbers" class="staff-pagination-numbers"></span>
-              <button type="button" id="paginationNext" class="staff-page-btn staff-page-arrow" aria-label="Next page">&rsaquo;</button>
-            </div>
-
-            <span class="staff-pagination-summary"><span id="paginationFrom">1</span>-<span id="paginationTo">1</span> / <span id="paginationTotal"><?= count($teachers) ?></span> results</span>
+        <div class="staff-toolbar">
+          <div class="staff-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <label for="tblSearch" class="sr-only">Search teachers</label>
+            <input type="search" id="tblSearch" placeholder="Search by name or username" autocomplete="off">
           </div>
+          <select class="staff-filter-select" id="tblSort" aria-label="Sort teachers">
+            <option value="name:asc">Sort: Name (A to Z)</option>
+            <option value="name:desc">Sort: Name (Z to A)</option>
+            <option value="state:desc">Sort: Needs account first</option>
+          </select>
+          <button type="button" class="staff-toolbar-reset hidden" id="tblReset">Reset filters</button>
+        </div>
+
+        <div class="staff-pills" role="group" aria-label="Filter by account status" data-pills data-attr="state" data-param="status">
+          <button type="button" class="staff-pill active" data-value="" aria-pressed="true">All <span data-count><?= count($teachers) ?></span></button>
+          <button type="button" class="staff-pill" data-value="none" aria-pressed="false">No account <span data-count><?= $missing_count ?></span></button>
+          <button type="button" class="staff-pill" data-value="active" aria-pressed="false">Active <span data-count><?= (int)($state_counts['active'] ?? 0) ?></span></button>
+          <button type="button" class="staff-pill" data-value="inactive" aria-pressed="false">Inactive <span data-count><?= (int)($state_counts['inactive'] ?? 0) ?></span></button>
+        </div>
+
+        <div class="staff-bulkbar hidden" id="tblBulkBar" role="region" aria-label="Bulk actions">
+          <strong class="staff-bulk-count" id="tblBulkCount" aria-live="polite">0 selected</strong>
+          <button type="button" class="staff-bulk-btn" id="bulkCreate">Create accounts</button>
+          <button type="button" class="staff-bulk-btn" data-bulk="export">Export selected</button>
+          <button type="button" class="staff-bulk-clear" data-bulk="clear">Clear selection</button>
+        </div>
+
+        <table class="data-table staff-table" id="dataTable">
+          <thead>
+            <tr>
+              <th class="staff-table-checkbox-col"><input type="checkbox" id="tblSelectAll" aria-label="Select all on this page"></th>
+              <th>Teacher</th>
+              <th>Contact</th>
+              <th>Handled Strand</th>
+              <th>Status</th>
+              <th>Date Joined</th>
+              <th class="staff-actions-col"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($teachers as $t):
+              $search = mb_strtolower(implode(' ', [
+                  $t['family_name'], $t['given_name'], $t['middle_name'] ?? '',
+                  $t['given_name'] . ' ' . $t['family_name'], $t['username'] ?? '',
+                  $t['email'] ?? '', $t['strand_code'] ?? '',
+              ]));
+            ?>
+              <tr class="<?= $t['state'] === 'active' ? '' : 'is-dim' ?>"
+                  data-search="<?= $h($search) ?>"
+                  data-state="<?= $t['state'] ?>"
+                  data-sort-name="<?= $h(mb_strtolower($t['full_name'])) ?>"
+                  data-sort-state="<?= $t['state'] === 'none' ? 1 : 0 ?>">
+                <td class="staff-table-checkbox-col"><input type="checkbox" class="staff-row-checkbox" value="<?= (int)$t['teacher_id'] ?>" aria-label="Select <?= $h($t['full_name']) ?>"></td>
+                <td class="td-name">
+                  <div class="td-name-cell">
+                    <span class="staff-table-avatar"><?= $h(name_initials($t['full_name'])) ?></span>
+                    <span class="staff-name-stack">
+                      <span class="staff-name-primary"><?= $h($t['full_name']) ?></span>
+                      <span class="staff-name-secondary"><?= $t['username'] !== null ? '@' . $h($t['username']) : 'No login yet' ?></span>
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <?php if (!empty($t['email'])): ?>
+                    <div class="staff-contact-line"><?= $svg_mail ?><span><?= $h($t['email']) ?></span></div>
+                  <?php endif; ?>
+                  <?php if (!empty($t['contact_number'])): ?>
+                    <div class="staff-contact-line"><?= $svg_phone ?><span><?= $h($t['contact_number']) ?></span></div>
+                  <?php endif; ?>
+                  <?php if (empty($t['email']) && empty($t['contact_number'])): ?><span class="td-muted">—</span><?php endif; ?>
+                </td>
+                <td>
+                  <?php if ($t['strand_code']): ?>
+                    <span class="staff-role-tag"><?= $h($t['strand_code']) ?></span>
+                  <?php else: ?>
+                    <span class="td-muted">—</span>
+                  <?php endif; ?>
+                </td>
+                <td>
+                  <?php if ($t['state'] === 'none'): ?>
+                    <span class="staff-state staff-state--pending"><i></i>No account</span>
+                  <?php elseif ($t['state'] === 'active'): ?>
+                    <span class="staff-state staff-state--active"><i></i>Active</span>
+                  <?php else: ?>
+                    <span class="staff-state staff-state--muted"><i></i>Inactive</span>
+                  <?php endif; ?>
+                </td>
+                <td class="staff-joined"><?= $t['created_at'] ? $h(date('M j, Y', strtotime($t['created_at']))) : '—' ?></td>
+                <td class="staff-actions-col">
+                  <?php if ($t['state'] === 'none'): ?>
+                    <form method="POST" action="teacher_accounts">
+                      <input type="hidden" name="teacher_id" value="<?= (int)$t['teacher_id'] ?>">
+                      <button type="submit" name="create_account" class="tbl-action-btn">Create account</button>
+                    </form>
+                  <?php endif; ?>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+
+        <div class="empty-state hidden" data-no-match>
+          <strong>No teachers match these filters</strong>
+          Try a different name or username.
+          <div><button type="button" class="staff-btn staff-btn--ghost" data-clear-filters>Clear filters</button></div>
+        </div>
+
+        <?php $tbl_total = count($teachers); $tbl_noun = 'teachers'; include BASE_PATH . '/shared/includes/admin_table_footer.php'; ?>
+
         <?php endif; ?>
       </div>
 
@@ -302,111 +394,45 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     </div>
   </div>
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      var tableRows = Array.prototype.slice.call(document.querySelectorAll('#dataTable tbody tr'));
-      if (!tableRows.length) return;
+  <?php if ($teachers): ?>
+    <form method="POST" action="teacher_accounts" id="bulkCreateForm" class="hidden" data-confirm="Create accounts for the selected teachers?">
+      <input type="hidden" name="create_selected" value="1">
+      <div id="bulkCreateIds"></div>
+    </form>
 
-      var rowsPerPageSel  = document.getElementById('rowsPerPage');
-      var paginationFrom  = document.getElementById('paginationFrom');
-      var paginationTo    = document.getElementById('paginationTo');
-      var paginationTotal = document.getElementById('paginationTotal');
-      var paginationNumbers = document.getElementById('paginationNumbers');
-      var prevBtn = document.getElementById('paginationPrev');
-      var nextBtn = document.getElementById('paginationNext');
-      var currentPage = 1;
+    <script src="<?= APP_URL ?>/assets/js/admin_table.js?v=<?= filemtime(__DIR__ . '/../../assets/js/admin_table.js') ?>"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        // "Create accounts" only applies to selected teachers who don't have one yet.
+        function needAccount(rows) { return rows.filter(function (r) { return r.getAttribute('data-state') === 'none'; }); }
 
-      function buildPageList(current, total) {
-        var boundary = 3, sibling = 1;
-        var pages = {};
-        for (var i = 1; i <= Math.min(boundary, total); i++) pages[i] = true;
-        for (var i = Math.max(1, total - boundary + 1); i <= total; i++) pages[i] = true;
-        for (var i = Math.max(1, current - sibling); i <= Math.min(total, current + sibling); i++) pages[i] = true;
-
-        var sorted = Object.keys(pages).map(Number).sort(function (a, b) { return a - b; });
-        var result = [];
-        var prev = 0;
-        sorted.forEach(function (p) {
-          if (prev && p - prev > 1) result.push('ellipsis');
-          result.push(p);
-          prev = p;
+        AdminTable.init({
+          noun: 'teachers',
+          bulk: [{
+            id: 'bulkCreate',
+            when: function (rows) { return needAccount(rows).length > 0; },
+            run: function (rows) {
+              var todo = needAccount(rows);
+              if (!todo.length) return;
+              var form = document.getElementById('bulkCreateForm');
+              var box  = document.getElementById('bulkCreateIds');
+              box.innerHTML = '';
+              todo.forEach(function (r) {
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'teacher_ids[]';
+                input.value = r._cb.value;
+                box.appendChild(input);
+              });
+              form.dataset.confirm = 'Create accounts for ' + todo.length + ' teacher' + (todo.length === 1 ? '' : 's') +
+                '? Each gets a random temporary password (shown once after creation) and must change it on first login.';
+              form.requestSubmit();
+            }
+          }]
         });
-        return result;
-      }
-
-      function renderPageNumbers(current, total) {
-        paginationNumbers.innerHTML = '';
-        buildPageList(current, total).forEach(function (item) {
-          if (item === 'ellipsis') {
-            var span = document.createElement('span');
-            span.className = 'staff-page-ellipsis';
-            span.textContent = '…';
-            paginationNumbers.appendChild(span);
-            return;
-          }
-          var btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'staff-page-btn' + (item === current ? ' active' : '');
-          btn.textContent = item;
-          btn.addEventListener('click', function () { currentPage = item; paginate(); });
-          paginationNumbers.appendChild(btn);
-        });
-      }
-
-      function paginate() {
-        var rowsPerPage = parseInt(rowsPerPageSel.value, 10);
-        var total = tableRows.length;
-        var totalPages = Math.max(1, Math.ceil(total / rowsPerPage));
-        if (currentPage > totalPages) currentPage = totalPages;
-
-        var start = (currentPage - 1) * rowsPerPage;
-        var end = start + rowsPerPage;
-        tableRows.forEach(function (r, i) {
-          r.classList.toggle('hidden', !(i >= start && i < end));
-        });
-
-        paginationFrom.textContent = total === 0 ? 0 : start + 1;
-        paginationTo.textContent = Math.min(end, total);
-        paginationTotal.textContent = total;
-        renderPageNumbers(currentPage, totalPages);
-        prevBtn.disabled = currentPage <= 1;
-        nextBtn.disabled = currentPage >= totalPages;
-      }
-
-      rowsPerPageSel.addEventListener('change', function () { currentPage = 1; paginate(); });
-      prevBtn.addEventListener('click', function () { if (currentPage > 1) { currentPage--; paginate(); } });
-      nextBtn.addEventListener('click', function () { currentPage++; paginate(); });
-      paginate();
-
-      var selectAll = document.getElementById('selectAllRows');
-      var exportBtn = document.getElementById('btnExportCsv');
-      var exportBtnLabel = document.getElementById('btnExportCsvLabel');
-      var rowCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.staff-row-checkbox'));
-
-      function updateExportLabel() {
-        var checkedCount = rowCheckboxes.filter(function (cb) { return cb.checked; }).length;
-        exportBtnLabel.textContent = checkedCount > 0 ? 'Export Selected (' + checkedCount + ')' : 'Export CSV';
-      }
-      rowCheckboxes.forEach(function (cb) { cb.addEventListener('change', updateExportLabel); });
-
-      if (selectAll) {
-        selectAll.addEventListener('change', function () {
-          document.querySelectorAll('#dataTable tbody tr:not(.hidden) .staff-row-checkbox').forEach(function (cb) {
-            cb.checked = selectAll.checked;
-          });
-          updateExportLabel();
-        });
-      }
-
-      exportBtn.addEventListener('click', function () {
-        var ids = rowCheckboxes.filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
-        var url = new URL(window.location.href);
-        url.searchParams.set('export', 'csv');
-        if (ids.length) { url.searchParams.set('ids', ids.join(',')); } else { url.searchParams.delete('ids'); }
-        window.location.href = url.toString();
       });
-    });
-  </script>
+    </script>
+  <?php endif; ?>
 
   <?php if ($new_credentials): ?>
     <div class="modal-overlay" id="credOverlay">

@@ -4,8 +4,6 @@ require_once __DIR__ . '/../../bootstrap.php';
 
 require_login('admin');
 
-$msg = '';
-
 // "Family, Given[ Middle...]" -> two-letter avatar initials, same technique
 // as staff_manage.php's staff_initials() (first letter of each side of the
 // comma), just fed a pre-concatenated name instead of separate columns.
@@ -17,55 +15,43 @@ function name_initials(string $commaName): string {
     return $initials !== '' ? $initials : '?';
 }
 
-// ── Filters ────────────────────────────────────────────────────────────────
-$filter_status = $_GET['status'] ?? '';
-$filter_grade  = $_GET['grade']  ?? '';
-$filter_strand = $_GET['strand'] ?? '';
-$search        = trim($_GET['q'] ?? '');
+// status => [label, .staff-state modifier]. Order is the order of the filter pills.
+$status_map = [
+    'enrolled'     => ['Enrolled',     'staff-state--active'],
+    'pre_enrolled' => ['Pre-enrolled', 'staff-state--info'],
+    'pending'      => ['Pending',      'staff-state--pending'],
+    'expired'      => ['Expired',      'staff-state--muted'],
+    'cancelled'    => ['Cancelled',    'staff-state--danger'],
+];
 
-$where  = ['1=1'];
-$params = [];
-$types  = '';
-
-if ($filter_status) { $where[] = 'e.status = ?';                 $params[] = $filter_status; $types .= 's'; }
-if ($filter_grade)  { $where[] = 'e.admission_grade_level = ?';  $params[] = $filter_grade;  $types .= 's'; }
-if ($filter_strand) { $where[] = 'e.admission_strand = ?';       $params[] = strand_id($conn, $filter_strand); $types .= 'i'; }
-if ($search) {
-    $where[] = "(st.family_name LIKE ? OR st.given_name LIKE ? OR st.student_number LIKE ?)";
-    $like = '%' . $search . '%';
-    $params[] = $like; $params[] = $like; $params[] = $like;
-    $types .= 'sss';
-}
-
-$where_sql = implode(' AND ', $where);
-
+// ── Fetch ──────────────────────────────────────────────────────────────────
+// Every record is loaded once; search / status / grade / strand / sort and
+// paging all happen in the browser (assets/js/admin_table.js), the same way
+// staff_manage.php works. CSV export re-uses $rows below.
 $sql = "
     SELECT e.enrollment_id,
            CONCAT(st.family_name, ', ', st.given_name) AS student_name,
+           st.family_name, st.given_name,
            st.student_number, e.admission_grade_level AS grade_level, strd.strand_code AS strand, sec.section_name,
            e.school_year, e.enrollment_date, e.status
     FROM enrollments e
     JOIN students st ON st.student_id = e.student_id
     JOIN strands strd ON strd.strand_id = e.admission_strand
     LEFT JOIN sections sec ON sec.section_id = e.section_id
-    WHERE $where_sql
     ORDER BY e.enrollment_date DESC, e.enrollment_id DESC
 ";
-
-$stmt = $conn->prepare($sql);
-if ($params) { $stmt->bind_param($types, ...$params); }
-$stmt->execute();
-$rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+$rows = $conn->query($sql)->fetch_all(MYSQLI_ASSOC);
 $conn->close();
 
 // ── Export CSV ───────────────────────────────────────────────────────────
-// Honors whatever status/grade/strand/search filter is already active
-// (baked into $rows above); ?ids=1,2,3 further restricts it to just the
-// checked rows, same convention as staff_manage.php's export.
-if (isset($_GET['export']) && $_GET['export'] === 'csv') {
+// POSTed by the page (ids can run to thousands — too long for a URL); a GET
+// ?export=csv still works. `ids` (comma list) limits it to those enrollments —
+// the checked rows, or whatever the filters currently show; none = everything.
+$req = $_SERVER['REQUEST_METHOD'] === 'POST' ? $_POST : $_GET;
+if (($req['export'] ?? '') === 'csv') {
     $export_rows = $rows;
-    if (!empty($_GET['ids'])) {
-        $selected_ids = array_map('intval', explode(',', $_GET['ids']));
+    if (!empty($req['ids'])) {
+        $selected_ids = array_map('intval', explode(',', (string)$req['ids']));
         $export_rows = array_values(array_filter($rows, function ($r) use ($selected_ids) {
             return in_array((int)$r['enrollment_id'], $selected_ids, true);
         }));
@@ -74,7 +60,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="enrollments_' . date('Y-m-d') . '.csv"');
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['Enrollment ID', 'Student', 'Student Number', 'Grade', 'Strand', 'Section', 'Date', 'Status']);
+    fputcsv($out, ['Enrollment ID', 'Student', 'Student Number', 'Grade', 'Strand', 'Section', 'Date', 'Status', 'School Year']);
     foreach ($export_rows as $r) {
         fputcsv($out, [
             $r['enrollment_id'],
@@ -85,11 +71,22 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
             $r['section_name'] ?? '',
             $r['enrollment_date'] ?? '',
             $r['status'],
+            $r['school_year'] ?? '',
         ]);
     }
     fclose($out);
     exit();
 }
+
+// Filter options and pill counts come from the data itself, so a strand or
+// grade nobody is enrolled in never shows up as an empty choice.
+$grades  = array_values(array_unique(array_column($rows, 'grade_level')));
+$strands = array_values(array_unique(array_column($rows, 'strand')));
+sort($grades);
+sort($strands);
+$status_counts = array_count_values(array_map(fn($r) => strtolower((string)$r['status']), $rows));
+
+$h = fn($v) => htmlspecialchars((string)$v, ENT_QUOTES);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -100,35 +97,6 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_admin.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_admin.css') ?>">
-  <style>
-    .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-    .filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:1.25rem; }
-    .filter-bar input, .filter-bar select {
-      height:36px; border:0.5px solid #D4D4E0; border-radius:8px; background:#fff;
-      padding:0 12px; font-size:13px; font-family:inherit; color:#1A1A2E; outline:none; }
-    .filter-bar input { min-width:200px; }
-    .filter-bar select { padding-right:28px; appearance:none;
-      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238A8A9A' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-      background-repeat:no-repeat; background-position:right 10px center; }
-    .filter-bar input:focus, .filter-bar select:focus { border-color:#386641; box-shadow:0 0 0 3px rgba(123,111,205,.14); }
-    .btn-filter { height:36px; padding:0 16px; background:#386641; border:none; border-radius:8px;
-      color:#fff; font-size:13px; font-weight:500; cursor:pointer; font-family:inherit; }
-    .btn-filter:hover { background:#2F5636; }
-    .btn-clear { height:36px; padding:0 14px; background:#fff; border:0.5px solid #D4D4E0;
-      border-radius:8px; color:#5A5A72; font-size:13px; font-weight:500; cursor:pointer;
-      font-family:inherit; text-decoration:none; display:inline-flex; align-items:center; }
-    .btn-clear:hover { border-color:#386641; color:#5B4DB5; }
-    .btn-sm { height:26px; padding:0 9px; font-size:11px; font-weight:500; border-radius:6px;
-      cursor:pointer; font-family:inherit; border:0.5px solid #D4D4E0; background:#fff; color:#5A5A72; }
-    .btn-sm:hover { border-color:#386641; color:#5B4DB5; }
-    .btn-sm-danger { border-color:#F5C6C2; color:#C0392B; }
-    .btn-sm-danger:hover { background:#FDF0EF; }
-    .alert { font-size:13px; border-radius:8px; padding:9px 13px; margin-bottom:1rem; }
-    .alert-success { background:#EBF7F2; border:0.5px solid #A8D9C5; color:#1A6B4A; }
-    .action-cell { display:flex; gap:5px; align-items:center; }
-    select.inline-status { height:26px; font-size:11px; border:0.5px solid #D4D4E0;
-      border-radius:6px; background:#fff; padding:0 6px; font-family:inherit; color:#1A1A2E; }
-  </style>
 </head>
 <body>
 
@@ -140,123 +108,129 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     </div>
     <div class="content">
 
-      <div class="staff-hero">
-        <p class="staff-breadcrumb"><span>Admin Portal</span> / <span class="staff-breadcrumb-current">Enrollments</span></p>
-        <h1 class="page-title">Enrollments</h1>
+      <div class="staff-hero staff-hero--row">
+        <div class="staff-hero-text">
+          <p class="page-eyebrow">Admin Portal</p>
+          <h1 class="page-title">Enrollments</h1>
+          <p class="staff-hero-desc">Review every enrollment record by status, grade level and strand.</p>
+        </div>
+        <?php if ($rows): ?>
+          <div class="staff-hero-actions">
+            <button type="button" class="btn-export-csv" id="tblExport">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+              <span id="tblExportLabel">Export CSV</span>
+            </button>
+          </div>
+        <?php endif; ?>
       </div>
 
       <div class="staff-overlap">
 
-      <?php if ($msg): ?>
-        <div class="alert alert-success"><?= htmlspecialchars($msg) ?></div>
-      <?php endif; ?>
-
-      <form method="GET" action="enrollments">
-        <div class="filter-bar">
-          <label for="f_q" class="sr-only">Search</label>
-          <input id="f_q" type="text" name="q" placeholder="Search name or Student Number…" value="<?= htmlspecialchars($search) ?>">
-          <label for="f_status" class="sr-only">Status</label>
-          <select id="f_status" name="status">
-            <option value="">All statuses</option>
-            <option value="enrolled"     <?= $filter_status==='enrolled'     ? 'selected':'' ?>>Enrolled</option>
-            <option value="pre_enrolled" <?= $filter_status==='pre_enrolled' ? 'selected':'' ?>>Pre-Enrolled</option>
-            <option value="pending"      <?= $filter_status==='pending'      ? 'selected':'' ?>>Pending</option>
-            <option value="expired"      <?= $filter_status==='expired'      ? 'selected':'' ?>>Expired</option>
-            <option value="cancelled"    <?= $filter_status==='cancelled'    ? 'selected':'' ?>>Cancelled</option>
-          </select>
-          <label for="f_grade" class="sr-only">Grade</label>
-          <select id="f_grade" name="grade">
-            <option value="">All grades</option>
-            <option value="11" <?= $filter_grade==='11' ? 'selected':'' ?>>Grade 11</option>
-            <option value="12" <?= $filter_grade==='12' ? 'selected':'' ?>>Grade 12</option>
-          </select>
-          <label for="f_strand" class="sr-only">Strand</label>
-          <select id="f_strand" name="strand">
-            <option value="">All strands</option>
-            <option value="STEM"  <?= $filter_strand==='STEM'  ? 'selected':'' ?>>STEM</option>
-            <option value="HUMSS" <?= $filter_strand==='HUMSS' ? 'selected':'' ?>>HUMSS</option>
-            <option value="ABM"   <?= $filter_strand==='ABM'   ? 'selected':'' ?>>ABM</option>
-            <option value="GAS"   <?= $filter_strand==='GAS'   ? 'selected':'' ?>>GAS</option>
-            <option value="TVL"   <?= $filter_strand==='TVL'   ? 'selected':'' ?>>TVL</option>
-          </select>
-          <button type="submit" class="btn-filter">Filter</button>
-          <a href="enrollments" class="btn-clear">Clear</a>
-        </div>
-      </form>
-
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Enrollment Records <span class="staff-record-count">(<?= count($rows) ?> records)</span></span>
-          <button type="button" class="btn-export-csv" id="btnExportCsv">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-            <span id="btnExportCsvLabel">Export CSV</span>
-          </button>
-        </div>
-
+      <div class="card staff-panel">
         <?php if (empty($rows)): ?>
-          <p class="empty-state">No enrollments match the current filter.</p>
+          <p class="empty-state">No enrollment records yet.</p>
         <?php else: ?>
-          <table class="data-table" id="dataTable">
-            <thead>
-              <tr>
-                <th class="staff-table-checkbox-col"><input type="checkbox" id="selectAllRows" aria-label="Select all"></th>
-                <th>#</th>
-                <th>Student</th>
-                <th>Grade / Strand</th>
-                <th>Section</th>
-                <th>Date</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <?php foreach ($rows as $r):
-                $s = strtolower($r['status'] ?? 'pending');
-                $b = match($s) {
-                    'enrolled'  => 'badge-enrolled',
-                    'cancelled' => 'badge-cancelled',
-                    'expired'   => 'badge-expired',
-                    default     => 'badge-pending',
-                };
-              ?>
-                <tr>
-                  <td class="staff-table-checkbox-col"><input type="checkbox" class="staff-row-checkbox" value="<?= (int)$r['enrollment_id'] ?>" aria-label="Select row"></td>
-                  <td class="td-meta"><?= $r['enrollment_id'] ?></td>
-                  <td>
-                    <div class="td-name-cell">
-                      <span class="staff-table-avatar"><?= htmlspecialchars(name_initials($r['student_name'])) ?></span>
-                      <div>
-                        <div class="td-name"><?= htmlspecialchars($r['student_name']) ?></div>
-                        <div class="td-meta"><?= htmlspecialchars($r['student_number'] ?? '—') ?></div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>G<?= htmlspecialchars($r['grade_level']) ?> &middot; <?= htmlspecialchars($r['strand']) ?></td>
-                  <td><?= htmlspecialchars($r['section_name'] ?? '—') ?></td>
-                  <td><?= htmlspecialchars($r['enrollment_date'] ?? '—') ?></td>
-                  <td><span class="badge <?= $b ?>"><?= htmlspecialchars($s) ?></span></td>
-                </tr>
-              <?php endforeach; ?>
-            </tbody>
-          </table>
 
-          <div class="staff-table-pagination">
-            <label class="staff-pagination-rows">
-              <select id="rowsPerPage">
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-              </select>
-              Results per page
-            </label>
-
-            <div class="staff-pagination-pages" id="paginationPages">
-              <button type="button" id="paginationPrev" class="staff-page-btn staff-page-arrow" aria-label="Previous page">&lsaquo;</button>
-              <span id="paginationNumbers" class="staff-pagination-numbers"></span>
-              <button type="button" id="paginationNext" class="staff-page-btn staff-page-arrow" aria-label="Next page">&rsaquo;</button>
-            </div>
-
-            <span class="staff-pagination-summary"><span id="paginationFrom">1</span>-<span id="paginationTo">1</span> / <span id="paginationTotal"><?= count($rows) ?></span> results</span>
+        <div class="staff-toolbar">
+          <div class="staff-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <label for="tblSearch" class="sr-only">Search enrollments</label>
+            <input type="search" id="tblSearch" class="tbl-search" placeholder="Search by name, student number or section" autocomplete="off">
           </div>
+          <select class="staff-filter-select" name="grade" data-filter-select data-attr="grade" aria-label="Filter by grade">
+            <option value="">All grades</option>
+            <?php foreach ($grades as $g): ?>
+              <option value="<?= $h($g) ?>">Grade <?= $h($g) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <select class="staff-filter-select" name="strand" data-filter-select data-attr="strand" aria-label="Filter by strand">
+            <option value="">All strands</option>
+            <?php foreach ($strands as $s): ?>
+              <option value="<?= $h($s) ?>"><?= $h($s) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <select class="staff-filter-select" id="tblSort" aria-label="Sort enrollments">
+            <option value="date:desc" data-num>Sort: Newest first</option>
+            <option value="date:asc" data-num>Sort: Oldest first</option>
+            <option value="name:asc">Sort: Name (A to Z)</option>
+            <option value="name:desc">Sort: Name (Z to A)</option>
+          </select>
+          <button type="button" class="staff-toolbar-reset hidden" id="tblReset">Reset filters</button>
+        </div>
+
+        <div class="staff-pills" role="group" aria-label="Filter by status" data-pills data-attr="status" data-param="status">
+          <button type="button" class="staff-pill active" data-value="" aria-pressed="true">All <span data-count><?= count($rows) ?></span></button>
+          <?php foreach ($status_map as $key => [$label]): ?>
+            <button type="button" class="staff-pill" data-value="<?= $h($key) ?>" aria-pressed="false"><?= $h($label) ?> <span data-count><?= (int)($status_counts[$key] ?? 0) ?></span></button>
+          <?php endforeach; ?>
+        </div>
+
+        <div class="staff-bulkbar hidden" id="tblBulkBar" role="region" aria-label="Bulk actions">
+          <strong class="staff-bulk-count" id="tblBulkCount" aria-live="polite">0 selected</strong>
+          <button type="button" class="staff-bulk-btn" data-bulk="export">Export selected</button>
+          <button type="button" class="staff-bulk-clear" data-bulk="clear">Clear selection</button>
+        </div>
+
+        <table class="data-table staff-table" id="dataTable">
+          <thead>
+            <tr>
+              <th class="staff-table-checkbox-col"><input type="checkbox" id="tblSelectAll" aria-label="Select all on this page"></th>
+              <th>Student</th>
+              <th>Grade &amp; strand</th>
+              <th>Section</th>
+              <th>Enrolled on</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php foreach ($rows as $r):
+              $s = strtolower((string)($r['status'] ?? 'pending'));
+              [$s_label, $s_class] = $status_map[$s] ?? [ucfirst(str_replace('_', ' ', $s)), 'staff-state--pending'];
+              $date_ts = $r['enrollment_date'] ? strtotime($r['enrollment_date']) : 0;
+              $search  = mb_strtolower(implode(' ', [
+                  $r['family_name'], $r['given_name'], $r['given_name'] . ' ' . $r['family_name'],
+                  $r['student_number'] ?? '', $r['section_name'] ?? '',
+              ]));
+            ?>
+              <tr class="<?= in_array($s, ['expired', 'cancelled'], true) ? 'is-dim' : '' ?>"
+                  data-search="<?= $h($search) ?>"
+                  data-status="<?= $h($s) ?>"
+                  data-grade="<?= $h($r['grade_level']) ?>"
+                  data-strand="<?= $h($r['strand']) ?>"
+                  data-sort-name="<?= $h(mb_strtolower($r['student_name'])) ?>"
+                  data-sort-date="<?= (int)$date_ts ?>">
+                <td class="staff-table-checkbox-col"><input type="checkbox" class="staff-row-checkbox" value="<?= (int)$r['enrollment_id'] ?>" aria-label="Select <?= $h($r['student_name']) ?>"></td>
+                <td class="td-name">
+                  <div class="td-name-cell">
+                    <span class="staff-table-avatar"><?= $h(name_initials($r['student_name'])) ?></span>
+                    <span class="staff-name-stack">
+                      <span class="staff-name-primary"><?= $h($r['student_name']) ?></span>
+                      <span class="staff-name-secondary"><?= $h($r['student_number'] ?? 'No student number') ?></span>
+                    </span>
+                  </div>
+                </td>
+                <td><span class="staff-role-tag">Grade <?= $h($r['grade_level']) ?> &middot; <?= $h($r['strand']) ?></span></td>
+                <td><?php if ($r['section_name']): ?><?= $h($r['section_name']) ?><?php else: ?><span class="td-muted">Unassigned</span><?php endif; ?></td>
+                <td>
+                  <span class="staff-name-stack">
+                    <span class="staff-joined"><?= $r['enrollment_date'] ? $h(date('M j, Y', $date_ts)) : '—' ?></span>
+                    <?php if (!empty($r['school_year'])): ?><span class="staff-name-secondary">S.Y. <?= $h($r['school_year']) ?></span><?php endif; ?>
+                  </span>
+                </td>
+                <td><span class="staff-state <?= $s_class ?>"><i></i><?= $h($s_label) ?></span></td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+
+        <div class="empty-state hidden" data-no-match>
+          <strong>No enrollments match these filters</strong>
+          Try a different search or status.
+          <div><button type="button" class="staff-btn staff-btn--ghost" data-clear-filters>Clear filters</button></div>
+        </div>
+
+        <?php $tbl_total = count($rows); $tbl_noun = 'enrollments'; include BASE_PATH . '/shared/includes/admin_table_footer.php'; ?>
+
         <?php endif; ?>
       </div>
 
@@ -265,116 +239,14 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     </div>
   </div>
 
-  <script>
-    // Client-side pagination + checkbox-scoped CSV export over the already
-    // server-filtered $rows — same pattern as staff_manage.php's table view,
-    // minus the client-side filtering (this page's status/grade/strand/search
-    // filters are server-side GET params, not toggled in-place).
-    document.addEventListener('DOMContentLoaded', function () {
-      var tableRows = Array.prototype.slice.call(document.querySelectorAll('#dataTable tbody tr'));
-      if (!tableRows.length) return;
-
-      var rowsPerPageSel  = document.getElementById('rowsPerPage');
-      var paginationFrom  = document.getElementById('paginationFrom');
-      var paginationTo    = document.getElementById('paginationTo');
-      var paginationTotal = document.getElementById('paginationTotal');
-      var paginationNumbers = document.getElementById('paginationNumbers');
-      var prevBtn = document.getElementById('paginationPrev');
-      var nextBtn = document.getElementById('paginationNext');
-      var currentPage = 1;
-
-      function buildPageList(current, total) {
-        var boundary = 3, sibling = 1;
-        var pages = {};
-        for (var i = 1; i <= Math.min(boundary, total); i++) pages[i] = true;
-        for (var i = Math.max(1, total - boundary + 1); i <= total; i++) pages[i] = true;
-        for (var i = Math.max(1, current - sibling); i <= Math.min(total, current + sibling); i++) pages[i] = true;
-
-        var sorted = Object.keys(pages).map(Number).sort(function (a, b) { return a - b; });
-        var result = [];
-        var prev = 0;
-        sorted.forEach(function (p) {
-          if (prev && p - prev > 1) result.push('ellipsis');
-          result.push(p);
-          prev = p;
-        });
-        return result;
-      }
-
-      function renderPageNumbers(current, total) {
-        paginationNumbers.innerHTML = '';
-        buildPageList(current, total).forEach(function (item) {
-          if (item === 'ellipsis') {
-            var span = document.createElement('span');
-            span.className = 'staff-page-ellipsis';
-            span.textContent = '…';
-            paginationNumbers.appendChild(span);
-            return;
-          }
-          var btn = document.createElement('button');
-          btn.type = 'button';
-          btn.className = 'staff-page-btn' + (item === current ? ' active' : '');
-          btn.textContent = item;
-          btn.addEventListener('click', function () { currentPage = item; paginate(); });
-          paginationNumbers.appendChild(btn);
-        });
-      }
-
-      function paginate() {
-        var rowsPerPage = parseInt(rowsPerPageSel.value, 10);
-        var total = tableRows.length;
-        var totalPages = Math.max(1, Math.ceil(total / rowsPerPage));
-        if (currentPage > totalPages) currentPage = totalPages;
-
-        var start = (currentPage - 1) * rowsPerPage;
-        var end = start + rowsPerPage;
-        tableRows.forEach(function (r, i) {
-          r.classList.toggle('hidden', !(i >= start && i < end));
-        });
-
-        paginationFrom.textContent = total === 0 ? 0 : start + 1;
-        paginationTo.textContent = Math.min(end, total);
-        paginationTotal.textContent = total;
-        renderPageNumbers(currentPage, totalPages);
-        prevBtn.disabled = currentPage <= 1;
-        nextBtn.disabled = currentPage >= totalPages;
-      }
-
-      rowsPerPageSel.addEventListener('change', function () { currentPage = 1; paginate(); });
-      prevBtn.addEventListener('click', function () { if (currentPage > 1) { currentPage--; paginate(); } });
-      nextBtn.addEventListener('click', function () { currentPage++; paginate(); });
-      paginate();
-
-      // ── Select-all + checkboxes drive the Export CSV button ─────────────
-      var selectAll = document.getElementById('selectAllRows');
-      var exportBtn = document.getElementById('btnExportCsv');
-      var exportBtnLabel = document.getElementById('btnExportCsvLabel');
-      var rowCheckboxes = Array.prototype.slice.call(document.querySelectorAll('.staff-row-checkbox'));
-
-      function updateExportLabel() {
-        var checkedCount = rowCheckboxes.filter(function (cb) { return cb.checked; }).length;
-        exportBtnLabel.textContent = checkedCount > 0 ? 'Export Selected (' + checkedCount + ')' : 'Export CSV';
-      }
-      rowCheckboxes.forEach(function (cb) { cb.addEventListener('change', updateExportLabel); });
-
-      if (selectAll) {
-        selectAll.addEventListener('change', function () {
-          document.querySelectorAll('#dataTable tbody tr:not(.hidden) .staff-row-checkbox').forEach(function (cb) {
-            cb.checked = selectAll.checked;
-          });
-          updateExportLabel();
-        });
-      }
-
-      exportBtn.addEventListener('click', function () {
-        var ids = rowCheckboxes.filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
-        var url = new URL(window.location.href);
-        url.searchParams.set('export', 'csv');
-        if (ids.length) { url.searchParams.set('ids', ids.join(',')); } else { url.searchParams.delete('ids'); }
-        window.location.href = url.toString();
+  <?php if ($rows): ?>
+    <script src="<?= APP_URL ?>/assets/js/admin_table.js?v=<?= filemtime(__DIR__ . '/../../assets/js/admin_table.js') ?>"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        AdminTable.init({ noun: 'enrollments' });
       });
-    });
-  </script>
+    </script>
+  <?php endif; ?>
 
 </body>
 </html>

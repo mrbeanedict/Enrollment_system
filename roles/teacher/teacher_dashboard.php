@@ -117,13 +117,33 @@ guard_password_change('teacher_change_password', 'teacher');
     // Today's classes — derived from $assignments (already fetched above),
     // no extra query needed. section_subjects.day is stored as Mon/Tue/.../Fri,
     // matching PHP's date('D') output directly.
+    // A subject can meet several times a week, so these read every class
+    // meeting (section_subject_meetings), not one slot per subject.
+    $mt_stmt = mysqli_prepare($conn, "
+        SELECT m.day, m.start_time, m.end_time, m.room AS room_override, sec.room AS homeroom,
+               sec.section_name, sub.subject_name
+        FROM teacher_assignments ta
+        JOIN section_subjects ss
+          ON ss.section_id = ta.section_id AND ss.subject_id = ta.subject_id
+         AND ss.teacher_id = ta.teacher_id AND ss.semester = ta.semester
+        JOIN section_subject_meetings m
+          ON m.section_id = ss.section_id AND m.subject_id = ss.subject_id AND m.semester = ss.semester
+        JOIN sections sec ON sec.section_id = ta.section_id
+        JOIN subjects sub ON sub.subject_id = ta.subject_id
+        WHERE ta.teacher_id = ? AND ta.is_active = 1
+    ");
+    mysqli_stmt_bind_param($mt_stmt, "i", $teacher_id);
+    mysqli_stmt_execute($mt_stmt);
+    $meetings = mysqli_fetch_all(mysqli_stmt_get_result($mt_stmt), MYSQLI_ASSOC);
+    mysqli_stmt_close($mt_stmt);
+
     $today_day     = date('D');
-    $today_classes = array_values(array_filter($assignments, fn($r) => $r['day'] === $today_day && $r['start_time']));
+    $today_classes = array_values(array_filter($meetings, fn($r) => $r['day'] === $today_day));
     usort($today_classes, fn($a, $b) => strcmp($a['start_time'], $b['start_time']));
 
     // Which weekdays this teacher has any class at all — drives the small
     // dot under each day in the week strip.
-    $week_class_days = array_values(array_unique(array_filter(array_column($assignments, 'day'))));
+    $week_class_days = array_values(array_unique(array_column($meetings, 'day')));
 
     // This week strip — Sunday through Saturday of the current week.
     $week_dow      = (int) date('w'); // 0 (Sun) .. 6 (Sat)

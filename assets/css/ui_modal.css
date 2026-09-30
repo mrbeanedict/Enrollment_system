@@ -1,0 +1,964 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   ui_modal.css — shared modal skin
+   Source of truth: shared/modal.php (design reference sheet).
+
+   Part i  — Modals: SweetAlert2 dialogs + the hand-built modal shells.
+   Part ii — Feedback: toasts & snackbars (.ui-toast, driven by
+             assets/js/ui_toast.js), inline alert banners (.notice-* /
+             .alert-* / .flash-*) and the notification dropdowns.
+
+   Loaded via shared/includes/ui_modal_css.php, always AFTER the role
+   stylesheet and any inline <style>, and every override is prefixed with
+   `body` so it wins regardless of source order. Tokens are namespaced
+   --ui-* so they cannot collide with the per-role --brand-* variables.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --ui-ink:         #1C2321;
+  --ui-text-soft:   #66767A;   /* body copy in dialogs — --ui-muted is too pale to read at 13px */
+  --ui-muted:       #8A9995;
+  --ui-card:        #FFFFFF;
+  --ui-hover:       #F1F3F2;
+  --ui-border:      rgba(19, 45, 40, 0.07);
+  --ui-border-strong: rgba(19, 45, 40, 0.14);
+
+  --ui-teal:        #0F6F62;
+  --ui-teal-hover:  #0B5A50;
+  --ui-teal-tint:   #E3F1EE;
+  --ui-teal-glow:   rgba(15, 111, 98, 0.28);
+
+  --ui-coral:       #D6503F;
+  --ui-coral-hover: #B93F30;
+  --ui-coral-tint:  #FBEAE7;
+  --ui-coral-glow:  rgba(214, 80, 63, 0.28);
+
+  --ui-gold:        #DE9A2A;
+  --ui-gold-hover:  #C88720;
+  --ui-gold-tint:   #FBF0DC;
+
+  --ui-ring:        0 20px 44px -14px rgba(19, 45, 40, 0.16);
+  --ui-scrim:       rgba(19, 45, 40, 0.45);
+
+  --ui-font-display: 'Fraunces', Georgia, serif;
+  --ui-font-body:    'Inter', system-ui, sans-serif;
+
+  /* Icon glyphs (stroke paths lifted from shared/modal.php) */
+  --ui-glyph-question: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='9' stroke='%230F6F62' stroke-width='1.8'/%3E%3Cpath d='M9.6 9.6a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1.1.9-1.1 1.6' stroke='%230F6F62' stroke-width='1.8' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='16.6' r='.9' fill='%230F6F62'/%3E%3C/svg%3E");
+  --ui-glyph-info:     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='9' stroke='%230F6F62' stroke-width='1.8'/%3E%3Cpath d='M12 11v5.2' stroke='%230F6F62' stroke-width='1.8' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='8' r='.9' fill='%230F6F62'/%3E%3C/svg%3E");
+  --ui-glyph-logout:   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M9 8V6.5A2.5 2.5 0 0 1 11.5 4H17a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5.5A2.5 2.5 0 0 1 9 17.5V16' stroke='%230F6F62' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M3.5 12H14' stroke='%230F6F62' stroke-width='1.8' stroke-linecap='round'/%3E%3Cpath d='M7 8.5 3.5 12 7 15.5' stroke='%230F6F62' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --ui-glyph-warning:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 8v5' stroke='%23D6503F' stroke-width='1.8' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='16.2' r='.9' fill='%23D6503F'/%3E%3Ccircle cx='12' cy='12' r='9' stroke='%23D6503F' stroke-width='1.8'/%3E%3C/svg%3E");
+  --ui-glyph-error:    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='9' stroke='%23D6503F' stroke-width='1.8'/%3E%3Cpath d='M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6' stroke='%23D6503F' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  --ui-glyph-success:  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M4.5 12.5 9.5 17.5 19.5 7' stroke='%230F6F62' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --ui-glyph-warning-gold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 8v5' stroke='%23DE9A2A' stroke-width='1.8' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='16.2' r='.9' fill='%23DE9A2A'/%3E%3Ccircle cx='12' cy='12' r='9' stroke='%23DE9A2A' stroke-width='1.8'/%3E%3C/svg%3E");
+  --ui-glyph-bell:       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 5.5c-3.9 0-6.5 2.9-6.5 6.7 0 3.1-.8 4.3-1.5 5.1h16c-.7-.8-1.5-2-1.5-5.1 0-3.8-2.6-6.7-6.5-6.7Z' stroke='%23DE9A2A' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M10 19.2a2 2 0 0 0 4 0' stroke='%23DE9A2A' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  --ui-glyph-calendar:   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Crect x='4' y='5.5' width='16' height='14' rx='2.5' stroke='%230F6F62' stroke-width='1.8'/%3E%3Cpath d='M4 10.2h16M8.5 3.5v4M15.5 3.5v4' stroke='%230F6F62' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  --ui-glyph-user:       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%230F6F62' stroke-width='1.8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Z'/%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M4.5 20c1.4-3.6 4.3-5.5 7.5-5.5s6.1 1.9 7.5 5.5'/%3E%3C/svg%3E");
+  --ui-glyph-logout-coral: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23D6503F' stroke-width='1.8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M9 8V6.5A2.5 2.5 0 0 1 11.5 4H17a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5.5A2.5 2.5 0 0 1 9 17.5V16'/%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M3.5 12H14'/%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M7 8.5 3.5 12 7 15.5'/%3E%3C/svg%3E");
+  --ui-glyph-bell-muted: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 5.5c-3.9 0-6.5 2.9-6.5 6.7 0 3.1-.8 4.3-1.5 5.1h16c-.7-.8-1.5-2-1.5-5.1 0-3.8-2.6-6.7-6.5-6.7Z' stroke='%238A9995' stroke-width='1.8' stroke-linejoin='round'/%3E%3Cpath d='M10 19.2a2 2 0 0 0 4 0' stroke='%238A9995' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PART i-a — SweetAlert2 dialogs (confirms, alerts, prompts)
+   Every Swal.fire() in the system picks this up with no per-call changes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Backdrop */
+body .swal2-container.swal2-backdrop-show,
+body .swal2-container.swal2-noanimation {
+  background: var(--ui-scrim) !important;
+  backdrop-filter: blur(2px);
+}
+
+/* Card — accent variables drive the wash, primary button and focus ring.
+   Defaults to teal; the :has() rules below retint per icon type. Browsers
+   without :has() simply stay teal. */
+body .swal2-popup:not(.swal2-toast) {
+  --ui-accent:       var(--ui-teal);
+  --ui-accent-hover: var(--ui-teal-hover);
+  --ui-accent-tint:  var(--ui-teal-tint);
+  --ui-accent-glow:  var(--ui-teal-glow);
+  --ui-accent-ink:   #FFFFFF;
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  padding: 34px 38px 30px;
+  border: 1px solid var(--ui-border);
+  border-radius: 22px;
+  background: var(--ui-card);
+  box-shadow: var(--ui-ring);
+  font-family: var(--ui-font-body);
+  color: var(--ui-ink);
+}
+body .swal2-popup:not(.swal2-toast):has(.swal2-icon-show.swal2-warning),
+body .swal2-popup:not(.swal2-toast):has(.swal2-icon-show.swal2-error) {
+  --ui-accent:       var(--ui-coral);
+  --ui-accent-hover: var(--ui-coral-hover);
+  --ui-accent-tint:  var(--ui-coral-tint);
+  --ui-accent-glow:  var(--ui-coral-glow);
+}
+
+/* Soft tinted wash behind the icon so the top of the card isn't dead white */
+body .swal2-popup:not(.swal2-toast)::before {
+  content: "";
+  position: absolute;
+  top: -70px;
+  left: 50%;
+  z-index: -1;
+  width: 220px;
+  height: 220px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--ui-accent-tint), transparent 70%);
+  filter: blur(6px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Icon — replaces Swal's animated ring/lines with the design's tinted disc */
+body .swal2-popup:not(.swal2-toast) .swal2-icon {
+  box-sizing: border-box;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  border: 0;
+  border-radius: 50%;
+  zoom: 1;
+  background-color: var(--ui-teal-tint);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 28px 28px;
+  box-shadow: 0 0 0 8px rgba(15, 111, 98, 0.06);
+  animation: none !important;
+}
+body .swal2-popup:not(.swal2-toast) .swal2-icon > * { display: none !important; }
+
+body .swal2-popup .swal2-icon.swal2-question { background-image: var(--ui-glyph-question); }
+body .swal2-popup .swal2-icon.swal2-info     { background-image: var(--ui-glyph-info); }
+body .swal2-popup.ui-swal-logout .swal2-icon.swal2-question { background-image: var(--ui-glyph-logout); }
+body .swal2-popup .swal2-icon.swal2-warning,
+body .swal2-popup .swal2-icon.swal2-error {
+  background-color: var(--ui-coral-tint);
+  box-shadow: 0 0 0 8px rgba(214, 80, 63, 0.06);
+}
+body .swal2-popup .swal2-icon.swal2-warning { background-image: var(--ui-glyph-warning); }
+body .swal2-popup .swal2-icon.swal2-error   { background-image: var(--ui-glyph-error); }
+
+/* Success = the design's "outcome" card: gradient wash, white icon disc */
+body .swal2-popup:not(.swal2-toast):has(.swal2-icon-show.swal2-success) {
+  background: linear-gradient(160deg, var(--ui-teal-tint) 0%, #FFFFFF 48%, #FFFFFF 100%);
+}
+body .swal2-popup:not(.swal2-toast):has(.swal2-icon-show.swal2-success)::before { content: none; }
+body .swal2-popup:not(.swal2-toast) .swal2-icon.swal2-success {
+  width: 66px;
+  height: 66px;
+  margin-bottom: 18px;
+  background-color: #FFFFFF;
+  background-image: var(--ui-glyph-success);
+  background-size: 26px 26px;
+  box-shadow: 0 10px 26px -8px rgba(15, 111, 98, 0.35), 0 0 0 1px rgba(15, 111, 98, 0.08);
+}
+
+/* Title + body copy */
+body .swal2-popup:not(.swal2-toast) .swal2-title {
+  margin: 0 0 8px;
+  padding: 0;
+  font-family: var(--ui-font-display);
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ui-ink);
+}
+body .swal2-popup:not(.swal2-toast) .swal2-html-container {
+  margin: 0 0 22px;
+  padding: 0;
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--ui-text-soft);
+}
+/* Title-only dialogs: Swal hides the empty text container, so the title has
+   to carry the gap to the buttons itself. */
+body .swal2-popup:not(.swal2-toast) .swal2-title:has(+ .swal2-html-container[style*="none"]) { margin-bottom: 22px; }
+
+/* Prompt inputs (approvals / scheduler reason boxes, discussions rename) */
+body .swal2-popup:not(.swal2-toast) .swal2-input,
+body .swal2-popup:not(.swal2-toast) .swal2-textarea,
+body .swal2-popup:not(.swal2-toast) .swal2-select {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 0 18px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 12px;
+  background: #FFFFFF;
+  box-shadow: none;
+  font-family: var(--ui-font-body);
+  font-size: 13.5px;
+  color: var(--ui-ink);
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+body .swal2-popup:not(.swal2-toast) .swal2-input { height: 42px; padding: 0 14px; }
+body .swal2-popup:not(.swal2-toast) .swal2-textarea { min-height: 96px; padding: 12px 14px; resize: vertical; }
+body .swal2-popup:not(.swal2-toast) .swal2-input:focus,
+body .swal2-popup:not(.swal2-toast) .swal2-textarea:focus,
+body .swal2-popup:not(.swal2-toast) .swal2-select:focus {
+  border-color: var(--ui-accent);
+  box-shadow: 0 0 0 3px var(--ui-accent-glow);
+  outline: none;
+}
+body .swal2-popup:not(.swal2-toast) .swal2-input::placeholder,
+body .swal2-popup:not(.swal2-toast) .swal2-textarea::placeholder { color: var(--ui-muted); }
+
+body .swal2-popup:not(.swal2-toast) .swal2-validation-message {
+  width: 100%;
+  margin: -6px 0 16px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--ui-coral-tint);
+  color: var(--ui-coral-hover);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+body .swal2-popup:not(.swal2-toast) .swal2-validation-message::before {
+  background: var(--ui-coral);
+}
+
+/* Actions — Cancel on the left, primary on the right, equal width */
+body .swal2-popup:not(.swal2-toast) .swal2-actions {
+  position: relative;
+  flex-wrap: nowrap;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+body .swal2-popup:not(.swal2-toast) .swal2-actions .swal2-styled {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  padding: 11px 20px;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: none;
+  font-family: var(--ui-font-body);
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+}
+body .swal2-popup:not(.swal2-toast) .swal2-actions .swal2-styled:active {
+  transform: translateY(1px) scale(0.98);
+}
+body .swal2-popup:not(.swal2-toast) .swal2-actions .swal2-styled:focus-visible {
+  box-shadow: 0 0 0 3px var(--ui-accent-glow);
+  outline: none;
+}
+body .swal2-popup .swal2-actions .swal2-cancel  { order: 1; }
+body .swal2-popup .swal2-actions .swal2-deny    { order: 2; }
+body .swal2-popup .swal2-actions .swal2-confirm { order: 3; }
+
+/* !important: Swal writes confirmButtonColor / cancelButtonColor as inline
+   background-color on the button, and the 20-odd call sites still pass them. */
+body .swal2-popup .swal2-actions .swal2-confirm {
+  background: var(--ui-accent) !important;
+  color: var(--ui-accent-ink) !important;
+}
+body .swal2-popup .swal2-actions .swal2-confirm:hover { background: var(--ui-accent-hover) !important; }
+body .swal2-popup .swal2-actions .swal2-deny {
+  background: var(--ui-coral) !important;
+  color: #FFFFFF !important;
+}
+body .swal2-popup .swal2-actions .swal2-deny:hover { background: var(--ui-coral-hover) !important; }
+body .swal2-popup .swal2-actions .swal2-cancel {
+  background: transparent !important;
+  color: var(--ui-text-soft) !important;
+  border: 1px solid var(--ui-border-strong);
+}
+body .swal2-popup .swal2-actions .swal2-cancel:hover {
+  background: var(--ui-hover) !important;
+  color: var(--ui-ink) !important;
+  border-color: transparent;
+}
+body .swal2-popup .swal2-loader { border-color: var(--ui-accent) transparent var(--ui-accent) transparent; }
+
+body .swal2-popup:not(.swal2-toast) .swal2-close {
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 22px;
+  color: var(--ui-muted);
+}
+body .swal2-popup:not(.swal2-toast) .swal2-close:hover { background: var(--ui-hover); color: var(--ui-ink); }
+
+@media (max-width: 440px) {
+  body .swal2-popup:not(.swal2-toast) { padding: 28px 22px 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body .swal2-popup, body .swal2-popup * { animation-duration: 0.01ms !important; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PART i-b — Hand-built modal shells
+   Restyles the chrome only (scrim, card, heading, close button, footer
+   buttons). Widths, padding and inner layout stay with each page.
+     .modal-overlay > .modal-box / .modal-panel   student, staff, admin
+     .pa-modal-overlay > .pa-modal                records review
+     dialog#sectionModal / #subjectModal          scheduler
+     .cred-overlay > .cred-modal                  coordinator credentials
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body .modal-overlay,
+body .pa-modal-overlay,
+body .cred-overlay {
+  background: var(--ui-scrim);
+  backdrop-filter: blur(2px);
+}
+body dialog#sectionModal::backdrop,
+body dialog#subjectModal::backdrop {
+  background: var(--ui-scrim);
+  backdrop-filter: blur(2px);
+}
+
+body .modal-box,
+body .modal-panel,
+body .pa-modal,
+body .cred-modal,
+body dialog#sectionModal,
+body dialog#subjectModal {
+  border: 1px solid var(--ui-border);
+  border-radius: 22px;
+  background: var(--ui-card);
+  box-shadow: var(--ui-ring);
+}
+
+/* Headings */
+body .modal-head h3,
+body .modal-title,
+body .pa-modal-title,
+body .staff-modal-header h2,
+body .cred-modal h2 {
+  font-family: var(--ui-font-display);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ui-ink);
+}
+body .modal-head p,
+body .modal-meta,
+body .pa-modal-sub { color: var(--ui-text-soft); }
+body .pa-modal-section-title { color: var(--ui-teal); }
+
+/* Close buttons */
+body .modal-close,
+body .pa-modal-close,
+body .staff-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ui-text-soft);
+  font-size: 20px;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+body .modal-close:hover,
+body .pa-modal-close:hover,
+body .staff-modal-close:hover {
+  background: var(--ui-hover);
+  color: var(--ui-ink);
+}
+
+/* Footer / action buttons inside modals — pill shape, design palette */
+body .btn-cred-copy,
+body .btn-cred-done,
+body .btn-decline-confirm,
+body .modal-box .btn-student-primary,
+body .staff-modal .btn-add,
+body .dr-modal-footer .btn-primary,
+body .dr-modal-footer .btn-secondary,
+body .dr-modal-footer .btn-admit,
+body .dr-modal-footer .btn-followup {
+  border-radius: 999px;
+  font-weight: 600;
+  transition: transform .12s ease, background .12s ease, border-color .12s ease;
+}
+body .btn-cred-copy:active,
+body .btn-cred-done:active,
+body .btn-decline-confirm:active,
+body .dr-modal-footer button:active { transform: translateY(1px) scale(0.98); }
+
+body .btn-cred-copy,
+body .modal-box .btn-student-primary,
+body .staff-modal .btn-add,
+body .dr-modal-footer .btn-primary,
+body .dr-modal-footer .btn-admit {
+  border: 0;
+  background: var(--ui-teal);
+  color: #FFFFFF;
+}
+body .btn-cred-copy:hover,
+body .modal-box .btn-student-primary:hover,
+body .staff-modal .btn-add:hover,
+body .dr-modal-footer .btn-primary:hover:not(:disabled),
+body .dr-modal-footer .btn-admit:hover:not(:disabled) { background: var(--ui-teal-hover); }
+body .btn-cred-copy.copied,
+body .btn-cred-copy.copied:hover { background: var(--ui-teal-hover); }
+
+/* !important: this button carries its colours in an inline style attribute */
+body .btn-decline-confirm {
+  background: var(--ui-coral) !important;
+  color: #FFFFFF !important;
+  border-radius: 999px !important;
+}
+body .btn-decline-confirm:hover { background: var(--ui-coral-hover) !important; }
+
+body .btn-cred-done,
+body .dr-modal-footer .btn-secondary {
+  background: transparent;
+  color: var(--ui-text-soft);
+  border: 1px solid var(--ui-border-strong);
+}
+body .btn-cred-done:hover,
+body .dr-modal-footer .btn-secondary:hover:not(:disabled) {
+  background: var(--ui-hover);
+  color: var(--ui-ink);
+  border-color: transparent;
+}
+
+body .dr-modal-footer .btn-followup {
+  background: var(--ui-gold-tint);
+  color: #8A5D14;
+  border: 1px solid transparent;
+}
+body .dr-modal-footer .btn-followup:hover:not(:disabled) { background: #F6E3BC; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PART ii-a — Toast & snackbar
+   Markup is built by assets/js/ui_toast.js (window.uiToast). Server-rendered
+   post-action messages opt in with a data-ui-toast attribute. A snackbar is
+   simply a toast that carries an .ui-toast-action.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ui-toast-stack {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1100;               /* above page modals (<=1000), level with Swal */
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(400px, calc(100vw - 24px));
+  pointer-events: none;        /* only the toasts themselves take clicks */
+  font-family: var(--ui-font-body);
+}
+
+.ui-toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 40px 16px 16px;
+  overflow: hidden;
+  pointer-events: auto;
+  background: var(--ui-card);
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+  box-shadow: 0 10px 28px -12px rgba(19, 45, 40, 0.14);
+  animation: ui-toast-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.ui-toast.is-leaving {
+  animation: none;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity .25s ease, transform .25s ease;
+}
+@keyframes ui-toast-in {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.ui-toast-icon {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 18px 18px;
+}
+.ui-toast--success .ui-toast-icon { background-color: var(--ui-teal-tint);  background-image: var(--ui-glyph-success); }
+.ui-toast--error   .ui-toast-icon { background-color: var(--ui-coral-tint); background-image: var(--ui-glyph-warning); }
+.ui-toast--info    .ui-toast-icon { background-color: var(--ui-gold-tint);  background-image: var(--ui-glyph-bell); }
+.ui-toast--warning .ui-toast-icon { background-color: var(--ui-gold-tint);  background-image: var(--ui-glyph-warning-gold); }
+
+.ui-toast-body { flex: 1 1 auto; min-width: 0; }
+.ui-toast-title {
+  margin: 0 0 3px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ui-ink);
+}
+.ui-toast-sub {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ui-text-soft);
+  overflow-wrap: anywhere;
+}
+
+/* Snackbar action ("Undo", "View") */
+.ui-toast-actions { display: flex; gap: 8px; margin-top: 10px; }
+.ui-toast-action {
+  margin-left: -10px;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font-family: var(--ui-font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ui-teal);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .12s ease;
+}
+.ui-toast-action:hover { background: var(--ui-teal-tint); }
+
+.ui-toast-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ui-muted);
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.ui-toast-close:hover { background: var(--ui-hover); color: var(--ui-ink); }
+
+/* Auto-dismiss countdown; errors and warnings stay until dismissed */
+.ui-toast-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 3px;
+  background: var(--ui-teal);
+  border-radius: 0 0 16px 16px;
+  transform-origin: left;
+  animation: ui-toast-progress var(--ui-toast-ms, 5000ms) linear forwards;
+}
+.ui-toast--info .ui-toast-progress { background: var(--ui-gold); }
+.ui-toast:hover .ui-toast-progress,
+.ui-toast:focus-within .ui-toast-progress { animation-play-state: paused; }
+@keyframes ui-toast-progress {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
+@media (max-width: 520px) {
+  .ui-toast-stack { top: 12px; right: 12px; left: 12px; width: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-toast { animation: none; }
+  .ui-toast-progress { animation: none; transform: scaleX(1); }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PART ii-b — Inline alert banners
+   Persistent, in-flow messages (validation errors, static notices, and the
+   fallback when JS cannot turn a message into a toast). Restyles every typed
+   variant across all role stylesheets; bare .alert / .auth-error (login and
+   password screens with their own themed look) are left alone.
+   The icon is absolutely positioned so text with inline <a>/<strong> keeps
+   flowing normally.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body :is(.notice-success, .notice-error, .notice-info,
+         .alert-success, .alert-error, .alert-warning,
+         .flash-success, .flash-error, .flash-info) {
+  position: relative;
+  padding: 12px 16px 12px 50px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+body :is(.notice-success, .notice-error, .notice-info,
+         .alert-success, .alert-error, .alert-warning,
+         .flash-success, .flash-error, .flash-info)::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: #FFFFFF;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 14px 14px;
+  box-shadow: 0 0 0 1px rgba(19, 45, 40, 0.06);
+}
+
+body :is(.notice-success, .alert-success, .flash-success) {
+  background: var(--ui-teal-tint);
+  border-color: rgba(15, 111, 98, 0.16);
+  color: var(--ui-teal-hover);
+}
+body :is(.notice-success, .alert-success, .flash-success)::before { background-image: var(--ui-glyph-success); }
+
+body :is(.notice-error, .alert-error, .flash-error) {
+  background: var(--ui-coral-tint);
+  border-color: rgba(214, 80, 63, 0.2);
+  color: #9C3326;
+}
+body :is(.notice-error, .alert-error, .flash-error)::before { background-image: var(--ui-glyph-warning); }
+
+body :is(.notice-info, .flash-info) {
+  background: #EEF4F3;
+  border-color: var(--ui-border-strong);
+  color: #2F4A45;
+}
+body :is(.notice-info, .flash-info)::before { background-image: var(--ui-glyph-info); }
+
+body .alert-warning {
+  background: var(--ui-gold-tint);
+  border-color: rgba(222, 154, 42, 0.3);
+  color: #7A5210;
+}
+body .alert-warning::before { background-image: var(--ui-glyph-warning-gold); }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PART ii-c — Notification dropdowns
+   student / teacher / LMS / staff bells all render the same shape:
+     .{role}-notif-dropdown > .-header, .-empty, a.-item[.unread] > .-msg + .-time
+   Only the look changes here: open/close, positioning and scrolling stay with
+   the role stylesheets. Each item becomes  [icon] message  time.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body .student-notif-dropdown, body .teacher-notif-dropdown,
+body .lms-notif-dropdown,     body .staff-notif-dropdown {
+  width: min(360px, calc(100vw - 24px));
+  border: 1px solid var(--ui-border);
+  border-radius: 18px;
+  background: var(--ui-card);
+  box-shadow: 0 16px 36px -14px rgba(19, 45, 40, 0.16);
+  font-family: var(--ui-font-body);
+}
+
+body .student-notif-header, body .teacher-notif-header,
+body .lms-notif-header,     body .staff-notif-header {
+  padding: 16px 18px 12px;
+  border-bottom: 0;
+  font-family: var(--ui-font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ui-ink);
+}
+
+body .student-notif-empty, body .teacher-notif-empty,
+body .lms-notif-empty,     body .staff-notif-empty {
+  padding: 36px 18px 40px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ui-text-soft);
+}
+
+body .student-notif-item, body .teacher-notif-item,
+body .lms-notif-item,     body .staff-notif-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 12px;
+  padding: 12px 18px;
+  border: 0;
+  border-top: 1px solid var(--ui-border);
+  background: transparent;
+  transition: background .12s ease;
+}
+/* Unread is signalled by the gold icon + coral dot, not a tinted row / left
+   border (the role stylesheets add both). Must precede :hover to lose to it. */
+body .student-notif-item.unread, body .teacher-notif-item.unread,
+body .lms-notif-item.unread,     body .staff-notif-item.unread {
+  background: transparent;
+  border-left: 0;
+}
+body .student-notif-item:hover, body .teacher-notif-item:hover,
+body .lms-notif-item:hover,     body .staff-notif-item:hover { background: var(--ui-hover); }
+
+/* Icon disc — the look comes from notifications.type (data-type on the row):
+     general (default)  quiet grey bell
+     approval           coral exclamation — someone has to act
+     schedule           teal calendar — section / subject / schedule news
+     highlight          prominent yellow bell, plus a faint yellow row wash
+   Read rows keep their type colour but fade; unread stay at full strength. */
+body .student-notif-item::before, body .teacher-notif-item::before,
+body .lms-notif-item::before,     body .staff-notif-item::before {
+  content: "";
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #EEF1F0 var(--ui-glyph-bell-muted) center / 16px 16px no-repeat;
+}
+body [class*="-notif-item"]:not(.unread)::before { opacity: 0.6; }
+
+body [class*="-notif-item"][data-type="approval"]::before {
+  background-color: var(--ui-coral-tint);
+  background-image: var(--ui-glyph-warning);
+}
+body [class*="-notif-item"][data-type="schedule"]::before {
+  background-color: var(--ui-teal-tint);
+  background-image: var(--ui-glyph-calendar);
+}
+body [class*="-notif-item"][data-type="highlight"]::before {
+  background-color: var(--ui-gold-tint);
+  background-image: var(--ui-glyph-bell);
+  box-shadow: 0 0 0 3px rgba(222, 154, 42, 0.18);
+}
+body [class*="-notif-item"][data-type="highlight"].unread { background: rgba(222, 154, 42, 0.07); }
+body [class*="-notif-item"][data-type="highlight"].unread:hover { background: rgba(222, 154, 42, 0.13); }
+
+body .student-notif-msg, body .teacher-notif-msg,
+body .lms-notif-msg,     body .staff-notif-msg {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--ui-ink);
+  overflow-wrap: anywhere;
+}
+body .student-notif-item.unread .student-notif-msg::before, body .teacher-notif-item.unread .teacher-notif-msg::before,
+body .lms-notif-item.unread .lms-notif-msg::before,         body .staff-notif-item.unread .staff-notif-msg::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--ui-coral);
+  vertical-align: middle;
+}
+
+body .student-notif-time, body .teacher-notif-time,
+body .lms-notif-time,     body .staff-notif-time {
+  padding-top: 2px;
+  margin-top: 0;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--ui-text-soft);
+}
+
+/* Unread count badge / dot -> coral */
+body .student-topbar-notif-badge, body .teacher-notif-badge, body .staff-notif-badge,
+body .lms-foldernav-notif-dot { background: var(--ui-coral); }
+
+
+/* ── Notification tabs (Today / This week / Earlier / All) ──
+   Rendered by notif_render_list() (shared/helpers/notify.php); switching is
+   handled by assets/js/ui_notif.js. Sticky so the tabs stay reachable while
+   the list scrolls inside the dropdown. */
+body .ui-notif-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  gap: 6px;
+  padding: 0 14px 12px;
+  background: var(--ui-card);
+}
+body .ui-notif-tab {
+  flex: 1;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font-family: var(--ui-font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--ui-text-soft);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .12s ease, color .12s ease;
+}
+body .ui-notif-tab:hover { color: var(--ui-ink); }
+body .ui-notif-tab.active { background: var(--ui-ink); color: #FFFFFF; }
+body .ui-notif-tab:focus-visible { outline: 2px solid var(--ui-teal); outline-offset: 2px; }
+
+/* Rows hidden by the active tab (display:grid above would beat the UA [hidden] rule) */
+body a[data-group][hidden],
+body [data-notif-empty][hidden] { display: none; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PART iii-a — Empty states
+   The "nothing here yet" card for blank tables/lists — tinted icon disc,
+   heading, helper copy. Markup (per shared/modal.php reference sheet):
+     <div class="empty-state">
+       <div class="icon-wrap teal|coral|gold"><svg>…</svg></div>
+       <h3>…</h3>
+       <p>…</p>
+       [<button class="btn-teal">…</button>]
+     </div>
+   A page needing only a one-line message can skip icon-wrap/h3 and put text
+   straight in .empty-state (or its own <p>/<div>) — padding/border/type still
+   apply. Pages with their own ad-hoc `.empty-state` (padding/color) are
+   overridden by the `body`-prefixed rules below regardless of source order.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body .empty-state {
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  padding: 44px 32px;
+  border: 1px dashed var(--ui-border-strong);
+  border-radius: 20px;
+  background: var(--ui-card);
+  font-family: var(--ui-font-body);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ui-text-soft);
+  text-align: center;
+}
+body .empty-state .icon-wrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  animation: ui-empty-float 3.6s ease-in-out infinite;
+}
+body .empty-state .icon-wrap svg {
+  transform-origin: 50% 60%;
+  animation: ui-empty-tilt 3.6s ease-in-out infinite;
+}
+body .empty-state .icon-wrap.teal  { background: var(--ui-teal-tint);  box-shadow: 0 0 0 8px rgba(15, 111, 98, 0.06); }
+body .empty-state .icon-wrap.coral { background: var(--ui-coral-tint); box-shadow: 0 0 0 8px rgba(214, 80, 63, 0.06); }
+body .empty-state .icon-wrap.gold  { background: var(--ui-gold-tint);  box-shadow: 0 0 0 8px rgba(222, 154, 42, 0.08); }
+@keyframes ui-empty-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+@keyframes ui-empty-tilt {
+  0%, 100% { transform: rotate(-4deg); }
+  50%      { transform: rotate(4deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  body .empty-state .icon-wrap,
+  body .empty-state .icon-wrap svg { animation: none; }
+}
+body .empty-state h3 {
+  margin: 0 0 6px;
+  font-family: var(--ui-font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ui-ink);
+}
+body .empty-state p {
+  margin: 0 0 20px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ui-text-soft);
+}
+body .empty-state p:last-child { margin-bottom: 0; }
+body .empty-state button { padding: 10px 22px; }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PART iii — Profile dropdown menu
+   Student (also used by the LMS bar) and teacher share one shape:
+     .{role}-profile-dropdown > a.-item  +  a.-item.-logout
+   Only the menu card and its items are restyled. The trigger button, avatar,
+   chevron and the open/close behaviour (opacity/visibility/transform, driven
+   by .{role}-topbar-profile-wrapper.open) stay with the role stylesheets.
+   Icons are CSS-only; the divider sits above Logout as in the reference.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body .student-profile-dropdown, body .teacher-profile-dropdown {
+  min-width: 210px;
+  padding: 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+  background: var(--ui-card);
+  box-shadow: 0 16px 36px -14px rgba(19, 45, 40, 0.18);
+  font-family: var(--ui-font-body);
+}
+
+body .student-profile-dropdown-item, body .teacher-profile-dropdown-item {
+  position: relative;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ui-ink);
+  transition: background .12s ease;
+}
+body .student-profile-dropdown-item::before, body .teacher-profile-dropdown-item::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  background: var(--ui-glyph-user) center / 17px 17px no-repeat;
+}
+body .student-profile-dropdown-item:hover, body .teacher-profile-dropdown-item:hover {
+  background: var(--ui-hover);
+}
+body .student-profile-dropdown-item:focus-visible, body .teacher-profile-dropdown-item:focus-visible {
+  outline: 2px solid var(--ui-teal);
+  outline-offset: -2px;
+}
+
+/* Logout: danger colour, coral glyph, divider above it */
+body .student-profile-dropdown-logout, body .teacher-profile-dropdown-logout {
+  margin-top: 9px;
+  color: var(--ui-coral-hover);
+}
+body .student-profile-dropdown-logout::before, body .teacher-profile-dropdown-logout::before {
+  background-image: var(--ui-glyph-logout-coral);
+}
+body .student-profile-dropdown-logout::after, body .teacher-profile-dropdown-logout::after {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 4px;
+  right: 4px;
+  height: 1px;
+  background: var(--ui-border);
+}
+body .student-profile-dropdown-logout:hover, body .teacher-profile-dropdown-logout:hover {
+  background: var(--ui-coral-tint);
+}

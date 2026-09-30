@@ -59,12 +59,13 @@ require_once __DIR__ . '/../../../bootstrap.php';
             // Today's classes only — section_subjects.day is stored as Mon/Tue/.../Fri,
             // which matches PHP's date('D') output directly.
             $today_stmt = mysqli_prepare($conn, "
-                SELECT sub.subject_name, ss.start_time, ss.end_time, ss.room, CONCAT(t.given_name, ' ', t.family_name) AS teacher_name
-                FROM section_subjects ss
-                JOIN subjects sub ON sub.subject_id = ss.subject_id
+                SELECT sub.subject_name, m.start_time, m.end_time, m.room, CONCAT(t.given_name, ' ', t.family_name) AS teacher_name
+                FROM section_subject_meetings m
+                JOIN section_subjects ss ON ss.section_id = m.section_id AND ss.subject_id = m.subject_id AND ss.semester = m.semester
+                JOIN subjects sub ON sub.subject_id = m.subject_id
                 LEFT JOIN teachers t ON t.teacher_id = ss.teacher_id
-                WHERE ss.section_id = ? AND ss.day = ?
-                ORDER BY ss.start_time
+                WHERE m.section_id = ? AND m.day = ?
+                ORDER BY m.start_time
             ");
             $today_day = date('D');
             mysqli_stmt_bind_param($today_stmt, "is", $enrollment['section_id'], $today_day);
@@ -74,7 +75,7 @@ require_once __DIR__ . '/../../../bootstrap.php';
 
             // Which weekdays this section has any class at all — drives the
             // small dot under each day in the week strip below.
-            $days_stmt = mysqli_prepare($conn, "SELECT DISTINCT day FROM section_subjects WHERE section_id = ?");
+            $days_stmt = mysqli_prepare($conn, "SELECT DISTINCT day FROM section_subject_meetings WHERE section_id = ?");
             mysqli_stmt_bind_param($days_stmt, "i", $enrollment['section_id']);
             mysqli_stmt_execute($days_stmt);
             $days_result = mysqli_stmt_get_result($days_stmt);

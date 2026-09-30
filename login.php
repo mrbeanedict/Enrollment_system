@@ -130,7 +130,7 @@ $conn->close();
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,450;9..144,560;9..144,650&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/assets/css/css_staff.css') ?>">
+<link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_staff.css?v=<?= filemtime(__DIR__ . '/assets/css/css_staff.css') ?>">
 <style>
   /* ─── Login card: flat revised look (login_revised.php) ──────────────────
      Scoped to this page only — teacher_login.php and student_login.php
@@ -224,11 +224,11 @@ $conn->close();
 
 <div class="page-loader" id="pageLoader"><div class="page-loader-spinner"></div></div>
 
-<img class="bg-photo" src="assets/images/background/ui_landscape_clear.png" alt="Greenfield Senior High School">
+<img class="bg-photo" src="<?= APP_URL ?>/assets/images/background/ui_landscape_clear.png" alt="Greenfield Senior High School">
 <div class="bg-scrim"></div>
 
 <div class="landing<?= $modal_open ? ' hidden' : '' ?>" id="landing">
-  <div class="landing-mark"><img src="assets/images/log_ui.png" alt=""></div>
+  <div class="landing-mark"><img src="<?= APP_URL ?>/assets/images/log_ui.png" alt=""></div>
   <p class="landing-eyebrow">Greenfield Senior High School</p>
   <h1 class="landing-title">Welcome back</h1>
   <p class="landing-sub">Sign in to continue to the Enrollment Management System.</p>
@@ -242,7 +242,7 @@ $conn->close();
   </button>
 
   <div class="crest">
-    <img src="assets/images/log_ui.png" alt="Greenfield Senior High School">
+    <img src="<?= APP_URL ?>/assets/images/log_ui.png" alt="Greenfield Senior High School">
   </div>
 
   <p class="school-name">GREENFIELD SENIOR HIGH SCHOOL</p>

@@ -404,7 +404,7 @@ if ($course_line === '') { $course_line = 'Senior High School'; }
 
     <div class="student-content">
 
-      <?php if ($success): ?><div class="notice notice-success"><?= htmlspecialchars($success) ?></div><?php endif; ?>
+      <?php if ($success): ?><div class="notice notice-success" data-ui-toast><?= htmlspecialchars($success) ?></div><?php endif; ?>
       <?php if ($error):   ?><div class="notice notice-error"><?= htmlspecialchars($error) ?></div><?php endif; ?>
 
       <div class="account-layout">

@@ -74,10 +74,15 @@ if (!$isEnrolled) {
 $val = trim((string) ($_POST['value'] ?? ''));
 
 if ($val === '') {
-    $del = $conn->prepare("DELETE FROM gradebook_scores WHERE item_id=? AND student_id=?");
+    // Clearing the score keeps any written feedback (schema/submission_feedback.sql).
+    $del = $conn->prepare("DELETE FROM gradebook_scores WHERE item_id=? AND student_id=? AND feedback IS NULL");
     $del->bind_param('ii', $item_id, $student_id);
     $del->execute();
     $del->close();
+    $clr = $conn->prepare("UPDATE gradebook_scores SET raw_score = NULL WHERE item_id=? AND student_id=?");
+    $clr->bind_param('ii', $item_id, $student_id);
+    $clr->execute();
+    $clr->close();
     $score = null;
 } else {
     $score = (float) $val;

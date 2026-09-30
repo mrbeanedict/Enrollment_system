@@ -52,6 +52,7 @@ mysqli_stmt_close($stu_stmt);
 
 <!-- SweetAlert2 -->
 <script src="<?= APP_URL ?>/assets/js/sweetalert2.all.min.js"></script>
+<?php require_once __DIR__ . '/ui_modal_css.php'; ?>
 <script src="<?= APP_URL ?>/assets/js/tab_guard.js?v=<?= filemtime(__DIR__ . '/../../assets/js/tab_guard.js') ?>" data-token="<?= htmlspecialchars($_SESSION['sg_tab_token'] ?? '', ENT_QUOTES) ?>" data-storage-key="sg_tab_token_student" data-logout-url="<?= APP_URL ?>/roles/student/portal/student_logout"></script>
 
 <!-- Sidebar overlay -->
@@ -177,6 +178,7 @@ mysqli_stmt_close($stu_stmt);
         }
         Swal.fire({
           title: 'Log out?',
+          customClass: { popup: 'ui-swal-logout' },
           text: 'You will be returned to the login page.',
           icon: 'question',
           showCancelButton: true,
