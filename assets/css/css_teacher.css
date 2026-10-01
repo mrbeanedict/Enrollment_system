@@ -605,6 +605,16 @@ body.teacher-layout {
   color: #8A8A9A;
 }
 
+/* My Classes: each class panel renders its own roster table, so without a
+   fixed-width Status column it auto-sizes to that panel's own longest
+   student name — making Status land at a different x-position in every
+   panel instead of lining up down the page. Pinning it keeps every panel's
+   Status column the same width/position regardless of name length. */
+.data-table.roster-table th:last-child,
+.data-table.roster-table td:last-child {
+  width: 110px;
+}
+
 /* ─── Status badges ───────────────────────────────────────────────────────── */
 
 .badge {

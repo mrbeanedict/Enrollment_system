@@ -287,7 +287,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_section'])) {
     $strand       = trim($_POST['strand']        ?? '');
     $room         = trim($_POST['room']          ?? '');
     $capacity     = (int)($_POST['capacity']     ?? 0);
-    $school_year  = trim($_POST['school_year']   ?? '');
+    // New sections always go into the current school year — the modal shows
+    // it read-only, and the posted value is ignored so it can't be swapped.
+    $school_year  = $current_year;
     $used_rooms   = rooms_in_use($conn)[$school_year] ?? [];
 
     if (!$section_name || !$grade_level || !$strand || !$school_year || $capacity < 1) {
@@ -1443,12 +1445,11 @@ $filter_labels = [
             </select>
           </div>
           <div class="form-group">
-            <label for="f_school_year">School year <span class="req">*</span></label>
-            <select id="f_school_year" name="school_year" required>
-              <?php foreach ($valid_school_years as $sy): ?>
-                <option value="<?= $sy ?>" <?= ($_POST['school_year'] ?? '') === $sy ? 'selected' : '' ?>><?= $sy ?></option>
-              <?php endforeach; ?>
-            </select>
+            <label for="f_school_year">School year</label>
+            <!-- Fixed to the current school year (server enforces it too). -->
+            <input id="f_school_year" type="text" value="<?= htmlspecialchars($current_year) ?>" readonly
+                   tabindex="-1" style="background:#F5F5F7; color:#5A5A72; cursor:default;">
+            <p class="room-hint">New sections are added to the current school year.</p>
           </div>
           <div class="form-group">
             <label for="f_capacity">Capacity <span class="req">*</span></label>
@@ -1675,7 +1676,6 @@ $filter_labels = [
         }
       }
       roomEl.addEventListener('input', checkRoom);
-      syEl.addEventListener('change', checkRoom);
       checkRoom();
     }
 

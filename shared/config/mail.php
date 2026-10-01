@@ -78,6 +78,35 @@ HTML;
     return $html;
 }
 
+// The outstanding-requirements list for the Records "Request Follow-up"
+// reminder (records/document_review.php and records/accountabilities.php).
+// Each row needs requirement_name, is_required, status and rejection_reason;
+// a declined document carries the reason staff gave, so the student knows
+// what to fix before resubmitting. Returns [html <li> items, plain-text lines].
+function followup_items_markup(array $outstanding): array
+{
+    $html = '';
+    $text = [];
+    foreach ($outstanding as $r) {
+        $tag  = ((int) $r['is_required'] === 1) ? 'required' : 'optional';
+        $name = $r['requirement_name'];
+        $note = '';
+        if ($r['status'] === 'rejected') {
+            $reason = trim((string) ($r['rejection_reason'] ?? ''));
+            $note = $reason !== '' ? 'Declined — ' . $reason . '. Please resubmit.' : 'Declined. Please resubmit.';
+        } elseif ($r['status'] === 'pending_review') {
+            $note = 'Received — still being reviewed, nothing to do yet.';
+        }
+
+        $html .= '<li style="margin-bottom:6px;"><strong>' . htmlspecialchars($name) . '</strong> (' . $tag . ')'
+            . ($note !== '' ? '<br><span style="color:' . ($r['status'] === 'rejected' ? '#C0392B' : '#5A5A72') . ';font-size:12.5px;">'
+                . htmlspecialchars($note) . '</span>' : '')
+            . '</li>';
+        $text[] = '- ' . $name . ' (' . $tag . ')' . ($note !== '' ? ': ' . $note : '');
+    }
+    return [$html, implode("\n", $text)];
+}
+
 // Wraps a caller's message HTML (plain <p>/<ul> content, plus optional
 // email_highlight_box()/email_detail_rows() pieces) in the school's
 // branded email shell: a wordmark + subtitle header sitting directly on a

@@ -168,7 +168,7 @@ guard_password_change('teacher_change_password', 'teacher');
             <?php if (empty($cls['roster'])): ?>
               <p class="empty-state">No students currently enrolled in this section.</p>
             <?php else: ?>
-              <table class="data-table" style="margin-top:.5rem;">
+              <table class="data-table roster-table" style="margin-top:.5rem;">
                 <thead>
                   <tr><th>Student</th><th>Status</th></tr>
                 </thead>

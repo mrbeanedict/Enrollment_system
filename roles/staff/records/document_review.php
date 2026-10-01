@@ -9,8 +9,8 @@
 // this page; the moment a Save Changes submission leaves every required
 // (is_required=1) document 'submitted', admission (control number + email)
 // fires automatically in that same request — see dr_finalize_admission()
-// and its call sites below. The standalone approve_admit handler stays as a
-// manual fallback/re-trigger, not the primary path.
+// and its call site below. That's the only admit path; there's no separate
+// Approve & Admit action.
 session_start();
 require_once __DIR__ . '/../../../bootstrap.php';
 require_once __DIR__ . '/../../../config/mail.php';
@@ -40,11 +40,10 @@ $flash_type    = $_SESSION['dr_flash_type']    ?? 'info';
 unset($_SESSION['dr_flash'], $_SESSION['dr_flash_type']);
 
 // Applicable requirement rows for one enrollment (respecting the
-// public-JHS-only gate), shared by the approve_admit and send_followup
-// handlers below.
+// public-JHS-only gate), used by the send_followup handler below.
 function dr_load_requirements(mysqli $conn, int $enrollment_id, int $jhs_is_public): array {
     $stmt = $conn->prepare("
-        SELECT er.enrollment_requirement_id, er.requirement_type_id, er.status,
+        SELECT er.enrollment_requirement_id, er.requirement_type_id, er.status, er.rejection_reason,
                rt.requirement_name, rt.is_required, rt.applicable_to
         FROM enrollment_requirements er
         JOIN requirement_types rt ON rt.requirement_type_id = er.requirement_type_id
@@ -67,8 +66,7 @@ function dr_load_requirements(mysqli $conn, int $enrollment_id, int $jhs_is_publ
 // if one isn't already set. Caller must already be inside a transaction and
 // must have already verified every required document is submitted. Returns
 // the control number, or null if this student was already admitted (nothing
-// to do) — shared by save_requirements' auto-admit-on-save path and the
-// standalone approve_admit handler (kept as a manual fallback/re-trigger).
+// to do) — called by save_requirements' auto-admit-on-save path.
 function dr_finalize_admission(mysqli $conn, int $enrollment_id, int $student_id, ?string $current_control_number): ?string {
     $adm_stmt = $conn->prepare("
         UPDATE students SET admission_status = 'admitted'
@@ -173,8 +171,8 @@ function dr_send_admission_email(array $rec, string $controlNumber, array $follo
 // Every applicable requirement row is re-evaluated: unchanged rows are
 // skipped entirely, changed rows are updated, and if that leaves every
 // required (is_required=1) row 'submitted', admission (control number +
-// confirmation email) fires automatically in this same request — no separate
-// "Approve & Admit" click needed for the common case.
+// confirmation email) fires automatically in this same request. Save Changes
+// is the only admit path — the old separate "Approve & Admit" action is gone.
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_requirements'])) {
     $enrollment_id = (int) ($_POST['enrollment_id'] ?? 0);
     $posted_status = $_POST['requirements'] ?? [];
@@ -285,10 +283,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_requirements']))
                 ];
             }
 
+            // Would this save leave every required row 'submitted'? Checked
+            // up front so a save with no row changes can still admit a
+            // student whose documents were already all approved (e.g. from
+            // before auto-admit existed) — Save Changes is the only admit
+            // path now that the separate Approve & Admit button is gone.
+            $can_admit = $rec['admission_status'] !== 'admitted';
+            foreach ($rows as $r) {
+                $erid = (int) $r['enrollment_requirement_id'];
+                if ((int) $r['is_required'] === 1 && ($updates[$erid]['status'] ?? $r['status']) !== 'submitted') {
+                    $can_admit = false;
+                    break;
+                }
+            }
+
             if (!empty($save_errors)) {
                 $_SESSION['dr_flash'] = implode(' ', $save_errors);
                 $_SESSION['dr_flash_type'] = 'error';
-            } elseif (empty($updates)) {
+            } elseif (empty($updates) && !$can_admit) {
                 $_SESSION['dr_flash'] = 'No changes to save.';
                 $_SESSION['dr_flash_type'] = 'info';
             } else {
@@ -385,84 +397,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_requirements']))
     exit();
 }
 
-// ── Approve & admit ──────────────────────────────────────────────────────────
-// The one deliberate "this application is accepted" action. Gated strictly on
-// every required (is_required=1) document being 'submitted' — optional
-// documents (Good Moral, 2x2 Picture, VEC) never block this, they just get
-// listed in the admission email as still-outstanding follow-ups. Re-checked
-// server-side regardless of what the disabled button state in the browser
-// says, since that's just a UX hint, not a security boundary.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['approve_admit'])) {
-    $enrollment_id = (int) ($_POST['enrollment_id'] ?? 0);
-    $return_qs     = $_POST['return_qs'] ?? '';
-
-    $chk = $conn->prepare("
-        SELECT e.enrollment_id, e.control_number,
-               e.admission_grade_level AS grade_level, strd.strand_code AS strand, e.school_year,
-               st.student_id, st.family_name, st.given_name, st.email, se.is_public AS jhs_is_public,
-               st.admission_status
-        FROM enrollments e
-        JOIN students st ON st.student_id = e.student_id
-        LEFT JOIN student_education se ON se.student_id = st.student_id
-        JOIN strands strd ON strd.strand_id = e.admission_strand
-        WHERE e.enrollment_id = ? AND e.status = 'pending'
-        LIMIT 1
-    ");
-    $chk->bind_param('i', $enrollment_id);
-    $chk->execute();
-    $rec = $chk->get_result()->fetch_assoc();
-    $chk->close();
-
-    if (!$rec) {
-        $_SESSION['dr_flash'] = 'This record is no longer available. Please search again.';
-        $_SESSION['dr_flash_type'] = 'error';
-    } elseif ($rec['admission_status'] === 'admitted') {
-        $_SESSION['dr_flash'] = 'This student is already admitted.';
-        $_SESSION['dr_flash_type'] = 'info';
-    } else {
-        $reqs = dr_load_requirements($conn, $enrollment_id, (int) $rec['jhs_is_public']);
-        $required_incomplete = false;
-        $followup_items = [];
-        foreach ($reqs as $r) {
-            if ($r['status'] === 'submitted') continue;
-            if ((int) $r['is_required'] === 1) { $required_incomplete = true; break; }
-            $followup_items[] = $r['requirement_name'];
-        }
-
-        if ($required_incomplete) {
-            $_SESSION['dr_flash'] = 'All required documents must be submitted before admitting this student.';
-            $_SESSION['dr_flash_type'] = 'error';
-        } else {
-            mysqli_begin_transaction($conn);
-            try {
-                $new_cn = dr_finalize_admission($conn, $enrollment_id, (int) $rec['student_id'], $rec['control_number']);
-                if ($new_cn === null) {
-                    throw new Exception('ALREADY_ADMITTED');
-                }
-
-                // Student portal account creation happens later, at
-                // treasury/payment.php, once this student's first payment
-                // actually clears (not here — admission alone doesn't mean
-                // they've committed to enrolling).
-                mysqli_commit($conn);
-
-                $email_ok = dr_send_admission_email($rec, $new_cn, $followup_items);
-                $_SESSION['dr_flash'] = $email_ok
-                    ? 'Student admitted — control number ' . $new_cn . '. Confirmation email sent.'
-                    : 'Student admitted — control number ' . $new_cn . '. The confirmation email could not be sent; please follow up manually.';
-                $_SESSION['dr_flash_type'] = $email_ok ? 'success' : 'error';
-            } catch (Exception $e) {
-                mysqli_rollback($conn);
-                $_SESSION['dr_flash'] = 'Something went wrong while admitting this student. Please try again.';
-                $_SESSION['dr_flash_type'] = 'error';
-                error_log('[document_review.php] ' . $e->getMessage());
-            }
-        }
-    }
-    header("Location: document_review" . ($return_qs !== '' ? '?' . $return_qs : ''));
-    exit();
-}
-
 // ── Request follow-up ────────────────────────────────────────────────────────
 // A general "nudge the guardian" email about whatever's currently outstanding
 // — required or optional, before or after admission. Doesn't change any
@@ -499,16 +433,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_followup'])) {
         } else {
             try {
                 $mail = getMailer();
-                $items_html = '';
-                foreach ($outstanding as $r) {
-                    $tag = ((int) $r['is_required'] === 1) ? ' (required)' : ' (optional)';
-                    $items_html .= '<li>' . htmlspecialchars($r['requirement_name']) . htmlspecialchars($tag) . '</li>';
-                }
+                [$items_html, $items_text] = followup_items_markup($outstanding);
                 $bodyHtml = '<p>Hi ' . htmlspecialchars($rec['given_name']) . ', this is a reminder that the following admission requirements are still outstanding:</p>'
                     . '<ul>' . $items_html . '</ul>'
                     . '<p>Please submit or bring these to the Records Office at your earliest convenience.</p>';
-                $altBody = "The following admission requirements are still outstanding:\n"
-                    . implode("\n", array_map(fn($r) => '- ' . $r['requirement_name'], $outstanding));
+                $altBody = "The following admission requirements are still outstanding:\n" . $items_text;
 
                 send_branded_email(
                     $mail,
@@ -900,23 +829,39 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
     .req-review-table tr.no-border td { border-bottom:none; }
     .req-name { font-weight:500; color:#1A1A2E; }
     .req-status-cell { display:flex; flex-direction:column; align-items:flex-start; gap:6px; width:190px; }
-    /* Grid instead of flex — two equal columns regardless of "Approve" vs
-       "Decline" content width. Flex-basis alone still let intrinsic content
-       widen a pill past its share; grid columns are a hard equal split. */
-    .req-decision { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; }
-    .req-radio {
-      display:inline-flex; align-items:center; justify-content:center; gap:5px;
-      width:100%; min-width:0; box-sizing:border-box;
-      font-size:12px; font-weight:600;
-      cursor:pointer; padding:4px 9px; border-radius:20px; border:0.5px solid #D4D4E0;
-      background:#FAFAFC; color:#5A5A72; user-select:none;
-      transition:background-color .15s, border-color .15s, color .15s;
+    /* Approve / Decline — the same segmented-pill shape as the Online /
+       In person toggle below. The radio inside each label is still the
+       real form control, just visually hidden; clicking the active side
+       again clears the decision (see onDecisionClick). */
+    .req-decision {
+      display:inline-flex; border:0.5px solid #D4D4E0; border-radius:20px; padding:2px; background:#FAFAFC;
     }
-    .req-radio input[type="radio"] { accent-color:currentColor; margin:0; cursor:pointer; width:14px; height:14px; flex-shrink:0; }
-    .req-radio-approve.is-checked { background:#EAF3EE; border-color:#BFE0CD; color:#1E4D3B; }
-    .req-radio-reject.is-checked { background:#FDF0EF; border-color:#F0B8B2; color:#C0392B; }
+    .req-radio {
+      position:relative; display:inline-flex; align-items:center; margin:0; line-height:1.3;
+      font-size:11px; font-weight:600; color:#8A8A9A;
+      padding:4px 12px; border-radius:20px; cursor:pointer; user-select:none;
+      transition:background-color .15s, color .15s;
+    }
+    .req-radio input[type="radio"] { position:absolute; opacity:0; width:1px; height:1px; margin:0; pointer-events:none; }
+    .req-radio:has(input:focus-visible) { outline:2px solid #1E4D3B; outline-offset:1px; }
+    .req-radio:not(.is-checked):not(.req-radio-disabled):hover { color:#1A1A2E; }
+    .req-radio-approve.is-checked { background:#1E4D3B; color:#fff; }
+    .req-radio-reject.is-checked { background:#C0392B; color:#fff; }
     .req-radio-disabled { opacity:0.45; cursor:not-allowed; }
-    .req-radio-disabled input { cursor:not-allowed; }
+
+    /* "Mark all seen in person" — flips every row that still has the
+       Online / In person choice to In person and ticks it. */
+    .req-mark-all-wrap { display:flex; justify-content:flex-end; margin:0 0 8px; }
+    /* css_staff.css gives every <label> top/bottom margins (and drops the top
+       one on :first-of-type), which made the two halves of a pill toggle
+       different heights — these pill labels opt out. */
+    .req-radio, .req-mark-all, .req-manual-confirm { margin:0; }
+    .req-mark-all {
+      display:inline-flex; align-items:center; gap:6px;
+      font-size:11.5px; font-weight:600; color:#A9720A; cursor:pointer; user-select:none;
+      background:#FEF6E8; border:0.5px solid #F3D896; border-radius:20px; padding:5px 14px;
+    }
+    .req-mark-all input[type="checkbox"] { margin:0; accent-color:#1E4D3B; cursor:pointer; }
 
     /* Full-row reason field — a second <tr> spanning all three columns,
        shown only while a Decline decision is active on that requirement.
@@ -1012,22 +957,29 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
       display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
       margin-top:1.25rem; padding-top:1rem; border-top:0.5px solid #EBEBF0;
     }
-    .dr-modal-footer .btn-primary, .dr-modal-footer .btn-secondary,
-    .dr-modal-footer .btn-followup, .dr-modal-footer .btn-admit {
+    .dr-modal-footer .btn-followup, .dr-modal-footer .btn-save {
       height:34px; padding:0 16px; font-size:12.5px;
     }
-    .dr-footer-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .dr-footer-hint { font-size:11.5px; color:#5A5A72; }
+    .dr-footer-actions { display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; }
 
+    /* Filled tint + stronger border so it reads as a live button — the old
+       white-with-faint-border version looked disabled even when it wasn't. */
     .btn-followup {
-      background:#fff; color:#A9720A; border:1px solid #F3D896; border-radius:8px;
+      display:inline-flex; align-items:center; gap:6px;
+      background:#FEF6E8; color:#8A5A00; border:1px solid #E9C46A; border-radius:8px;
       font-weight:600; cursor:pointer; font-family:inherit;
+      transition:background-color .15s, border-color .15s;
     }
-    .btn-followup:hover:not(:disabled) { background:#FEF6E8; }
-    .btn-admit {
+    .btn-followup svg { width:14px; height:14px; flex-shrink:0; }
+    .btn-followup:hover:not(:disabled) { background:#FCEBC8; border-color:#D9A93A; }
+    /* Save Changes — took over the old Approve & Admit button's look and
+       spot, since saving is now what admits the student. */
+    .btn-save {
       background:var(--brand-primary); color:#fff; border:none; border-radius:8px;
       font-weight:600; cursor:pointer; font-family:inherit;
     }
-    .btn-admit:hover:not(:disabled) { background:#163829; }
+    .btn-save:hover:not(:disabled) { background:#163829; }
     .dr-modal-footer button:disabled {
       opacity:0.55; cursor:not-allowed; pointer-events:auto;
     }
@@ -1313,10 +1265,10 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
         // than show a pair of pills that can't be used.
         control = r.file_path
           ? '<div class="req-decision">' +
-              '<label class="req-radio req-radio-approve">' +
+              '<label class="req-radio req-radio-approve" onclick="onDecisionClick(event, this, ' + rid + ')">' +
                 '<input type="radio" name="requirements[' + rid + ']" value="submitted" onchange="onDecisionChange(this, ' + rid + ')"><span>Approve</span>' +
               '</label>' +
-              '<label class="req-radio req-radio-reject">' +
+              '<label class="req-radio req-radio-reject" onclick="onDecisionClick(event, this, ' + rid + ')">' +
                 '<input type="radio" name="requirements[' + rid + ']" value="rejected" onchange="onDecisionChange(this, ' + rid + ')"><span>Decline</span>' +
               '</label>' +
             '</div>'
@@ -1339,16 +1291,16 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
 
         control =
           rejectionNote +
-          '<div class="req-verify-toggle" role="group">' +
+          '<div class="req-verify-toggle" role="group" data-rid="' + rid + '">' +
             '<button type="button" class="active" data-mode="online" onclick="setVerifyMode(' + rid + ', \'online\', this)">Online</button>' +
             '<button type="button" data-mode="person" onclick="setVerifyMode(' + rid + ', \'person\', this)">In person</button>' +
           '</div>' +
           '<div id="verify-online-' + rid + '">' +
             '<div class="req-decision" id="decision-' + rid + '" style="display:none;">' +
-              '<label class="req-radio req-radio-approve" id="approve-label-' + rid + '">' +
+              '<label class="req-radio req-radio-approve" onclick="onDecisionClick(event, this, ' + rid + ')" id="approve-label-' + rid + '">' +
                 '<input type="radio" name="requirements[' + rid + ']" value="submitted" onchange="onDecisionChange(this, ' + rid + ')"><span>Approve</span>' +
               '</label>' +
-              '<label class="req-radio req-radio-reject" id="reject-label-' + rid + '">' +
+              '<label class="req-radio req-radio-reject" onclick="onDecisionClick(event, this, ' + rid + ')" id="reject-label-' + rid + '">' +
                 '<input type="radio" name="requirements[' + rid + ']" value="rejected" onchange="onDecisionChange(this, ' + rid + ')"><span>Decline</span>' +
               '</label>' +
             '</div>' +
@@ -1391,11 +1343,24 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
       );
     }).join('');
 
+    // Only rows that still offer the Online / In person choice can be bulk-
+    // marked; already-approved or awaiting-review rows are left alone.
+    const canMarkAll = requirements.some(r => r.status === 'pending' || r.status === 'rejected');
+    const markAll = canMarkAll
+      ? '<div class="req-mark-all-wrap"><label class="req-mark-all">' +
+          '<input type="checkbox" id="markAllPerson" onchange="markAllInPerson(this.checked)"> Mark all as seen in person' +
+        '</label></div>'
+      : '';
+
     return (
       '<div class="pa-modal-section-title">Document Requirements</div>' +
       '<form method="POST" action="document_review" id="reqSaveForm" enctype="multipart/form-data">' +
         '<input type="hidden" name="enrollment_id" value="' + enrollmentId + '">' +
         '<input type="hidden" name="return_qs" value="' + esc(returnQs) + '">' +
+        // A field, not the submit button's name — the admit confirmation
+        // re-submits via form.submit(), which drops the clicked button.
+        '<input type="hidden" name="save_requirements" value="1">' +
+        markAll +
         '<div class="req-table-wrap">' +
           '<table class="req-review-table">' +
             '<thead><tr><th>Requirement</th><th>Verification</th><th>File</th></tr></thead>' +
@@ -1406,29 +1371,61 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
     );
   }
 
-  function onDecisionChange(radio, rid) {
-    const group = radio.closest('.req-decision');
+  // Sets (or with value=null, clears) the Approve/Decline toggle for one
+  // requirement. Rows with nothing on file also carry a hidden
+  // requirements[rid] field placed AFTER the radios — PHP keeps the last
+  // value for a repeated name, so that field is what the server actually
+  // reads and must mirror the toggle (left blank it silently discarded
+  // every Online approve/decline).
+  function setDecision(rid, value, group) {
     if (group) {
-      group.querySelectorAll('.req-radio').forEach(l => l.classList.toggle('is-checked', l.querySelector('input') === radio));
+      group.querySelectorAll('.req-radio').forEach(function (l) {
+        const input = l.querySelector('input');
+        input.checked = value !== null && input.value === value;
+        l.classList.toggle('is-checked', input.checked);
+      });
     }
+    const hidden = document.getElementById('hidden-' + rid);
+    if (hidden) hidden.value = value || '';
+
+    // Decline keeps its reason field: it opens whenever Decline is the
+    // active side, and whatever was typed survives toggling away and back.
     const reasonRow = document.getElementById('reason-row-' + rid);
     const reasonInput = document.getElementById('reason-' + rid);
-    if (!reasonRow || !reasonInput) return;
-    const rejecting = radio.value === 'rejected';
-    reasonRow.classList.toggle('show', rejecting);
-    if (rejecting) reasonInput.setAttribute('required', 'required');
-    else reasonInput.removeAttribute('required');
+    if (reasonRow && reasonInput) {
+      const rejecting = value === 'rejected';
+      reasonRow.classList.toggle('show', rejecting);
+      if (rejecting) reasonInput.setAttribute('required', 'required');
+      else reasonInput.removeAttribute('required');
+      if (rejecting) reasonInput.focus();
 
-    // The row above the reason field drops its own border while the
-    // field is open, so no rule sits directly above the textbox.
-    const parentRow = document.getElementById('req-row-' + rid);
-    if (parentRow) parentRow.classList.toggle('no-border', rejecting);
+      // The row above the reason field drops its own border while the
+      // field is open, so no rule sits directly above the textbox.
+      const parentRow = document.getElementById('req-row-' + rid);
+      if (parentRow) parentRow.classList.toggle('no-border', rejecting);
+    }
+    onReqFormChanged();
+  }
+
+  // Keyboard path (arrow keys move between the visually hidden radios).
+  function onDecisionChange(radio, rid) {
+    setDecision(rid, radio.value, radio.closest('.req-decision'));
+  }
+
+  // Mouse path — handled manually so clicking the side that's already
+  // active clears the decision instead of doing nothing.
+  function onDecisionClick(e, label, rid) {
+    e.preventDefault();
+    const input = label.querySelector('input');
+    if (!input || input.disabled) return;
+    setDecision(rid, input.checked ? null : input.value, label.closest('.req-decision'));
   }
 
   function onManualCheck(checkbox, rid) {
     const hidden = document.getElementById('hidden-' + rid);
-    if (!hidden) return;
-    hidden.value = checkbox.checked ? 'submitted' : '';
+    if (hidden) hidden.value = checkbox.checked ? 'submitted' : '';
+    syncMarkAll();
+    onReqFormChanged();
   }
 
   // Toggles which verification path is visible for a requirement that has
@@ -1443,7 +1440,6 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
     const onlineFile   = document.getElementById('file-online-' + rid);
     const personFile   = document.getElementById('file-person-' + rid);
     const checkbox     = document.getElementById('checkbox-' + rid);
-    const hidden        = document.getElementById('hidden-' + rid);
 
     const isOnline = mode === 'online';
     if (onlineVerify) onlineVerify.style.display = isOnline ? '' : 'none';
@@ -1451,12 +1447,44 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
     if (onlineFile) onlineFile.style.display = isOnline ? '' : 'none';
     if (personFile) personFile.style.display = isOnline ? 'none' : '';
 
-    // Switching away from "In person" un-checks it so a stray checked box
-    // doesn't silently mark the item Submitted from a hidden panel.
-    if (isOnline && checkbox && checkbox.checked) {
-      checkbox.checked = false;
-      if (hidden) hidden.value = '';
+    // Only one path's choice may count — switching clears the other one, so
+    // a stray choice can't be submitted from a panel that's now hidden.
+    if (isOnline) {
+      if (checkbox && checkbox.checked) {
+        checkbox.checked = false;
+        onManualCheck(checkbox, rid);
+      }
+    } else {
+      const decision = document.getElementById('decision-' + rid);
+      if (decision) setDecision(rid, null, decision);
     }
+    syncMarkAll();
+  }
+
+  // "Mark all as seen in person" — every row that still offers the
+  // Online / In person choice is switched to In person and ticked
+  // (unticking reverses it back to Online).
+  function markAllInPerson(checked) {
+    document.querySelectorAll('#reqSaveForm .req-verify-toggle').forEach(function (toggle) {
+      const rid = toggle.dataset.rid;
+      const btn = toggle.querySelector('button[data-mode="' + (checked ? 'person' : 'online') + '"]');
+      if (btn) setVerifyMode(rid, checked ? 'person' : 'online', btn);
+      const checkbox = document.getElementById('checkbox-' + rid);
+      if (checkbox && checkbox.checked !== checked) {
+        checkbox.checked = checked;
+        onManualCheck(checkbox, rid);
+      }
+    });
+    syncMarkAll();
+  }
+
+  function syncMarkAll() {
+    const master = document.getElementById('markAllPerson');
+    if (!master) return;
+    const boxes = Array.from(document.querySelectorAll('#reqSaveForm .req-manual-checkbox'));
+    const n = boxes.filter(b => b.checked).length;
+    master.checked = boxes.length > 0 && n === boxes.length;
+    master.indeterminate = n > 0 && n < boxes.length;
   }
 
   function refreshApproveGate(rid, hasFile) {
@@ -1495,7 +1523,11 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
     if (hidden) hidden.value = '';
     const note = document.getElementById('resubmit-note-' + rid);
     if (note) note.style.display = 'none';
+    // No file means nothing to approve or decline any more.
+    const decision = document.getElementById('decision-' + rid);
+    if (decision) setDecision(rid, null, decision);
     refreshApproveGate(rid, false);
+    onReqFormChanged();
   }
 
   function onDropzoneFileChange(rid, file) {
@@ -1522,6 +1554,7 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
       } else {
         refreshApproveGate(rid, true);
       }
+      onReqFormChanged();
     }
 
     if (typeof scoreImageSharpness !== 'function' || !file.type.startsWith('image/')) {
@@ -1557,37 +1590,58 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
     return { cls: 'status-incomplete', label: 'Incomplete' };
   }
 
-  // Approve & Admit only ever looks at is_required=1 rows; optional rows
-  // (Good Moral, 2x2 Picture, VEC) never block it — they just surface here so
-  // Request Follow-up can be offered regardless of which bucket they're in.
-  function admitReadiness(a) {
-    const reqs = a.requirements || [];
-    const requiredComplete = reqs.filter(r => Number(r.is_required) === 1).every(r => r.status === 'submitted');
-    const hasOutstanding = reqs.some(r => r.status !== 'submitted');
-    return { requiredComplete, hasOutstanding };
+  function hasOutstanding(a) {
+    return (a.requirements || []).some(r => r.status !== 'submitted');
+  }
+
+  // The applicant whose modal is open — read by willAdmit() as the form
+  // changes.
+  let currentApplicant = null;
+
+  // What the server will read for requirements[rid] (PHP keeps the last
+  // value of a repeated name), or '' when nothing is chosen.
+  function postedStatus(rid) {
+    const form = document.getElementById('reqSaveForm');
+    if (!form) return '';
+    const vals = new FormData(form).getAll('requirements[' + rid + ']');
+    return vals.length ? vals[vals.length - 1] : '';
+  }
+
+  // Mirrors the save handler's $can_admit: saving admits the student when
+  // every required (*) row ends up 'submitted' — already approved, or set
+  // to Approve / Seen in person in this form. Optional rows never block it.
+  function willAdmit() {
+    const a = currentApplicant;
+    if (!a || a.admission_status === 'admitted') return false;
+    return (a.requirements || [])
+      .filter(r => Number(r.is_required) === 1)
+      .every(r => r.status === 'submitted' || postedStatus(r.requirement_type_id) === 'submitted');
+  }
+
+  // Keeps the Save button honest about what it's about to do.
+  function onReqFormChanged() {
+    const btn = document.getElementById('saveBtn');
+    if (btn) btn.textContent = willAdmit() ? 'Save & Admit' : 'Save Changes';
   }
 
   function buildFullName(a) {
     return [a.family_name + ',', a.given_name, a.middle_name, a.suffix].filter(Boolean).join(' ');
   }
 
+  const mailIconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="m22 6-10 7L2 6"/></svg>';
+
   function openModal(enrollmentId) {
     const a = applicantData[enrollmentId];
     if (!a) return;
+    currentApplicant = a;
 
     const fullName = buildFullName(a);
     const status = computeStatus(a);
-    const ready = admitReadiness(a);
     const isAdmitted = a.admission_status === 'admitted';
 
-    const admitBtn = isAdmitted
-      ? '<button type="button" class="btn-admit" disabled title="Already admitted">Admitted</button>'
-      : '<button type="button" class="btn-admit" onclick="confirmApprove(' + enrollmentId + ')"' +
-          (ready.requiredComplete ? '' : ' disabled title="All required documents must be submitted first"') +
-          '>Approve &amp; Admit</button>';
     const followupBtn = '<button type="button" class="btn-followup" onclick="confirmFollowup(' + enrollmentId + ')"' +
-      (ready.hasOutstanding ? '' : ' disabled title="Nothing outstanding for this applicant"') +
-      '>Request Follow-up</button>';
+      (hasOutstanding(a) ? '' : ' disabled title="Nothing outstanding for this applicant"') +
+      '>' + mailIconSvg + 'Request Follow-up</button>';
 
     document.getElementById('paModal').innerHTML = `
       <div class="pa-modal-head">
@@ -1602,16 +1656,17 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
       ${renderRequirementsTab(enrollmentId, a.requirements)}
 
       <div class="dr-modal-footer">
-        <button type="submit" form="reqSaveForm" name="save_requirements" class="btn-secondary">Save Changes</button>
+        ${isAdmitted ? '' : '<span class="dr-footer-hint">Saving with every <span class="req">*</span> document approved admits the student.</span>'}
         <div class="dr-footer-actions">
           ${followupBtn}
-          ${admitBtn}
+          <button type="submit" form="reqSaveForm" class="btn-save" id="saveBtn">Save Changes</button>
         </div>
       </div>
     `;
     document.getElementById('paModalOverlay').classList.add('open');
     checkUploadedImagesForBlur(a.requirements);
     guardBlurrySubmit();
+    onReqFormChanged();
   }
 
   // Checks already-uploaded images (not PDFs, which can't be meaningfully
@@ -1679,6 +1734,28 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
         } else {
           alert('One of the documents is flagged as possibly blurry — please reject it instead of approving.');
         }
+        return;
+      }
+
+      // This save will admit the student (control number + confirmation
+      // email) — confirm first, as the old Approve & Admit button did.
+      if (willAdmit()) {
+        e.preventDefault();
+        const fullName = buildFullName(currentApplicant);
+        Swal.fire({
+          title: 'Save & admit this student?',
+          html: '<p style="margin:0;font-size:13px;color:#5A5A72;text-align:left;">' +
+            'Every required document is approved, so saving assigns a control number to <strong>' + esc(fullName) +
+            '</strong>, marks them admitted, and emails their confirmation.</p>',
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#1E4D3B',
+          cancelButtonColor: '#aaa',
+          confirmButtonText: 'Save & Admit',
+          cancelButtonText: 'Cancel',
+        }).then(function (result) {
+          if (result.isConfirmed) HTMLFormElement.prototype.submit.call(form);
+        });
       }
     });
   }
@@ -1701,24 +1778,6 @@ foreach ($applicants as $a) $modal_data[$a['enrollment_id']] = $a;
       '<input type="hidden" name="' + action + '" value="1">';
     document.body.appendChild(form);
     form.submit();
-  }
-
-  function confirmApprove(enrollmentId) {
-    const fullName = buildFullName(applicantData[enrollmentId]);
-    Swal.fire({
-      title: 'Approve & admit this student?',
-      html: '<p style="margin:0;font-size:13px;color:#5A5A72;text-align:left;">' +
-        'This assigns a control number to <strong>' + esc(fullName) + '</strong>, marks them admitted, and emails their confirmation.' +
-        '</p>',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#1E4D3B',
-      cancelButtonColor: '#aaa',
-      confirmButtonText: 'Approve & Admit',
-      cancelButtonText: 'Cancel',
-    }).then((result) => {
-      if (result.isConfirmed) postAction('approve_admit', enrollmentId);
-    });
   }
 
   function confirmFollowup(enrollmentId) {

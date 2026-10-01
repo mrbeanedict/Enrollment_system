@@ -7,10 +7,12 @@
 // number to carry in that flash — Records assigns one later, once a
 // student's requirements are fully verified and they're marked admitted
 // (see records/document_review.php), not here. This session must NEVER be
-// used to check $_SESSION['user_id'] like the staff pages do, and no other
-// application field data is ever stored in the session — every other field
-// is only echoed back from $_POST within the same request (old() helper
-// below).
+// used to check $_SESSION['user_id'] like the staff pages do. The only
+// application data kept in the session is adm_staged — pointers to
+// requirement files that already passed validation, so a bounced POST
+// doesn't lose them (see "Staged requirement uploads" below). Every other
+// field is only echoed back from $_POST within the same request (old()
+// helper below).
 session_start();
 require_once __DIR__ . '/../../../bootstrap.php';
 require_once __DIR__ . '/../../../config/mail.php';
@@ -168,6 +170,49 @@ if (empty($_SESSION['adm_token'])) {
 
 if ($blocked_silently) {
     $errors['_db'] = 'Something went wrong while submitting your application. Please reload the page and try again.';
+}
+
+// ── Staged requirement uploads ─────────────────────────────────────────────
+// A browser can never re-populate an <input type="file"> after a round-trip,
+// so any POST that bounced on a validation error used to silently drop every
+// document the applicant had attached. Instead, each file that passes its own
+// checks is moved into a staging folder right away (under requirement_
+// documents/, so it inherits that folder's deny-all .htaccess), and only its
+// metadata is kept in $_SESSION['adm_staged'][requirement_type_id]. The next
+// render shows it as already attached; the next POST reuses it unless the
+// applicant replaced it, removed it, or switched to "submit later".
+const ADM_STAGE_DIR = __DIR__ . '/../../../uploads/requirement_documents/_staged/';
+const ADM_STAGE_TTL = 7200; // seconds a staged file survives without a final submit
+
+// Returns the session's staged entry for $rid, or null — dropping the entry
+// if its file has expired or disappeared from disk.
+function adm_staged_file(int $rid): ?array {
+    $s = $_SESSION['adm_staged'][$rid] ?? null;
+    if (!$s) return null;
+    if (time() - (int) $s['at'] > ADM_STAGE_TTL || !is_file(ADM_STAGE_DIR . $s['file'])) {
+        adm_discard_staged($rid);
+        return null;
+    }
+    return $s;
+}
+
+function adm_discard_staged(int $rid): void {
+    $s = $_SESSION['adm_staged'][$rid] ?? null;
+    if ($s && is_file(ADM_STAGE_DIR . $s['file'])) @unlink(ADM_STAGE_DIR . $s['file']);
+    unset($_SESSION['adm_staged'][$rid]);
+}
+
+function adm_discard_all_staged(): void {
+    foreach (array_keys($_SESSION['adm_staged'] ?? []) as $rid) adm_discard_staged((int) $rid);
+    unset($_SESSION['adm_staged']);
+}
+
+// Opportunistic cleanup of files abandoned by other sessions (tab closed
+// mid-application) — anything older than the TTL can no longer be claimed.
+function adm_sweep_stage_dir(): void {
+    foreach (glob(ADM_STAGE_DIR . 'stage_*') ?: [] as $path) {
+        if (is_file($path) && time() - filemtime($path) > ADM_STAGE_TTL) @unlink($path);
+    }
 }
 
 
@@ -407,7 +452,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $admission_open && !$blocked_silent
     // IS a hard error — never silently dropped, since that would mislead
     // the applicant into thinking it was received.
     $applicable_req_types  = load_requirement_types_for($conn, $jhs_public);
-    $uploaded_requirements = []; // requirement_type_id => [tmp_name, ext, original_name]
+    adm_sweep_stage_dir();
 
     foreach ($applicable_req_types as $rt) {
         $rid         = (int) $rt['requirement_type_id'];
@@ -415,6 +460,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $admission_open && !$blocked_silent
 
         $file_name     = $_FILES['requirements']['name'][$rid]  ?? '';
         $file_error    = $_FILES['requirements']['error'][$rid] ?? UPLOAD_ERR_NO_FILE;
+        $has_new_file  = !($file_error === UPLOAD_ERR_NO_FILE || $file_name === '');
         // "Submit later" is a per-requirement acknowledgement, not a file —
         // uploads themselves stay optional (see note above), but the
         // applicant must make an explicit choice for every applicable
@@ -423,7 +469,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $admission_open && !$blocked_silent
         // being silently skipped with no signal either way.
         $later_checked = isset($_POST['requirements_later'][$rid]);
 
-        if ($file_error === UPLOAD_ERR_NO_FILE || $file_name === '') {
+        // A file staged by an earlier attempt is only carried forward while
+        // the form still posts requirements_keep[rid] for it — the JS drops
+        // that flag when the applicant removes it or picks "submit later",
+        // and a freshly attached file always replaces it.
+        if (isset($_SESSION['adm_staged'][$rid])
+            && ($has_new_file || $later_checked || !isset($_POST['requirements_keep'][$rid]))) {
+            adm_discard_staged($rid);
+        }
+
+        if (!$has_new_file) {
+            if (adm_staged_file($rid)) continue; // kept from an earlier attempt
             if (!$later_checked) {
                 $errors['requirements'][$rid] = 'Attach this document, or check "I\'ll submit this in person later."';
             }
@@ -453,10 +509,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $admission_open && !$blocked_silent
             continue;
         }
 
-        $uploaded_requirements[$rid] = [
-            'tmp_name'      => $_FILES['requirements']['tmp_name'][$rid],
+        // Passed every check — stage it now, so it survives this request
+        // even if some other field sends the form back for corrections.
+        $staged_name = 'stage_' . bin2hex(random_bytes(16)) . '.' . $ext;
+        if ((!is_dir(ADM_STAGE_DIR) && !@mkdir(ADM_STAGE_DIR, 0755, true))
+            || !move_uploaded_file($_FILES['requirements']['tmp_name'][$rid], ADM_STAGE_DIR . $staged_name)) {
+            error_log('[admission.php] STAGE_UPLOAD_FAILED: requirement_type_id=' . $rid);
+            $errors['requirements'][$rid] = 'There was a problem uploading this file. Please try again.';
+            continue;
+        }
+        $_SESSION['adm_staged'][$rid] = [
+            'file'          => $staged_name,
             'ext'           => $ext,
             'original_name' => $file_name,
+            'size'          => $file_size,
+            'at'            => time(),
         ];
     }
 
@@ -533,7 +600,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $admission_open && !$blocked_silent
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stu_stmt = $conn->prepare($q1);
             $stu_stmt->bind_param(
-                'sssssssssiis',
+                'ssssssssssis',
                 $family_name, $given_name, $middle_name_val, $suffix_val,
                 $birth_date, $sex, $civil_status, $nationality,
                 $email, $student_mobile_val,
@@ -652,12 +719,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $admission_open && !$blocked_silent
                     $orig_name_val    = null;
                     $submitted_at_val = null;
 
-                    if (isset($uploaded_requirements[$rid])) {
-                        $up          = $uploaded_requirements[$rid];
+                    $up = adm_staged_file($rid);
+                    if ($up) {
                         $stored_name = uniqid('reqdoc_', true) . '.' . $up['ext'];
                         $dest        = __DIR__ . '/../../../uploads/requirement_documents/' . $stored_name;
 
-                        if (!move_uploaded_file($up['tmp_name'], $dest)) {
+                        // copy(), not rename() — if this transaction rolls
+                        // back, the staged original must still be there for
+                        // the applicant's next attempt.
+                        if (!copy(ADM_STAGE_DIR . $up['file'], $dest)) {
                             throw new Exception('MOVE_UPLOAD_FAILED: requirement_type_id=' . $rid);
                         }
                         $moved_files[]    = $dest;
@@ -678,6 +748,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $admission_open && !$blocked_silent
             }
 
             mysqli_commit($conn);
+            adm_discard_all_staged();
 
             // Successful submission — start the cooldown window and burn the
             // token so this exact POST can't be replayed.
@@ -716,6 +787,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $admission_open && !$blocked_silent
 // ── Post-submit success flash (Post/Redirect/Get) ───────────────────────────
 if (isset($_GET['new'])) {
     unset($_SESSION['adm_success']); // "Submit another application" link
+    adm_discard_all_staged();
 }
 // Gating on $admission_open too: if an admin closes admissions in the
 // narrow window between a student's submit and their redirected GET, the
@@ -1271,7 +1343,7 @@ function old(string $key, string $default = ''): string {
           <div class="adm-field-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.3"/></svg>
             <textarea id="guardianAddress" name="guardianAddress" rows="2" maxlength="100"
-                      placeholder="House No., Street, Subdivision/Sitio"
+                      placeholder="House No., Street, Subdivision"
                       class="<?= isset($errors['guardianAddress']) ? 'input-error' : '' ?>"><?= old('guardianAddress') ?></textarea>
           </div>
           <?php if (isset($errors['guardianAddress'])): ?><span class="field-error"><?= $errors['guardianAddress'] ?></span><?php endif; ?>
@@ -1316,11 +1388,22 @@ function old(string $key, string $default = ''): string {
         $hidden       = ($req['applicable_to'] === 'public_jhs_only' && !isset($old['jhsIsPublic']));
         $later_checked = isset($old['requirements_later'][$rid]);
         $req_has_error = isset($errors['requirements'][$rid]);
+        // A file kept from an earlier attempt (see "Staged requirement
+        // uploads") — JS paints it as an already-attached file card.
+        $staged        = $later_checked ? null : adm_staged_file($rid);
         ?>
 
         <div class="upload-group<?= $req_has_error ? ' upload-group-error' : '' ?><?= $later_checked ? ' is-later' : '' ?>"
              <?= $req['applicable_to'] === 'public_jhs_only' ? 'data-public-only' : '' ?>
+             <?php if ($staged): ?>
+             data-staged-name="<?= htmlspecialchars($staged['original_name']) ?>"
+             data-staged-size="<?= (int) $staged['size'] ?>"
+             <?php endif; ?>
              <?= $hidden ? 'style="display:none;"' : '' ?>>
+
+            <?php if ($staged): ?>
+                <input type="hidden" class="upload-keep-input" name="requirements_keep[<?= $rid ?>]" value="1">
+            <?php endif; ?>
 
             <!-- Collapses away entirely once "submit later" is checked below —
                  the label + whole upload-control fold into ~0 height so a
@@ -1562,7 +1645,38 @@ function old(string $key, string $default = ''): string {
     const fileActions   = card.querySelector('.upload-file-actions');
     const changeBtn     = card.querySelector('.upload-change-btn');
     const removeBtn     = card.querySelector('.upload-remove-btn');
+    const keepInput     = group.querySelector('.upload-keep-input');
     let progressTimer   = null;
+
+    // A file the server kept from an earlier attempt (requirements_keep[]
+    // is posted while keepInput stays enabled). Disabling it is how this
+    // group tells the server to discard that file.
+    function hasKeptFile() { return !!(keepInput && !keepInput.disabled); }
+    function dropKeptFile() { if (keepInput) keepInput.disabled = true; }
+
+    function showKeptFile() {
+      if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
+      const name = group.dataset.stagedName || '';
+      const meta = fileIconMeta(name);
+      fileIcon.textContent = meta.label;
+      fileIcon.className = 'upload-file-icon ' + meta.cls;
+      fileNameEl.textContent = name;
+      progressFill.style.width = '100%';
+      progressFill.classList.add('is-complete');
+      filePercent.style.display = 'none';
+      fileDone.style.display = '';
+      fileMeta.textContent = formatMB(parseInt(group.dataset.stagedSize, 10) || 0) + ' · attached earlier';
+      fileActions.style.display = '';
+      dropzone.style.display = 'none';
+      card.style.display = '';
+      if (laterLabel) laterLabel.style.display = 'none';
+    }
+
+    // Back to the kept file if there still is one, else the empty dropzone —
+    // used whenever a newly picked file is cancelled or rejected.
+    function restoreOrReset() {
+      if (hasKeptFile()) showKeptFile(); else resetToDropzone();
+    }
 
     // Once a file is attached, the "submit later" choice no longer applies
     // to this item — hide it entirely rather than just leaving it unchecked,
@@ -1585,6 +1699,7 @@ function old(string $key, string $default = ''): string {
     // server until final submit, so this is a purely visual "your file is
     // ready" confirmation, not a real transfer.
     function showUploadProgress(file) {
+      dropKeptFile(); // the new file replaces any kept one
       const meta = fileIconMeta(file.name);
       fileIcon.textContent = meta.label;
       fileIcon.className = 'upload-file-icon ' + meta.cls;
@@ -1630,7 +1745,7 @@ function old(string $key, string $default = ''): string {
 
     fileInput.addEventListener('change', function () {
       if (!(fileInput.files && fileInput.files.length > 0)) {
-        resetToDropzone();
+        restoreOrReset();
         clearUploadGroupError(group);
         return;
       }
@@ -1655,7 +1770,7 @@ function old(string $key, string $default = ''): string {
         blurStatus.style.display = 'none';
         if (score < BLUR_THRESHOLD) {
           fileInput.value = '';
-          resetToDropzone();
+          restoreOrReset();
           const showBlurAlert = function () {
             if (typeof Swal !== 'undefined') {
               Swal.fire({ icon: 'warning', title: 'Image looks blurry', text: 'This image looks blurry — please attach a clearer photo or scan.', confirmButtonColor: '#1E4D3B' });
@@ -1687,6 +1802,7 @@ function old(string $key, string $default = ''): string {
     if (removeBtn) {
       removeBtn.addEventListener('click', function () {
         fileInput.value = '';
+        dropKeptFile();
         resetToDropzone();
         clearUploadGroupError(group);
       });
@@ -1697,6 +1813,7 @@ function old(string $key, string $default = ''): string {
       dropzone.classList.toggle('upload-dropzone-disabled', laterCb.checked);
       if (laterCb.checked) {
         fileInput.value = '';
+        dropKeptFile();
       }
       resetToDropzone();
       // Collapse the whole card away (label + upload control) once
@@ -1737,7 +1854,7 @@ function old(string $key, string $default = ''): string {
       }
     });
 
-    resetToDropzone();
+    restoreOrReset();
   });
 
   syncAllDocsLaterCheckbox();
@@ -1772,7 +1889,9 @@ function old(string $key, string $default = ''): string {
       const laterCb   = group.querySelector('.upload-later-check input[type="checkbox"]');
       if (!fileInput || !laterCb) return;
 
-      const hasFile = fileInput.files && fileInput.files.length > 0;
+      const keepInput = group.querySelector('.upload-keep-input');
+      const hasFile = (fileInput.files && fileInput.files.length > 0)
+                   || !!(keepInput && !keepInput.disabled);
 
       if (!hasFile && !laterCb.checked) {
         valid = false;
@@ -2153,30 +2272,6 @@ function old(string $key, string $default = ''): string {
     sections.forEach(sec => observer.observe(sec));
   })();
 
-  (function () {
-    const bd  = document.getElementById('birthDate');
-    const err = document.getElementById('birthDate-error');
-    if (!bd || !err) return;
-
-    function checkBirthDate() {
-      if (!bd.value) { err.style.display = 'none'; bd.classList.remove('input-error'); return; }
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const chosen = new Date(bd.value + 'T00:00:00');
-      if (isNaN(chosen.getTime()) || chosen > today) {
-        err.textContent = 'Date of birth cannot be today or a future date.';
-        err.style.display = '';
-        bd.classList.add('input-error');
-      } else {
-        err.style.display = 'none';
-        bd.classList.remove('input-error');
-      }
-    }
-
-    bd.addEventListener('input', checkBirthDate);
-    bd.addEventListener('change', checkBirthDate);
-  })();
-
   // ── Real-time field validation ────────────────────────────────────────
   // Mirrors the PHP rules in the POST handler above (kept in sync by
   // hand — this is a convenience layer only, PHP remains the real gate)
@@ -2184,8 +2279,23 @@ function old(string $key, string $default = ''): string {
   // instead of only after Submit. Reuses each field's existing
   // "<span class="field-error"> right after the input" markup — creates
   // one on the fly if a field never rendered one (i.e. no server error
-  // on the initial load).
+  // on the initial load). Every check also registers in `checks`, which
+  // validateAllFields() runs on Submit so a bad field is caught before the
+  // round-trip instead of after it.
+  let validateAllFields = function () { return null; };
   (function () {
+    // Each entry runs one check, paints its error, and returns the element
+    // to scroll to if it failed (null when valid).
+    const checks = [];
+    validateAllFields = function () {
+      let first = null;
+      checks.forEach(function (check) {
+        const bad = check();
+        if (bad && !first) first = bad;
+      });
+      return first;
+    };
+
     const nameRegex   = /^[A-Za-zÀ-ÿ' .\-]+$/;
     const suffixRegex = /^[A-Za-z.]+$/;
 
@@ -2260,15 +2370,41 @@ function old(string $key, string $default = ''): string {
         if (v === '') return 'Email address is required.';
         return !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? 'Enter a valid email address.' : '';
       },
-      fullAddress:  v => v === '' ? 'House number / street is required.' : '',
+      fullAddress:  v => {
+        if (v === '') return 'House number / street is required.';
+        return v.length > 100 ? 'Address is too long (max 100 characters).' : '';
+      },
       relationship: v => v === '' ? 'Please select a relationship to student.' : '',
+      birthDate: v => {
+        if (v === '') return 'Date of birth is required.';
+        const chosen = new Date(v + 'T00:00:00');
+        if (isNaN(chosen.getTime())) return 'Enter a valid date of birth.';
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (chosen >= today) return 'Date of birth cannot be today or a future date.';
+        let age = today.getFullYear() - chosen.getFullYear();
+        if (today.getMonth() < chosen.getMonth()
+            || (today.getMonth() === chosen.getMonth() && today.getDate() < chosen.getDate())) age--;
+        if (age < 13) return 'Student must be at least 13 years old.';
+        return age > 100 ? 'Enter a valid date of birth.' : '';
+      },
     };
 
     Object.keys(validators).forEach(function (id) {
       const el = document.getElementById(id);
       if (!el) return;
-      function run() { setError(el, validators[id](el.value.trim())); }
+      function run() {
+        const msg = validators[id](el.value.trim());
+        setError(el, msg);
+        return msg ? el : null;
+      }
+      checks.push(run);
       el.addEventListener('blur', run);
+      // A date picker has no typing phase, so check it as soon as it changes.
+      if (el.type === 'date') {
+        el.addEventListener('change', run);
+        return;
+      }
       el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', function () {
         if (el.classList.contains('input-error')) run();
       });
@@ -2279,10 +2415,14 @@ function old(string $key, string $default = ''): string {
     if (guardianAddressEl) {
       function runGuardianAddress() {
         const sameAddress = document.getElementById('sameAddress');
-        if (sameAddress && sameAddress.checked) { setError(guardianAddressEl, ''); return; }
-        setError(guardianAddressEl, guardianAddressEl.value.trim() === ''
-          ? 'Guardian address is required (or check "Same as student address").' : '');
+        if (sameAddress && sameAddress.checked) { setError(guardianAddressEl, ''); return null; }
+        const v = guardianAddressEl.value.trim();
+        const msg = v === '' ? 'Guardian address is required (or check "Same as student address").'
+                  : v.length > 100 ? 'Address is too long (max 100 characters).' : '';
+        setError(guardianAddressEl, msg);
+        return msg ? guardianAddressEl : null;
       }
+      checks.push(runGuardianAddress);
       guardianAddressEl.addEventListener('blur', runGuardianAddress);
       guardianAddressEl.addEventListener('input', function () {
         if (guardianAddressEl.classList.contains('input-error')) runGuardianAddress();
@@ -2306,7 +2446,9 @@ function old(string $key, string $default = ''): string {
           msg = 'Enter a valid PH mobile number (09XXXXXXXXX).';
         }
         setError(display, msg, { errorClassTarget: wrap || display, anchor: hidden || display });
+        return msg ? display : null;
       }
+      checks.push(run);
       display.addEventListener('blur', run);
       display.addEventListener('input', function () {
         if ((wrap || display).classList.contains('input-error')) run();
@@ -2316,16 +2458,28 @@ function old(string $key, string $default = ''): string {
     wireMobileValidation('guardianMobileDisplay', true);
 
     // Required picker rows (radio groups) — nothing to format-check, just
-    // clear the "required" highlight the moment a choice is made.
-    function wireRequiredGroup(groupName, containerSelector) {
+    // clear the "required" highlight the moment a choice is made, and flag
+    // the row on Submit if nothing was picked.
+    function wireRequiredGroup(groupName, containerSelector, message) {
       const inputs = document.querySelectorAll('input[name="' + groupName + '"]');
       const container = document.querySelector(containerSelector);
       if (!inputs.length || !container) return;
       inputs.forEach(input => input.addEventListener('change', () => clearGroupError(container)));
+      checks.push(function () {
+        if (document.querySelector('input[name="' + groupName + '"]:checked')) {
+          clearGroupError(container);
+          return null;
+        }
+        container.classList.add('input-error');
+        const err = fieldErrorEl(container);
+        err.textContent = message;
+        err.style.display = '';
+        return container;
+      });
     }
-    wireRequiredGroup('gradeLevel', '#step-type .adm-card-row:not(.adm-strand-row)');
-    wireRequiredGroup('strand', '.adm-strand-row');
-    wireRequiredGroup('sex', '.sex-row');
+    wireRequiredGroup('gradeLevel', '#step-type .adm-card-row:not(.adm-strand-row)', 'Please select a grade level.');
+    wireRequiredGroup('strand', '.adm-strand-row', 'Please select a strand.');
+    wireRequiredGroup('sex', '.sex-row', 'Please select a sex.');
 
     // PSGC cascading address (province -> city -> barangay) — the three
     // selects share one error, keyed off whether barangay (the final,
@@ -2343,7 +2497,7 @@ function old(string $key, string $default = ''): string {
           if (sameAddress && sameAddress.checked) {
             setError(brgy, '');
             [province, city, brgy].forEach(sel => sel.classList.remove('input-error'));
-            return;
+            return null;
           }
         }
         const msg = brgy.value === ''
@@ -2353,7 +2507,9 @@ function old(string $key, string $default = ''): string {
           : '';
         [province, city, brgy].forEach(sel => sel.classList.toggle('input-error', !!msg));
         setError(brgy, msg);
+        return msg ? province : null;
       }
+      checks.push(run);
       brgy.addEventListener('blur', run);
       brgy.addEventListener('change', run);
       city.addEventListener('change', run);
@@ -2382,7 +2538,22 @@ function old(string $key, string $default = ''): string {
       e.preventDefault();
       const self = this;
 
-      if (!validateUploadChoices()) {
+      // Uploads first, fields second, so the scroll lands on the earliest
+      // problem on the page (field sections come before Requirements).
+      const uploadsOk = validateUploadChoices();
+      const firstBadField = validateAllFields();
+      if (firstBadField) {
+        firstBadField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        Swal.fire({
+          icon: 'warning',
+          title: 'Please fix the highlighted fields',
+          text: 'Some details need correcting before you can submit. Your attached documents will stay attached.',
+          confirmButtonColor: '#1E4D3B'
+        });
+        return;
+      }
+
+      if (!uploadsOk) {
         Swal.fire({
           icon: 'warning',
           title: 'Missing requirement selection',

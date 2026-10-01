@@ -405,7 +405,22 @@ $svg_phone = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 
       <div class="card staff-panel">
         <?php if (empty($teacher_list)): ?>
-          <p class="empty-state">No teachers yet. Use "Add teacher" to create the first one.</p>
+          <!-- Empty-state card from assets/css/ui_modal.css (Part iii-a). The
+               hero's Add teacher button only renders once teachers exist, so
+               this card carries its own. -->
+          <div class="empty-state">
+            <div class="icon-wrap teal">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#0F6F62" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>
+              </svg>
+            </div>
+            <h3>No teachers yet</h3>
+            <p>Add your first teacher to give them a portal login. They'll get a temporary password by email.</p>
+            <button type="button" class="btn-add-staff" id="btnEmptyAddTeacher">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              Add teacher
+            </button>
+          </div>
         <?php else: ?>
 
         <div class="staff-toolbar">
@@ -524,9 +539,14 @@ $svg_phone = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
         </table>
 
         <div class="empty-state hidden" data-no-match>
-          <strong>No teachers match these filters</strong>
-          Try a different name, strand, or status.
-          <div><button type="button" class="staff-btn staff-btn--ghost" data-clear-filters>Clear filters</button></div>
+          <div class="icon-wrap gold">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#DE9A2A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>
+            </svg>
+          </div>
+          <h3>No teachers match these filters</h3>
+          <p>Try a different name, strand, or status.</p>
+          <button type="button" class="staff-btn staff-btn--ghost" data-clear-filters>Clear filters</button>
         </div>
 
         <?php $tbl_total = count($teacher_list); $tbl_noun = 'teachers'; include BASE_PATH . '/shared/includes/admin_table_footer.php'; ?>
@@ -658,26 +678,33 @@ $svg_phone = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
             }
           ]
         });
-
-        // ── Add teacher modal open/close (the "hide" control on the modal
-        // is its ✕ button and Cancel button, both marked [data-close-modal]) ──
-        var overlay = document.getElementById('addTeacherOverlay');
-        var openBtn = document.getElementById('btnOpenAddTeacher');
-        if (openBtn) {
-          openBtn.addEventListener('click', function () {
-            overlay.classList.remove('hidden');
-            document.getElementById('tf_given_name').focus();
-          });
-        }
-        overlay.addEventListener('click', function (e) {
-          if (e.target === overlay || e.target.closest('[data-close-modal]')) overlay.classList.add('hidden');
-        });
-        document.addEventListener('keydown', function (e) {
-          if (e.key === 'Escape') overlay.classList.add('hidden');
-        });
       });
     </script>
   <?php endif; ?>
+
+  <script>
+    // ── Add teacher modal open/close — outside the $teacher_list guard so
+    // the empty state's own "Add teacher" button works before any teacher
+    // exists. Closed via its ✕ / Cancel buttons ([data-close-modal]),
+    // a backdrop click, or Escape. ──
+    document.addEventListener('DOMContentLoaded', function () {
+      var overlay = document.getElementById('addTeacherOverlay');
+      ['btnOpenAddTeacher', 'btnEmptyAddTeacher'].forEach(function (id) {
+        var btn = document.getElementById(id);
+        if (!btn) return;
+        btn.addEventListener('click', function () {
+          overlay.classList.remove('hidden');
+          document.getElementById('tf_given_name').focus();
+        });
+      });
+      overlay.addEventListener('click', function (e) {
+        if (e.target === overlay || e.target.closest('[data-close-modal]')) overlay.classList.add('hidden');
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') overlay.classList.add('hidden');
+      });
+    });
+  </script>
 
   <?php if ($new_credentials): ?>
     <div class="modal-overlay" id="credOverlay">

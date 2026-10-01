@@ -28,6 +28,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancel_id'])) {
 $balance_join  = "LEFT JOIN (SELECT enrollment_id, SUM(amount) AS paid, MAX(paid_at) AS last_payment_at FROM payments GROUP BY enrollment_id) pd
                    ON pd.enrollment_id = e.enrollment_id";
 $balance_where = "e.status = 'enrolled' AND e.total_due IS NOT NULL AND COALESCE(pd.paid, 0) < e.total_due";
+// "Fully Paid" tab (URL key stays 'enrolled' so existing links keep working) —
+// the exact complement of $balance_where within enrolled rows, so every
+// enrolled student lands in exactly one of Fully Paid / Balance Due.
+$paid_where    = "e.status = 'enrolled' AND NOT (e.total_due IS NOT NULL AND COALESCE(pd.paid, 0) < e.total_due)";
 
 // The "Pending" tab means "awaiting Treasury payment" — that's
 // enrollments.status='pre_enrolled' (Registrar has finished and assigned a
@@ -40,6 +44,8 @@ if ($status_filter === 'all') {
     $where = '';
 } elseif ($status_filter === 'balance') {
     $where = "WHERE $balance_where";
+} elseif ($status_filter === 'enrolled') {
+    $where = "WHERE $paid_where";
 } else {
     $where = "WHERE e.status = ?";
 }
@@ -83,6 +89,9 @@ $bal_cnt_res = mysqli_query($conn, "
     WHERE $balance_where
 ");
 if ($bal_cnt_res) { $counts['balance'] = (int) mysqli_fetch_assoc($bal_cnt_res)['c']; }
+// Fully Paid badge = enrolled minus those still owing ($counts['enrolled']
+// itself stays the raw total, which the All tab still sums).
+$counts['paid'] = max(0, $counts['enrolled'] - $counts['balance']);
 
 // Distinct grade levels present in the current tab's rows, for the Grade filter.
 $grade_levels = [];
@@ -277,7 +286,7 @@ function balance_pill(?float $amount): string {
   <?php
     $tabs = [
       'pending'   => 'Pending Payment',
-      'enrolled'  => 'Enrolled',
+      'enrolled'  => 'Fully Paid',
       'balance'   => 'Balance Due',
       'expired'   => 'Expired',
       'cancelled' => 'Cancelled',
@@ -294,6 +303,8 @@ function balance_pill(?float $amount): string {
           $cnt = $counts['pending'] + $counts['pre_enrolled'] + $counts['enrolled'] + $counts['cancelled'] + $counts['expired'];
       } elseif ($key === 'pending') {
           $cnt = $counts['pre_enrolled'];
+      } elseif ($key === 'enrolled') {
+          $cnt = $counts['paid'];
       } else {
           $cnt = $counts[$key] ?? 0;
       }
@@ -352,7 +363,7 @@ function balance_pill(?float $amount): string {
               <th>Remaining</th>
               <th>Enrollment Date</th>
             <?php elseif ($status_filter === 'enrolled'): ?>
-              <th>Balance Due</th>
+              <th>Amount Paid</th>
               <th>Enrollment Date</th>
             <?php elseif ($status_filter === 'balance'): ?>
               <th>Balance Due</th>
@@ -404,7 +415,7 @@ function balance_pill(?float $amount): string {
                 <td><?= balance_pill($total_due !== null ? $balance_due : null) ?></td>
                 <td class="td-meta"><?= htmlspecialchars($r['enrollment_date']) ?></td>
               <?php elseif ($status_filter === 'enrolled'): ?>
-                <td><?= balance_pill($balance_due) ?></td>
+                <td>₱<?= number_format($amount_paid, 2) ?></td>
                 <td class="td-meta"><?= htmlspecialchars($r['enrollment_date']) ?></td>
               <?php elseif ($status_filter === 'balance'): ?>
                 <td><?= balance_pill($balance_due) ?></td>

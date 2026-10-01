@@ -373,6 +373,30 @@ if ($department === 'registrar') {
 
 </aside>
 
+<!-- Search modal — opened by the topbar search button injected below. -->
+<div class="staff-search-modal" id="staffSearchModal" hidden>
+  <div class="staff-search-box" role="dialog" aria-modal="true" aria-label="Search">
+    <div class="staff-search-field">
+      <?= $ico_search ?>
+      <?php
+        $sb_search_placeholder = [
+            'records'     => 'Search pages or students by name / control number',
+            'registrar'   => 'Search pages or students by name / student number',
+            'treasury'    => 'Search pages or payments by student name / number',
+            'scheduler'   => 'Search pages, sections or subjects',
+            'coordinator' => 'Search pages, sections, subjects or teachers',
+        ][$department] ?? 'Search pages';
+      ?>
+      <input type="search" id="staffSearchInput" placeholder="<?= htmlspecialchars($sb_search_placeholder) ?>"
+             autocomplete="off" maxlength="60" role="combobox" aria-expanded="true"
+             aria-controls="staffSearchList" aria-autocomplete="list">
+      <button type="button" class="staff-search-esc" id="staffSearchClose" aria-label="Close search">Esc</button>
+    </div>
+    <div class="staff-search-status" id="staffSearchStatus" role="status" aria-live="polite"></div>
+    <ul class="staff-search-list" id="staffSearchList" role="listbox" aria-label="Search results"></ul>
+  </div>
+</div>
+
 <script>
 (function () {
   const staffSidebar  = document.getElementById('staffSidebar');
@@ -397,8 +421,8 @@ if ($department === 'registrar') {
 
     // Inject a search button next to every page's existing
     // .staff-topbar-date pill, so every staff page gets the same topbar
-    // controls without editing each page's markup individually. HTML/CSS
-    // only for now — no search behavior is wired up yet.
+    // controls without editing each page's markup individually. It opens
+    // #staffSearchModal (wired up further down).
     var staffTopbarEl = document.querySelector('.staff-topbar');
     var staffDateEl = staffTopbarEl ? staffTopbarEl.querySelector('.staff-topbar-date') : null;
     if (staffDateEl) {
@@ -416,10 +440,143 @@ if ($department === 'registrar') {
       searchBtn.className = 'staff-topbar-icon-btn';
       searchBtn.setAttribute('aria-label', 'Search');
       searchBtn.innerHTML = <?= json_encode($ico_search) ?>;
+      searchBtn.title = 'Search (Ctrl+K)';
+      searchBtn.addEventListener('click', function () { openSearch(); });
       actionsWrap.appendChild(searchBtn);
       // No fallback bell: pages that should notify include
       // shared/includes/staff_notifications.php themselves, and the ones that
       // leave it out (Records) are meant to have no bell at all.
+    }
+
+    // ── Search modal ──
+    // Sidebar pages are matched locally; records come from
+    // ajax/staff_search (department-scoped).
+    var sModal  = document.getElementById('staffSearchModal');
+    var sInput  = document.getElementById('staffSearchInput');
+    var sList   = document.getElementById('staffSearchList');
+    var sStatus = document.getElementById('staffSearchStatus');
+    var sPages  = <?= json_encode(array_map(fn($sb_it) => [
+        'title' => $sb_it[1],
+        'sub'   => $sb_it[5] ?? $roleLabel,
+        'url'   => APP_URL . '/' . $sb_it[0],
+    ], $navItems), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    var sRecords = <?= in_array($department, ['records', 'registrar', 'treasury', 'scheduler', 'coordinator'], true) ? 'true' : 'false' ?>;
+    var sTimer = null, sCtrl = null, sActive = -1, sLastFocus = null;
+
+    function esc(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    function opts() { return sList.querySelectorAll('.staff-search-opt'); }
+    function setActive(i) {
+      var o = opts();
+      o.forEach(function (el, n) {
+        el.classList.toggle('active', n === i);
+        el.setAttribute('aria-selected', n === i ? 'true' : 'false');
+      });
+      sActive = i;
+      if (o[i]) { sInput.setAttribute('aria-activedescendant', o[i].id); o[i].scrollIntoView({ block: 'nearest' }); }
+      else sInput.removeAttribute('aria-activedescendant');
+    }
+    function render(groups) {
+      var html = '', n = 0;
+      groups.forEach(function (g) {
+        if (!g.items.length) return;
+        html += '<li class="staff-search-group" role="presentation">' + esc(g.label) + '</li>';
+        g.items.forEach(function (it) {
+          html += '<li role="option" id="staffSearchOpt' + n + '" class="staff-search-opt" data-url="' + esc(it.url) + '" aria-selected="false">'
+                + '<span class="staff-search-opt-title">' + esc(it.title) + '</span>'
+                + (it.sub ? '<span class="staff-search-opt-sub">' + esc(it.sub) + '</span>' : '')
+                + '</li>';
+          n++;
+        });
+      });
+      sList.innerHTML = html;
+      setActive(n ? 0 : -1);
+      return n;
+    }
+    function search() {
+      var q = sInput.value.trim();
+      var ql = q.toLowerCase();
+      var pageHits = q === '' ? sPages : sPages.filter(function (p) {
+        return (p.title + ' ' + p.sub).toLowerCase().indexOf(ql) !== -1;
+      });
+      var pageGroup = { label: 'Pages', items: pageHits };
+      if (sCtrl) sCtrl.abort();
+
+      if (!sRecords || q.length < 2) {
+        var n = render([pageGroup]);
+        sStatus.textContent = n ? '' : 'No matches for “' + q + '”.';
+        return;
+      }
+      render([pageGroup]);
+      sStatus.textContent = 'Searching…';
+      sCtrl = new AbortController();
+      fetch('<?= APP_URL ?>/ajax/staff_search?q=' + encodeURIComponent(q), { signal: sCtrl.signal, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          var n = render([pageGroup].concat(d.groups || []));
+          sStatus.textContent = n ? '' : 'No matches for “' + q + '”.';
+        })
+        .catch(function (e) { if (e.name !== 'AbortError') sStatus.textContent = 'Search is unavailable right now.'; });
+    }
+    function go(el) {
+      if (!el) return;
+      document.getElementById('pageLoader').classList.add('show');
+      window.location.href = el.dataset.url;
+    }
+    function openSearch() {
+      if (!sModal.hidden) return;
+      sLastFocus = document.activeElement;
+      sModal.hidden = false;
+      document.body.style.overflow = 'hidden';
+      sInput.value = '';
+      search();
+      sInput.focus();
+    }
+    function closeSearch() {
+      if (sModal.hidden) return;
+      if (sCtrl) sCtrl.abort();
+      clearTimeout(sTimer);
+      sModal.hidden = true;
+      document.body.style.overflow = '';
+      if (sLastFocus && sLastFocus.focus) sLastFocus.focus();
+    }
+
+    sInput.addEventListener('input', function () { clearTimeout(sTimer); sTimer = setTimeout(search, 200); });
+    sInput.addEventListener('keydown', function (e) {
+      var n = opts().length;
+      if (e.key === 'ArrowDown')    { e.preventDefault(); if (n) setActive((sActive + 1) % n); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); if (n) setActive((sActive - 1 + n) % n); }
+      else if (e.key === 'Enter')   { e.preventDefault(); go(opts()[sActive]); }
+    });
+    sList.addEventListener('click', function (e) { go(e.target.closest('.staff-search-opt')); });
+    sList.addEventListener('mousemove', function (e) {
+      var el = e.target.closest('.staff-search-opt');
+      if (el) setActive(Array.prototype.indexOf.call(opts(), el));
+    });
+    document.getElementById('staffSearchClose').addEventListener('click', closeSearch);
+    sModal.addEventListener('mousedown', function (e) { if (e.target === sModal) closeSearch(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !sModal.hidden) { e.preventDefault(); closeSearch(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openSearch(); }
+    });
+
+    // Pages whose search box filters client-side only don't read ?q=, so
+    // a search-modal result (ajax/staff_search) landing there with ?q= gets
+    // it copied into that box. Waits for `load` so each page's own input
+    // listener — attached in its later scripts — is in place first.
+    var sPrefillQ = new URLSearchParams(window.location.search).get('q');
+    if (sPrefillQ) {
+      window.addEventListener('load', function () {
+        ['directory-search', 'enrollSearchInput', 'onlineSearchInput'].forEach(function (id) {
+          var box = document.getElementById(id);
+          if (!box || box.value) return;
+          box.value = sPrefillQ;
+          box.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+      });
     }
 
     // Logout — SweetAlert (falls back to native confirm() if Swal failed to load)

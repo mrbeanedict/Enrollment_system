@@ -438,66 +438,68 @@ header("Pragma: no-cache");
 
 <div class="wrap"><hr class="section-rule"></div>
 
-<!-- ==================== HOW TO ENROLL ==================== -->
-<section id="journey">
-  <div class="wrap">
-    <div class="section-head">
-      <span class="eyebrow">Enrollment Process</span>
-      <h2>Your journey starts here.</h2>
-      <p>Five simple steps from online application to student portal access — track your progress at every stage.</p>
-    </div>
+<!-- ==================== HOW TO ENROLL ==================== --> 
 
-    <div class="journey-steps">
-      <div class="journey-step">
-        <div class="journey-step-top">
-          <div class="journey-step-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.8"/><path d="M5 20c0-3.5 3.1-6.2 7-6.2s7 2.7 7 6.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div>
-          <span class="journey-step-num">1</span>
-        </div>
-        <h3>Create an account</h3>
-        <p>Sign up using your Student Number if you already have one, or create a new student account.</p>
-      </div>
-      <div class="journey-arrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+<section id="journey"> 
+  <div class="wrap"> 
+    <div class="section-head"> 
+      <span class="eyebrow">Enrollment Process</span> 
+      <h2>Your journey starts here.</h2> 
+      <p>Five simple steps from admission to full access to your student portal and LMS.</p> 
+    </div> 
 
-      <div class="journey-step">
-        <div class="journey-step-top">
-          <div class="journey-step-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="5" y="3.5" width="14" height="17" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
-          <span class="journey-step-num">2</span>
-        </div>
-        <h3>Fill out application</h3>
-        <p>Choose your preferred grade level and strand, then submit for review.</p>
-      </div>
-      <div class="journey-arrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+<div class="journey-steps"> 
+  <div class="journey-step"> 
+    <div class="journey-step-top"> 
+      <div class="journey-step-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.8"/><path d="M5 20c0-3.5 3.1-6.2 7-6.2s7 2.7 7 6.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></div> 
+      <span class="journey-step-num">1</span> 
+    </div> 
+    <h3>Admission & Strand/Level</h3> 
+    <p>Apply for admission and select your preferred grade level and strand based on your academic goals.</p> 
+  </div> 
+  <div class="journey-arrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div> 
 
-      <div class="journey-step">
-        <div class="journey-step-top">
-          <div class="journey-step-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M7 18a4.5 4.5 0 0 1-.5-8.97A5.5 5.5 0 0 1 17.4 8.5 4 4 0 0 1 17 18H7z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10.5v6M9.2 13.3 12 10.5l2.8 2.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <span class="journey-step-num">3</span>
-        </div>
-        <h3>Upload requirements</h3>
-        <p>Submit Form 138, PSA birth certificate, and good moral certificate securely online.</p>
-      </div>
-      <div class="journey-arrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div class="journey-step"> 
+    <div class="journey-step-top"> 
+      <div class="journey-step-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="5" y="3.5" width="14" height="17" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div> 
+      <span class="journey-step-num">2</span> 
+    </div> 
+    <h3>Records Requirements</h3> 
+    <p>Prepare and submit the required student records and documents for verification and enrollment processing.</p> 
+  </div> 
+  <div class="journey-arrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div> 
 
-      <div class="journey-step">
-        <div class="journey-step-top">
-          <div class="journey-step-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="m8 12.5 2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <span class="journey-step-num">4</span>
-        </div>
-        <h3>Track your application</h3>
-        <p>Monitor your admission status in real time as our Records team reviews your file.</p>
-      </div>
-      <div class="journey-arrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div class="journey-step"> 
+    <div class="journey-step-top"> 
+      <div class="journey-step-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M7 18a4.5 4.5 0 0 1-.5-8.97A5.5 5.5 0 0 1 17.4 8.5 4 4 0 0 1 17 18H7z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10.5v6M9.2 13.3 12 10.5l2.8 2.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></div> 
+      <span class="journey-step-num">3</span> 
+    </div> 
+    <h3>Pre-Enroll</h3> 
+    <p>Complete the pre-enrollment process and review your enrollment details before proceeding to payment.</p> 
+  </div> 
+  <div class="journey-arrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div> 
 
-      <div class="journey-step">
-        <div class="journey-step-top">
-          <div class="journey-step-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.2 4.6 5 .7-3.6 3.6.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.6 5-.7L12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
-          <span class="journey-step-num">5</span>
-        </div>
-        <h3>Get admitted & enroll</h3>
-        <p>Complete section selection, pay enrollment fees, and get your student portal access.</p>
-      </div>
-    </div>
-  </div>
+  <div class="journey-step"> 
+    <div class="journey-step-top"> 
+      <div class="journey-step-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="m8 12.5 2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div> 
+      <span class="journey-step-num">4</span> 
+    </div> 
+    <h3>Payment & Treasury</h3> 
+    <p>Settle the required enrollment fees and complete the payment process with the Treasury Office.</p> 
+  </div> 
+  <div class="journey-arrow"><svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div> 
+
+  <div class="journey-step"> 
+    <div class="journey-step-top"> 
+      <div class="journey-step-icon"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M12 3l2.2 4.6 5 .7-3.6 3.6.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.6 5-.7L12 3z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></div> 
+      <span class="journey-step-num">5</span> 
+    </div> 
+    <h3>Student Portal & LMS Access</h3> 
+    <p>Confirm your access to the student portal and LMS, where you can view your enrollment details and learning resources.</p> 
+  </div> 
+</div> 
+
+  </div> 
 </section>
 
 <!-- ==================== FINAL CTA ==================== -->

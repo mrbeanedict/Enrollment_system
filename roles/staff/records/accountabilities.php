@@ -42,7 +42,7 @@ unset($_SESSION['ac_flash'], $_SESSION['ac_flash_type']);
 // dr_load_requirements(), used by the follow-up email handler below.
 function ac_load_requirements(mysqli $conn, int $enrollment_id, int $jhs_is_public): array {
     $stmt = $conn->prepare("
-        SELECT er.enrollment_requirement_id, er.requirement_type_id, er.status,
+        SELECT er.enrollment_requirement_id, er.requirement_type_id, er.status, er.rejection_reason,
                rt.requirement_name, rt.is_required, rt.applicable_to
         FROM enrollment_requirements er
         JOIN requirement_types rt ON rt.requirement_type_id = er.requirement_type_id
@@ -303,16 +303,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_followup'])) {
         } else {
             try {
                 $mail = getMailer();
-                $items_html = '';
-                foreach ($outstanding as $r) {
-                    $tag = ((int) $r['is_required'] === 1) ? ' (required)' : ' (optional)';
-                    $items_html .= '<li>' . htmlspecialchars($r['requirement_name']) . htmlspecialchars($tag) . '</li>';
-                }
+                [$items_html, $items_text] = followup_items_markup($outstanding);
                 $bodyHtml = '<p>Hi ' . htmlspecialchars($rec['given_name']) . ', this is a reminder that the following documents are still outstanding on your file:</p>'
                     . '<ul>' . $items_html . '</ul>'
                     . '<p>Please submit or bring these to the Records Office at your earliest convenience.</p>';
-                $altBody = "The following documents are still outstanding on your file:\n"
-                    . implode("\n", array_map(fn($r) => '- ' . $r['requirement_name'], $outstanding));
+                $altBody = "The following documents are still outstanding on your file:\n" . $items_text;
 
                 send_branded_email(
                     $mail,
@@ -706,23 +701,39 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
     .req-review-table tr.no-border td { border-bottom:none; }
     .req-name { font-weight:500; color:#1A1A2E; }
     .req-status-cell { display:flex; flex-direction:column; align-items:flex-start; gap:6px; width:190px; }
-    /* Grid instead of flex — two equal columns regardless of "Approve" vs
-       "Decline" content width. Flex-basis alone still let intrinsic content
-       widen a pill past its share; grid columns are a hard equal split. */
-    .req-decision { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; }
-    .req-radio {
-      display:inline-flex; align-items:center; justify-content:center; gap:5px;
-      width:100%; min-width:0; box-sizing:border-box;
-      font-size:12px; font-weight:600;
-      cursor:pointer; padding:4px 9px; border-radius:20px; border:0.5px solid #D4D4E0;
-      background:#FAFAFC; color:#5A5A72; user-select:none;
-      transition:background-color .15s, border-color .15s, color .15s;
+    /* Approve / Decline — the same segmented-pill shape as the Online /
+       In person toggle below. The radio inside each label is still the
+       real form control, just visually hidden; clicking the active side
+       again clears the decision (see onDecisionClick). */
+    .req-decision {
+      display:inline-flex; border:0.5px solid #D4D4E0; border-radius:20px; padding:2px; background:#FAFAFC;
     }
-    .req-radio input[type="radio"] { accent-color:currentColor; margin:0; cursor:pointer; flex-shrink:0; }
-    .req-radio-approve.is-checked { background:#EAF3EE; border-color:#BFE0CD; color:#1E4D3B; }
-    .req-radio-reject.is-checked { background:#FDF0EF; border-color:#F0B8B2; color:#C0392B; }
+    .req-radio {
+      position:relative; display:inline-flex; align-items:center; margin:0; line-height:1.3;
+      font-size:11px; font-weight:600; color:#8A8A9A;
+      padding:4px 12px; border-radius:20px; cursor:pointer; user-select:none;
+      transition:background-color .15s, color .15s;
+    }
+    .req-radio input[type="radio"] { position:absolute; opacity:0; width:1px; height:1px; margin:0; pointer-events:none; }
+    .req-radio:has(input:focus-visible) { outline:2px solid #1E4D3B; outline-offset:1px; }
+    .req-radio:not(.is-checked):not(.req-radio-disabled):hover { color:#1A1A2E; }
+    .req-radio-approve.is-checked { background:#1E4D3B; color:#fff; }
+    .req-radio-reject.is-checked { background:#C0392B; color:#fff; }
     .req-radio-disabled { opacity:0.45; cursor:not-allowed; }
-    .req-radio-disabled input { cursor:not-allowed; }
+
+    /* "Mark all seen in person" — flips every row that still has the
+       Online / In person choice to In person and ticks it. */
+    .req-mark-all-wrap { display:flex; justify-content:flex-end; margin:0 0 8px; }
+    /* css_staff.css gives every <label> top/bottom margins (and drops the top
+       one on :first-of-type), which made the two halves of a pill toggle
+       different heights — these pill labels opt out. */
+    .req-radio, .req-mark-all, .req-manual-confirm { margin:0; }
+    .req-mark-all {
+      display:inline-flex; align-items:center; gap:6px;
+      font-size:11.5px; font-weight:600; color:#A9720A; cursor:pointer; user-select:none;
+      background:#FEF6E8; border:0.5px solid #F3D896; border-radius:20px; padding:5px 14px;
+    }
+    .req-mark-all input[type="checkbox"] { margin:0; accent-color:#1E4D3B; cursor:pointer; }
 
     /* Full-row reason field — a second <tr> spanning all three columns,
        shown only while a Decline decision is active on that requirement.
@@ -818,16 +829,28 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
       display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
       margin-top:1.25rem; padding-top:1rem; border-top:0.5px solid #EBEBF0;
     }
-    .dr-modal-footer .btn-primary, .dr-modal-footer .btn-secondary, .dr-modal-footer .btn-followup {
+    .dr-modal-footer .btn-followup, .dr-modal-footer .btn-save {
       height:34px; padding:0 16px; font-size:12.5px;
     }
-    .dr-footer-actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .dr-footer-actions { display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; }
 
+    /* Filled tint + stronger border so it reads as a live button — the old
+       white-with-faint-border version looked disabled even when it wasn't. */
     .btn-followup {
-      background:#fff; color:#A9720A; border:1px solid #F3D896; border-radius:8px;
+      display:inline-flex; align-items:center; gap:6px;
+      background:#FEF6E8; color:#8A5A00; border:1px solid #E9C46A; border-radius:8px;
+      font-weight:600; cursor:pointer; font-family:inherit;
+      transition:background-color .15s, border-color .15s;
+    }
+    .btn-followup svg { width:14px; height:14px; flex-shrink:0; }
+    .btn-followup:hover:not(:disabled) { background:#FCEBC8; border-color:#D9A93A; }
+    /* Save Changes — same look and spot as document_review.php's (where it
+       took over the old Approve & Admit button). */
+    .btn-save {
+      background:var(--brand-primary); color:#fff; border:none; border-radius:8px;
       font-weight:600; cursor:pointer; font-family:inherit;
     }
-    .btn-followup:hover:not(:disabled) { background:#FEF6E8; }
+    .btn-save:hover:not(:disabled) { background:#163829; }
     .dr-modal-footer button:disabled { opacity:0.55; cursor:not-allowed; pointer-events:auto; }
 
     .swal2-popup .swal2-input { margin-top: 1em !important; }
@@ -1098,10 +1121,10 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
         // than show a pair of pills that can't be used.
         control = r.file_path
           ? '<div class="req-decision">' +
-              '<label class="req-radio req-radio-approve">' +
+              '<label class="req-radio req-radio-approve" onclick="onDecisionClick(event, this, ' + rid + ')">' +
                 '<input type="radio" name="requirements[' + rid + ']" value="submitted" onchange="onDecisionChange(this, ' + rid + ')"> Approve' +
               '</label>' +
-              '<label class="req-radio req-radio-reject">' +
+              '<label class="req-radio req-radio-reject" onclick="onDecisionClick(event, this, ' + rid + ')">' +
                 '<input type="radio" name="requirements[' + rid + ']" value="rejected" onchange="onDecisionChange(this, ' + rid + ')"> Decline' +
               '</label>' +
             '</div>'
@@ -1124,16 +1147,16 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
 
         control =
           rejectionNote +
-          '<div class="req-verify-toggle" role="group">' +
+          '<div class="req-verify-toggle" role="group" data-rid="' + rid + '">' +
             '<button type="button" class="active" data-mode="online" onclick="setVerifyMode(' + rid + ', \'online\', this)">Online</button>' +
             '<button type="button" data-mode="person" onclick="setVerifyMode(' + rid + ', \'person\', this)">In person</button>' +
           '</div>' +
           '<div id="verify-online-' + rid + '">' +
             '<div class="req-decision" id="decision-' + rid + '" style="display:none;">' +
-              '<label class="req-radio req-radio-approve" id="approve-label-' + rid + '">' +
+              '<label class="req-radio req-radio-approve" onclick="onDecisionClick(event, this, ' + rid + ')" id="approve-label-' + rid + '">' +
                 '<input type="radio" name="requirements[' + rid + ']" value="submitted" onchange="onDecisionChange(this, ' + rid + ')"> Approve' +
               '</label>' +
-              '<label class="req-radio req-radio-reject" id="reject-label-' + rid + '">' +
+              '<label class="req-radio req-radio-reject" onclick="onDecisionClick(event, this, ' + rid + ')" id="reject-label-' + rid + '">' +
                 '<input type="radio" name="requirements[' + rid + ']" value="rejected" onchange="onDecisionChange(this, ' + rid + ')"> Decline' +
               '</label>' +
             '</div>' +
@@ -1176,11 +1199,22 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
       );
     }).join('');
 
+    // Only rows that still offer the Online / In person choice can be bulk-
+    // marked; already-approved or awaiting-review rows are left alone.
+    const canMarkAll = requirements.some(r => r.status === 'pending' || r.status === 'rejected');
+    const markAll = canMarkAll
+      ? '<div class="req-mark-all-wrap"><label class="req-mark-all">' +
+          '<input type="checkbox" id="markAllPerson" onchange="markAllInPerson(this.checked)"> Mark all as seen in person' +
+        '</label></div>'
+      : '';
+
     return (
       '<div class="pa-modal-section-title">Document Requirements</div>' +
       '<form method="POST" action="accountabilities" id="reqSaveForm" enctype="multipart/form-data">' +
         '<input type="hidden" name="enrollment_id" value="' + enrollmentId + '">' +
         '<input type="hidden" name="return_qs" value="' + esc(returnQs) + '">' +
+        '<input type="hidden" name="save_requirements" value="1">' +
+        markAll +
         '<div class="req-table-wrap">' +
           '<table class="req-review-table">' +
             '<thead><tr><th>Requirement</th><th>Verification</th><th>File</th></tr></thead>' +
@@ -1191,29 +1225,61 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
     );
   }
 
-  function onDecisionChange(radio, rid) {
-    const group = radio.closest('.req-decision');
+  // Sets (or with value=null, clears) the Approve/Decline toggle for one
+  // requirement. Rows with nothing on file also carry a hidden
+  // requirements[rid] field placed AFTER the radios — PHP keeps the last
+  // value for a repeated name, so that field is what the server actually
+  // reads and must mirror the toggle (left blank it silently discarded
+  // every Online approve/decline).
+  function setDecision(rid, value, group) {
     if (group) {
-      group.querySelectorAll('.req-radio').forEach(l => l.classList.toggle('is-checked', l.querySelector('input') === radio));
+      group.querySelectorAll('.req-radio').forEach(function (l) {
+        const input = l.querySelector('input');
+        input.checked = value !== null && input.value === value;
+        l.classList.toggle('is-checked', input.checked);
+      });
     }
+    const hidden = document.getElementById('hidden-' + rid);
+    if (hidden) hidden.value = value || '';
+
+    // Decline keeps its reason field: it opens whenever Decline is the
+    // active side, and whatever was typed survives toggling away and back.
     const reasonRow = document.getElementById('reason-row-' + rid);
     const reasonInput = document.getElementById('reason-' + rid);
-    if (!reasonRow || !reasonInput) return;
-    const rejecting = radio.value === 'rejected';
-    reasonRow.classList.toggle('show', rejecting);
-    if (rejecting) reasonInput.setAttribute('required', 'required');
-    else reasonInput.removeAttribute('required');
+    if (reasonRow && reasonInput) {
+      const rejecting = value === 'rejected';
+      reasonRow.classList.toggle('show', rejecting);
+      if (rejecting) reasonInput.setAttribute('required', 'required');
+      else reasonInput.removeAttribute('required');
+      if (rejecting) reasonInput.focus();
 
-    // The row above the reason field drops its own border while the
-    // field is open, so no rule sits directly above the textbox.
-    const parentRow = document.getElementById('req-row-' + rid);
-    if (parentRow) parentRow.classList.toggle('no-border', rejecting);
+      // The row above the reason field drops its own border while the
+      // field is open, so no rule sits directly above the textbox.
+      const parentRow = document.getElementById('req-row-' + rid);
+      if (parentRow) parentRow.classList.toggle('no-border', rejecting);
+    }
+    onReqFormChanged();
+  }
+
+  // Keyboard path (arrow keys move between the visually hidden radios).
+  function onDecisionChange(radio, rid) {
+    setDecision(rid, radio.value, radio.closest('.req-decision'));
+  }
+
+  // Mouse path — handled manually so clicking the side that's already
+  // active clears the decision instead of doing nothing.
+  function onDecisionClick(e, label, rid) {
+    e.preventDefault();
+    const input = label.querySelector('input');
+    if (!input || input.disabled) return;
+    setDecision(rid, input.checked ? null : input.value, label.closest('.req-decision'));
   }
 
   function onManualCheck(checkbox, rid) {
     const hidden = document.getElementById('hidden-' + rid);
-    if (!hidden) return;
-    hidden.value = checkbox.checked ? 'submitted' : '';
+    if (hidden) hidden.value = checkbox.checked ? 'submitted' : '';
+    syncMarkAll();
+    onReqFormChanged();
   }
 
   // Toggles which verification path is visible for a requirement that has
@@ -1228,7 +1294,6 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
     const onlineFile   = document.getElementById('file-online-' + rid);
     const personFile   = document.getElementById('file-person-' + rid);
     const checkbox     = document.getElementById('checkbox-' + rid);
-    const hidden        = document.getElementById('hidden-' + rid);
 
     const isOnline = mode === 'online';
     if (onlineVerify) onlineVerify.style.display = isOnline ? '' : 'none';
@@ -1236,12 +1301,44 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
     if (onlineFile) onlineFile.style.display = isOnline ? '' : 'none';
     if (personFile) personFile.style.display = isOnline ? 'none' : '';
 
-    // Switching away from "In person" un-checks it so a stray checked box
-    // doesn't silently mark the item Submitted from a hidden panel.
-    if (isOnline && checkbox && checkbox.checked) {
-      checkbox.checked = false;
-      if (hidden) hidden.value = '';
+    // Only one path's choice may count — switching clears the other one, so
+    // a stray choice can't be submitted from a panel that's now hidden.
+    if (isOnline) {
+      if (checkbox && checkbox.checked) {
+        checkbox.checked = false;
+        onManualCheck(checkbox, rid);
+      }
+    } else {
+      const decision = document.getElementById('decision-' + rid);
+      if (decision) setDecision(rid, null, decision);
     }
+    syncMarkAll();
+  }
+
+  // "Mark all as seen in person" — every row that still offers the
+  // Online / In person choice is switched to In person and ticked
+  // (unticking reverses it back to Online).
+  function markAllInPerson(checked) {
+    document.querySelectorAll('#reqSaveForm .req-verify-toggle').forEach(function (toggle) {
+      const rid = toggle.dataset.rid;
+      const btn = toggle.querySelector('button[data-mode="' + (checked ? 'person' : 'online') + '"]');
+      if (btn) setVerifyMode(rid, checked ? 'person' : 'online', btn);
+      const checkbox = document.getElementById('checkbox-' + rid);
+      if (checkbox && checkbox.checked !== checked) {
+        checkbox.checked = checked;
+        onManualCheck(checkbox, rid);
+      }
+    });
+    syncMarkAll();
+  }
+
+  function syncMarkAll() {
+    const master = document.getElementById('markAllPerson');
+    if (!master) return;
+    const boxes = Array.from(document.querySelectorAll('#reqSaveForm .req-manual-checkbox'));
+    const n = boxes.filter(b => b.checked).length;
+    master.checked = boxes.length > 0 && n === boxes.length;
+    master.indeterminate = n > 0 && n < boxes.length;
   }
 
   function refreshApproveGate(rid, hasFile) {
@@ -1280,7 +1377,11 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
     if (hidden) hidden.value = '';
     const note = document.getElementById('resubmit-note-' + rid);
     if (note) note.style.display = 'none';
+    // No file means nothing to approve or decline any more.
+    const decision = document.getElementById('decision-' + rid);
+    if (decision) setDecision(rid, null, decision);
     refreshApproveGate(rid, false);
+    onReqFormChanged();
   }
 
   function onDropzoneFileChange(rid, file) {
@@ -1307,6 +1408,7 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
       } else {
         refreshApproveGate(rid, true);
       }
+      onReqFormChanged();
     }
 
     if (typeof scoreImageSharpness !== 'function' || !file.type.startsWith('image/')) {
@@ -1349,6 +1451,12 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
     return [a.family_name + ',', a.given_name, a.middle_name, a.suffix].filter(Boolean).join(' ');
   }
 
+  // Shared handler code calls this after every form change; document_review
+  // uses it to relabel Save as "Save & Admit". Nothing to admit here.
+  function onReqFormChanged() {}
+
+  const mailIconSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="m22 6-10 7L2 6"/></svg>';
+
   function openModal(enrollmentId) {
     const a = studentData[enrollmentId];
     if (!a) return;
@@ -1357,7 +1465,7 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
     const status = computeStatus(a);
     const followupBtn = '<button type="button" class="btn-followup" onclick="confirmFollowup(' + enrollmentId + ')"' +
       (hasOutstanding(a) ? '' : ' disabled title="Nothing outstanding for this student"') +
-      '>Request Follow-up</button>';
+      '>' + mailIconSvg + 'Request Follow-up</button>';
 
     document.getElementById('paModal').innerHTML = `
       <div class="pa-modal-head">
@@ -1371,9 +1479,9 @@ foreach ($students as $a) $modal_data[$a['enrollment_id']] = $a;
       ${renderRequirementsTab(enrollmentId, a.requirements)}
 
       <div class="dr-modal-footer">
-        <button type="submit" form="reqSaveForm" name="save_requirements" class="btn-secondary">Save Changes</button>
         <div class="dr-footer-actions">
           ${followupBtn}
+          <button type="submit" form="reqSaveForm" class="btn-save">Save Changes</button>
         </div>
       </div>
     `;

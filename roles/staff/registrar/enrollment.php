@@ -158,8 +158,14 @@ $wizard = &$_SESSION['enroll_wizard'];
 
 // SHS students enroll once per school year and take all 8 subjects for
 // that grade level (4 CORE + 4 strand-specific) — no semester split.
-function subjects_for_curriculum(mysqli $conn, string $gradeLevel, string $strand): array
+function subjects_for_curriculum(mysqli $conn, string $gradeLevel, string $strand, string $schoolYear): array
 {
+    // Scoped to one school_year and to approved subjects only — subjects
+    // are tagged per year (see scheduler/curriculum.php), so without this a
+    // subject that exists in more than one year (the common case: this
+    // year's approved curriculum plus next year's proposed one) would come
+    // back once per year and show up duplicated in every list built from
+    // this function.
     $coreId   = strand_id($conn, 'CORE');
     $strandId = strand_id($conn, $strand);
     return db_fetch_all(
@@ -167,10 +173,11 @@ function subjects_for_curriculum(mysqli $conn, string $gradeLevel, string $stran
         "SELECT sub.subject_id, sub.subject_name, st.strand_code AS strand
          FROM subjects sub
          JOIN strands st ON st.strand_id = sub.strand
-         WHERE sub.grade_level = ? AND sub.strand IN (?, ?) AND sub.is_active = 1
+         WHERE sub.grade_level = ? AND sub.strand IN (?, ?) AND sub.school_year = ?
+               AND sub.is_active = 1 AND sub.review_status = 'approved'
          ORDER BY FIELD(sub.strand, ?, ?), sub.subject_name",
-        'siiii',
-        [$gradeLevel, $coreId, $strandId, $coreId, $strandId]
+        'siisii',
+        [$gradeLevel, $coreId, $strandId, $schoolYear, $coreId, $strandId]
     );
 }
 
@@ -234,7 +241,7 @@ function auto_evaluate_returning(mysqli $conn, array $wizard): array
         return ['credited' => [], 'back' => []];
     }
 
-    $priorAll = subjects_for_curriculum($conn, $prior[0], curriculum_strand($wizard['strand']));
+    $priorAll = subjects_for_curriculum($conn, $prior[0], curriculum_strand($wizard['strand']), $wizard['school_year']);
     if (wizard_is_strand_change($wizard)) {
         $priorAll = array_filter($priorAll, fn($s) => $s['strand'] === 'CORE');
     }
@@ -760,7 +767,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // are no internal subject_completion_records to trust for a
             // student coming from another school.
             $isTransfereeShift = wizard_is_strand_change($wizard);
-            $currentSubjects   = subjects_for_curriculum($conn, $wizard['grade_level'], curriculum_strand($wizard['strand']));
+            $currentSubjects   = subjects_for_curriculum($conn, $wizard['grade_level'], curriculum_strand($wizard['strand']), $wizard['school_year']);
             $currentSubjectIds = array_map('intval', array_column($currentSubjects, 'subject_id'));
             // A strand-shifting transferee can only ever credit the shared
             // CORE (minor) subjects — the new strand's major subjects
@@ -780,7 +787,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $priorSubjectIds = array_map(
                     'intval',
                     array_column(
-                        subjects_for_curriculum($conn, $prior[0], curriculum_strand($wizard['strand'])),
+                        subjects_for_curriculum($conn, $prior[0], curriculum_strand($wizard['strand']), $wizard['school_year']),
                         'subject_id'
                     )
                 );
@@ -798,7 +805,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'intval',
                         array_column(
                             array_filter(
-                                subjects_for_curriculum($conn, $prior[0], curriculum_strand($wizard['strand'])),
+                                subjects_for_curriculum($conn, $prior[0], curriculum_strand($wizard['strand']), $wizard['school_year']),
                                 fn($s) => $s['strand'] === 'CORE'
                             ),
                             'subject_id'
@@ -1384,10 +1391,10 @@ $needsValidation     = false;
 $autoPreview         = ['credited' => [], 'back' => []]; // returning, non-transferee only
 $subjLookupById      = [];
 if ($step === 3 && $wizard['grade_level'] && $wizard['strand']) {
-    $curriculumSubjects = subjects_for_curriculum($conn, $wizard['grade_level'], curriculum_strand($wizard['strand']));
+    $curriculumSubjects = subjects_for_curriculum($conn, $wizard['grade_level'], curriculum_strand($wizard['strand']), $wizard['school_year']);
     $priorTermInfo = prior_term($wizard['grade_level']);
     if ($priorTermInfo) {
-        $priorSubjects = subjects_for_curriculum($conn, $priorTermInfo[0], curriculum_strand($wizard['strand']));
+        $priorSubjects = subjects_for_curriculum($conn, $priorTermInfo[0], curriculum_strand($wizard['strand']), $wizard['school_year']);
     }
     $needsValidation = wizard_needs_validation($wizard);
     if ($needsValidation && !$wizard['is_transferee']) {
@@ -1414,7 +1421,7 @@ if (in_array($step, [4, 5], true) && $wizard['grade_level'] && $wizard['strand']
         [$wizard['grade_level'], strand_id($conn, curriculum_strand($wizard['strand'])), $wizard['school_year']]
     );
 
-    $allSubjects = subjects_for_curriculum($conn, $wizard['grade_level'], curriculum_strand($wizard['strand']));
+    $allSubjects = subjects_for_curriculum($conn, $wizard['grade_level'], curriculum_strand($wizard['strand']), $wizard['school_year']);
     $byId = [];
     foreach ($allSubjects as $s) {
         $byId[(int)$s['subject_id']] = $s;
@@ -1451,7 +1458,7 @@ if (in_array($step, [4, 5], true) && $wizard['grade_level'] && $wizard['strand']
     if ($wizard['back_subject_ids']) {
         $priorTermInfo2 = prior_term($wizard['grade_level']);
         $priorAll = $priorTermInfo2
-            ? subjects_for_curriculum($conn, $priorTermInfo2[0], curriculum_strand($wizard['strand']))
+            ? subjects_for_curriculum($conn, $priorTermInfo2[0], curriculum_strand($wizard['strand']), $wizard['school_year'])
             : [];
         $priorById = [];
         foreach ($priorAll as $p) $priorById[(int)$p['subject_id']] = $p;
@@ -2089,7 +2096,7 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
                         <span class="td-meta"><?= htmlspecialchars($semesterLabel) ?></span>
                       </td>
                       <td>
-                        <?php if ($bucket === 'enrolled' && $sem2Status === 'approved'): ?>
+                        <?php if ($bucket === 'enrolled' && $isGenuinelySem2): ?>
                           <button type="button" class="btn-secondary directory-select-btn" disabled title="Already enrolled for this cycle">Enrolled</button>
                         <?php else: ?>
                           <form method="post" style="display:inline;">
@@ -2734,12 +2741,24 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
             <form method="post">
               <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
               <input type="hidden" name="action" value="finalize_preenrollment">
-              <div class="proceed-row" style="border-top:none; padding-top:0;">
-                <span></span>
+              <div class="dtl-actions" style="border-top:none; padding-top:0; margin-top:0;">
+                <div class="dtl-actions-left">
+                  <button type="submit" form="step5-back-form" class="link-muted">&larr; Back</button>
+                  <button type="submit" form="step5-start-over-form" class="link-caution">Start over</button>
+                </div>
                 <button type="submit" class="btn-primary" <?= ($reviewAssessment && !$reviewAssessment['fees_configured']) ? 'disabled' : '' ?>>Confirm Enrollment</button>
               </div>
             </form>
           </div>
+          <form method="post" id="step5-back-form" class="hidden no-print">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+            <input type="hidden" name="action" value="go_to_step">
+            <input type="hidden" name="target_step" value="<?= $step - 1 ?>">
+          </form>
+          <form method="post" id="step5-start-over-form" class="hidden no-print" data-confirm="Start over? This clears all progress for this enrollment — student selection, evaluation, and section — and can't be undone." data-icon="warning">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
+            <input type="hidden" name="action" value="reset_wizard">
+          </form>
 
         <?php elseif ($step === 6): ?>
           <?php if (!$finalSummary): ?>
@@ -2810,17 +2829,27 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
               </div>
             </div>
 
-            <div class="no-print" style="margin-top:1rem; display:flex; justify-content:flex-end;">
+            <!-- Same action row as Steps 3–5. No Back here: the enrollment is
+                 already finalized, and returning to Step 5 would only offer
+                 Confirm Enrollment again for a record that's done. "Enroll
+                 Another Student" is this step's Start over. -->
+            <div class="panel no-print" style="margin-top:1rem;">
               <form method="post">
                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token']) ?>">
                 <input type="hidden" name="action" value="reset_wizard">
-                <button type="submit" class="btn-primary">Enroll Another Student →</button>
+                <div class="dtl-actions" style="border-top:none; padding-top:0; margin-top:0;">
+                  <div class="dtl-actions-left">
+                    <span class="proceed-info" style="margin:0;">Pre-enrollment saved — sent to the Cashier for payment.</span>
+                  </div>
+                  <button type="submit" class="btn-primary">Enroll Another Student &rarr;</button>
+                </div>
               </form>
             </div>
           <?php endif; ?>
         <?php endif; ?>
 
-        <?php if (!in_array($step, [3, 4], true)): ?>
+        <?php // Steps 3–6 carry Back / Start over inside their own action row. ?>
+        <?php if (!in_array($step, [3, 4, 5, 6], true)): ?>
         <div style="display:flex; gap:8px; margin-top:0.5rem;" class="no-print">
           <?php if ($step > 1 && !$wizard['finalized']): ?>
             <form method="post">

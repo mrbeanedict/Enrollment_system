@@ -164,13 +164,6 @@ guard_password_change('teacher_change_password', 'teacher');
 
     <div class="teacher-content">
 
-      <div class="dashboard-hero">
-        <div class="dashboard-hero-content">
-          <h2>Welcome back, <?= htmlspecialchars($_SESSION['username'] ?? 'there') ?>!</h2>
-          <p>Here's your teaching overview for today.</p>
-        </div>
-      </div>
-
       <?php if (empty($classes)): ?>
         <div class="notice notice-info">No class assignments found yet.</div>
       <?php else: ?>

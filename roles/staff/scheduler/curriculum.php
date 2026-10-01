@@ -255,17 +255,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_subject'])) {
              VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)"
         );
         $stmt->bind_param('ssisiiss', $subject_name, $grade_level, $strandId, $review_status, $proposed_by, $approved_by, $approved_at, $f_year);
+        $didRevive = false;
         if ($stmt->execute()) {
             $success = $is_reviewer
                 ? "Subject \"$subject_name\" created and approved."
                 : "Subject \"$subject_name\" submitted for coordinator review.";
-            if (!$is_reviewer) {
-                notify_coordinators($conn, "New subject \"$subject_name\" awaiting review.", 'coordinator/approvals?type=curriculum');
-            }
         } elseif ($conn->errno === 1062) {
-            $error = 'A subject with this name, grade level, and strand already exists.';
+            // A row with this exact name/grade/strand/year already exists —
+            // the table's UNIQUE KEY doesn't care about review_status, so a
+            // REJECTED row in that same slot would otherwise permanently
+            // block resubmission. Revive it instead; a genuinely
+            // active/pending row (not rejected) is correctly left alone and
+            // still blocks, below.
+            $revive = $conn->prepare(
+                "UPDATE subjects SET is_active=1, review_status=?, proposed_by=?, approved_by=?, approved_at=?, rejection_reason=NULL
+                 WHERE subject_name=? AND grade_level=? AND strand=? AND school_year=? AND review_status='rejected'"
+            );
+            $revive->bind_param('siisssis', $review_status, $proposed_by, $approved_by, $approved_at, $subject_name, $grade_level, $strandId, $f_year);
+            $revive->execute();
+            $didRevive = $revive->affected_rows > 0;
+            $revive->close();
+            if ($didRevive) {
+                $success = $is_reviewer
+                    ? "Subject \"$subject_name\" created and approved."
+                    : "Subject \"$subject_name\" submitted for coordinator review.";
+            } else {
+                $error = 'A subject with this name, grade level, and strand already exists.';
+            }
         } else {
             $error = 'Could not submit subject. Please try again.';
+        }
+        if (!$is_reviewer && ($stmt->affected_rows > 0 || $didRevive)) {
+            notify_coordinators($conn, "New subject \"$subject_name\" awaiting review.", 'coordinator/approvals?type=curriculum');
         }
         $stmt->close();
     }
@@ -438,6 +459,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_copy_subjects'])
             $approved_at   = $is_reviewer ? date('Y-m-d H:i:s') : null;
 
             $ph2 = implode(',', array_fill(0, count($confirmed_ids), '?'));
+            $types2 = 'siiss' . str_repeat('i', count($confirmed_ids));
+
+            // Revive any REJECTED row already sitting in the exact
+            // (subject_name, grade_level, strand, school_year) slot a pick
+            // would copy into — the table's UNIQUE KEY on those four
+            // columns doesn't care about review_status, so the INSERT IGNORE
+            // below would otherwise silently no-op against a still-existing
+            // rejected row forever, even though rejecting it should free
+            // that slot back up for a fresh carry-over.
+            // NOTE: this query's placeholder order differs from $copy_stmt
+            // below (the subject_id list comes BEFORE school_year here, in
+            // the WHERE clause, instead of after it in a SELECT list) — its
+            // own type string/argument order must match that.
+            $typesRevive = 'siis' . str_repeat('i', count($confirmed_ids)) . 's';
+            $reviveParams = array_merge($confirmed_ids, [$target_year]);
+            $revive_stmt = $conn->prepare("
+                UPDATE subjects dst
+                JOIN subjects src ON src.subject_name = dst.subject_name
+                                  AND src.grade_level = dst.grade_level
+                                  AND src.strand = dst.strand
+                SET dst.review_status = ?, dst.proposed_by = ?, dst.approved_by = ?, dst.approved_at = ?,
+                    dst.rejection_reason = NULL, dst.is_active = 1
+                WHERE src.subject_id IN ($ph2) AND dst.school_year = ? AND dst.review_status = 'rejected'
+            ");
+            $revive_stmt->bind_param($typesRevive, $review_status, $proposed_by, $approved_by, $approved_at, ...$reviveParams);
+            $revive_stmt->execute();
+            $revived = $revive_stmt->affected_rows;
+            $revive_stmt->close();
+
+            // Insert fresh rows for picks that don't already have ANY row
+            // (rejected or otherwise) in the target year.
             $copy_stmt = $conn->prepare("
                 INSERT IGNORE INTO subjects
                     (subject_name, grade_level, strand, is_active, review_status, proposed_by, approved_by, approved_at, school_year)
@@ -445,17 +497,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_copy_subjects'])
                 FROM subjects
                 WHERE subject_id IN ($ph2)
             ");
-            $copy_stmt->bind_param('siiss' . str_repeat('i', count($confirmed_ids)), $review_status, $proposed_by, $approved_by, $approved_at, $target_year, ...$confirmed_ids);
+            $copy_stmt->bind_param($types2, $review_status, $proposed_by, $approved_by, $approved_at, $target_year, ...$confirmed_ids);
             if ($copy_stmt->execute()) {
                 $copied = $copy_stmt->affected_rows;
                 $copy_stmt->close();
-                $success = $copied > 0
+                $total = $revived + $copied;
+                $success = $total > 0
                     ? ($is_reviewer
-                        ? "$copied subject(s) added to SY $target_year."
-                        : "$copied subject(s) submitted for coordinator review in SY $target_year.")
+                        ? "$total subject(s) added to SY $target_year."
+                        : "$total subject(s) submitted for coordinator review in SY $target_year.")
                     : "Those subjects are already part of SY $target_year.";
-                if (!$is_reviewer && $copied > 0) {
-                    notify_coordinators($conn, "$copied subject(s) carried into SY $target_year awaiting review.", 'coordinator/approvals?type=curriculum');
+                if (!$is_reviewer && $total > 0) {
+                    notify_coordinators($conn, "$total subject(s) carried into SY $target_year awaiting review.", 'coordinator/approvals?type=curriculum');
                 }
             } else {
                 $error = 'Could not carry over subjects. Please try again.';
@@ -579,11 +632,18 @@ $carry_target_year = $is_carry_post && in_array($_POST['target_year'] ?? '', $al
 $carry_picked = $is_carry_post && $carry_error !== '' ? array_map('intval', $_POST['subject_id'] ?? []) : [];
 
 $carry_data = array_fill_keys($all_years, []);
+// Rejected rows are excluded entirely — they were never copyable (that
+// already requires review_status='approved'), and a rejected subject
+// shouldn't count as "already in" the target year either, or a coordinator
+// rejecting a carried-over subject would permanently block re-carrying it
+// over. Matches approvals.php's own duplicate-subject check, which excludes
+// rejected rows for the same reason.
 $carry_res = mysqli_query($conn, "
     SELECT s.subject_id, s.subject_name, s.grade_level, st.strand_code AS strand, s.school_year,
            (s.is_active = 1 AND s.review_status = 'approved') AS copyable
     FROM subjects s
     JOIN strands st ON st.strand_id = s.strand
+    WHERE s.review_status <> 'rejected'
     ORDER BY s.grade_level ASC, s.subject_name ASC
 ");
 if ($carry_res) {
