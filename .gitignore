@@ -7,3 +7,7 @@
 
 /storage/*
 !/storage/.gitkeep
+
+# Database dumps/exports — contain real data (password hashes, student/
+# guardian records), never commit these.
+/backups/
