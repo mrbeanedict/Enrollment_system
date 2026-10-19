@@ -158,9 +158,6 @@ $conn->close();
   }
   .login-modal .modal .login-btn:active { background: var(--brand-primary-active); }
 
-  .login-modal .forgot { color: var(--login-muted); }
-  .login-modal .forgot a { color: var(--brand-primary); }
-
   /* Landing screen's "Log In" button (shown before the card pops up) —
      flat, matching the revised card instead of the gradient/glow look. */
   #openLoginBtn {
@@ -261,8 +258,6 @@ $conn->close();
 
     <button type="submit" name="login_btn" class="login-btn">Log In</button>
   </form>
-
-  <p class="forgot">Staff or Admin? <a href="../login">Log in here</a></p>
 </div>
 </div>
 

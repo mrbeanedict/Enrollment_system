@@ -297,7 +297,26 @@ unset($_SESSION['gb_flash'], $_SESSION['gb_flash_type']);
       }
       .gb-add-item input[name="title"] { flex:1 1 180px; }
       .gb-add-item input[name="max_score"] { width:80px; }
+      .gb-add-item select {
+        height:32px; border:0.5px solid #D4D4E0; border-radius:6px; padding:0 8px; font-size:12px;
+        font-family:inherit; color:#1A1A2E; background:#FAFAFC; cursor:pointer;
+      }
+      .gb-add-item input, .gb-add-item select, .gb-add-item .btn-sm { transition:border-color .15s, box-shadow .15s, background .15s, opacity .15s; }
+      .gb-add-item input:hover, .gb-add-item select:hover { border-color:#9DB8A9; }
+      .gb-add-item input:focus, .gb-add-item select:focus {
+        outline:none; border-color:var(--brand-primary, #1E4D3B); box-shadow:0 0 0 3px rgba(30,77,59,.15);
+      }
+      .gb-add-item input.is-invalid { border-color:#D14343; box-shadow:0 0 0 3px rgba(209,67,67,.12); }
+      .gb-add-item .btn-sm {
+        height:32px; padding:0 14px; border:0; border-radius:6px; font-size:12px; font-weight:600;
+        font-family:inherit; background:var(--brand-primary, #1E4D3B); color:#fff; cursor:pointer;
+      }
+      .gb-add-item .btn-sm:hover:not(:disabled) { filter:brightness(1.12); }
+      .gb-add-item .btn-sm:disabled { opacity:.45; cursor:not-allowed; }
+      .gb-add-item .gb-time-limit { width:130px; }
       .gb-add-item input[name="due_date"] { width:170px; }
+      @keyframes gb-row-flash { from { background:#FFF6CC; } to { background:transparent; } }
+      .gb-item-table tr.gb-row-new td { animation:gb-row-flash 2.5s ease-out; }
       .gb-submission-toggle { display:flex; align-items:center; gap:4px; font-size:11px; color:#5A5A72; white-space:nowrap; }
       .gb-submission-toggle input { height:auto !important; }
       .gb-submissions { margin-top:6px; padding:8px 10px; background:#FAFAFC; border:0.5px solid #EBEBF0; border-radius:6px; font-size:11px; }
@@ -569,7 +588,8 @@ unset($_SESSION['gb_flash'], $_SESSION['gb_flash_type']);
 
           <div class="teacher-panel-block gb-cat-block">
             <div class="gb-cat-title">Add Item</div>
-            <form method="POST" class="gb-add-item">
+            <form method="POST" class="gb-add-item" id="gbAddItemForm" novalidate>
+              <input type="hidden" name="add_item" value="1">
               <input type="hidden" name="subject_id" value="<?= $sel_subject ?>">
               <input type="hidden" name="section_id" value="<?= $sel_section ?>">
               <input type="hidden" name="school_year" value="<?= htmlspecialchars($sel_sy) ?>">
@@ -581,14 +601,14 @@ unset($_SESSION['gb_flash'], $_SESSION['gb_flash_type']);
               </select>
               <input type="text" name="title" placeholder="Item title (e.g. Seatwork 1)" required>
               <input type="number" name="max_score" placeholder="Max score" min="1" step="0.01" required>
-              <select name="item_type" class="gb-item-type" onchange="var w=this.closest('form').querySelector('.gb-time-limit'); w.style.display = this.value==='quiz' ? '' : 'none';">
+              <select name="item_type" class="gb-item-type">
                 <option value="manual">Manual score entry</option>
                 <option value="submission">Accept file submissions</option>
                 <option value="quiz">Online quiz (auto-graded)</option>
               </select>
               <input type="number" name="time_limit_minutes" class="gb-time-limit" placeholder="Time limit (min)" min="1" style="display:none;">
               <input type="datetime-local" name="due_date" title="Due date (optional)">
-              <button type="submit" name="add_item" class="btn-sm">+ Add Item</button>
+              <button type="submit" class="btn-sm" disabled>+ Add Item</button>
             </form>
           </div>
 
@@ -748,6 +768,66 @@ unset($_SESSION['gb_flash'], $_SESSION['gb_flash_type']);
     <input type="hidden" name="max_score" id="editItemMax">
   </form>
   <script>
+    (function () {
+      var form = document.getElementById('gbAddItemForm');
+      if (!form) return;
+      var title = form.elements.title, max = form.elements.max_score;
+      var type = form.elements.item_type, limit = form.elements.time_limit_minutes;
+      var btn = form.querySelector('.btn-sm');
+
+      function titleOk() { return title.value.trim() !== ''; }
+      function maxOk() { var v = parseFloat(max.value); return !isNaN(v) && v >= 1; }
+      function limitOk() {
+        if (type.value !== 'quiz' || limit.value === '') return true;
+        return parseInt(limit.value, 10) >= 1;
+      }
+      function refresh() {
+        btn.disabled = !(titleOk() && maxOk() && limitOk());
+      }
+      function flag(el, ok) { el.classList.toggle('is-invalid', !ok); }
+
+      title.addEventListener('blur', function () { flag(title, titleOk()); });
+      max.addEventListener('blur', function () { flag(max, maxOk()); });
+      limit.addEventListener('blur', function () { flag(limit, limitOk()); });
+      [title, max, limit].forEach(function (el) {
+        el.addEventListener('input', function () {
+          if (el.classList.contains('is-invalid')) flag(el, el === title ? titleOk() : el === max ? maxOk() : limitOk());
+          refresh();
+        });
+      });
+
+      type.addEventListener('change', function () {
+        var isQuiz = type.value === 'quiz';
+        limit.style.display = isQuiz ? '' : 'none';
+        if (!isQuiz) { limit.value = ''; flag(limit, true); }
+        else limit.focus();
+        refresh();
+      });
+
+      form.addEventListener('submit', function (e) {
+        if (btn.disabled) { e.preventDefault(); flag(title, titleOk()); flag(max, maxOk()); return; }
+        btn.disabled = true;
+        btn.textContent = 'Adding…';
+      });
+
+      // After the redirect, highlight the row that was just added (matched by
+      // the flash toast text: "<title>" added.).
+      var toast = document.querySelector('.notice-success[data-ui-toast]');
+      var m = toast && toast.textContent.match(/^"(.*)" added\.$/);
+      if (m) {
+        var rows = document.querySelectorAll('.gb-item-table tbody tr');
+        for (var i = rows.length - 1; i >= 0; i--) {
+          var cell = rows[i].querySelector('.td-name');
+          if (cell && cell.textContent === m[1]) {
+            rows[i].classList.add('gb-row-new');
+            rows[i].scrollIntoView({ block: 'center', behavior: 'smooth' });
+            break;
+          }
+        }
+      }
+      refresh();
+    })();
+
     document.querySelectorAll('.gb-item-edit').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var currentTitle = btn.dataset.title;

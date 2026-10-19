@@ -38,9 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_quiz']) && $is
         // little slack for an auto-submit fired at 0:00); after that, only
         // what was already saved is graded.
         if (!quiz_time_up($attempt, QUIZ_GRACE_SECONDS)) {
-            foreach ((array) ($_POST['answer'] ?? []) as $qid => $cid) {
-                if ((int) $cid > 0) $answers[(int) $qid] = (int) $cid;
-            }
+            $answers = quiz_merge_posted_answers(quiz_questions($conn, $item_id), $answers, (array) ($_POST['answer'] ?? []));
         } else {
             $_SESSION['tq_flash'] = 'Time ran out — the answers saved before then were submitted.';
             $_SESSION['tq_flash_type'] = 'info';
@@ -134,6 +132,11 @@ $num = fn($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
       .tq-opt:has(input:checked) { background:var(--tq-pick); border-color:var(--tq-green-2); }
       .tq-opt-text { flex:1; min-width:0; word-break:break-word; }
       .tq-opt-key { flex:none; font-size:11.5px; color:#A3ADA7; }
+      .tq-typed { display:flex; flex-direction:column; gap:8px; }
+      .tq-typed-hint { margin:0; font-size:12.5px; color:var(--tq-muted); }
+      .tq-text { width:100%; padding:10px 12px; background:#fff; border:1px solid var(--tq-line); border-radius:10px; font:inherit; color:var(--tq-ink); }
+      .tq-text:hover { border-color:#AEB8B1; }
+      .tq-text:focus-visible { outline:2px solid var(--tq-green-2); outline-offset:2px; border-color:var(--tq-green-2); }
 
       .tq-foot { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 0 24px; }
       .tq-foot-note { font-size:12.5px; color:var(--tq-muted); }
@@ -237,6 +240,7 @@ $num = fn($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
                     <span class="tq-q-pts"><?= $num($q['points']) ?> <?= (float) $q['points'] === 1.0 ? 'pt' : 'pts' ?></span>
                   </div>
                   <p class="tq-q-text" id="q<?= $i + 1 ?>-text"><?= htmlspecialchars($q['question_text']) ?></p>
+                  <?php if (($q['question_type'] ?? 'multiple_choice') === 'multiple_choice'): ?>
                   <div class="tq-opts" role="radiogroup" aria-labelledby="q<?= $i + 1 ?>-text">
                     <?php foreach ($q['choices'] as $k => $c): $cid = (int) $c['choice_id']; ?>
                       <label class="tq-opt">
@@ -246,6 +250,26 @@ $num = fn($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
                       </label>
                     <?php endforeach; ?>
                   </div>
+                  <?php elseif ($q['question_type'] === 'enumeration'):
+                    // Only the NUMBER of required items is sent to the page — never the answers themselves.
+                    $nItems = max(1, count(array_filter($q['choices'], fn($c) => (int) $c['is_correct'] === 1)));
+                    $savedItems = is_string($saved[$qid] ?? null) ? (json_decode($saved[$qid], true) ?: []) : [];
+                  ?>
+                  <div class="tq-typed" data-type="enumeration">
+                    <p class="tq-typed-hint">Enter <?= $nItems ?> answer<?= $nItems === 1 ? '' : 's' ?>, in any order.</p>
+                    <?php for ($k = 0; $k < $nItems; $k++): ?>
+                      <input type="text" class="tq-text" name="answer[<?= $qid ?>][]" maxlength="200" autocomplete="off"
+                             aria-label="Answer <?= $k + 1 ?> of <?= $nItems ?> for question <?= $i + 1 ?>"
+                             placeholder="Answer <?= $k + 1 ?>" value="<?= htmlspecialchars((string) ($savedItems[$k] ?? '')) ?>">
+                    <?php endfor; ?>
+                  </div>
+                  <?php else: ?>
+                  <div class="tq-typed" data-type="single">
+                    <input type="text" class="tq-text" name="answer[<?= $qid ?>]" maxlength="500" autocomplete="off"
+                           aria-labelledby="q<?= $i + 1 ?>-text" placeholder="Type your answer"
+                           value="<?= htmlspecialchars(is_string($saved[$qid] ?? null) ? $saved[$qid] : '') ?>">
+                  </div>
+                  <?php endif; ?>
                 </fieldset>
               <?php endforeach; ?>
 
@@ -273,7 +297,12 @@ $num = fn($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
     var submitting = false;
 
     /* ── Progress ── */
-    function answeredCount() { return form.querySelectorAll('.tq-q input:checked').length; }
+    // A question counts as answered if a radio is picked or any typed box has text.
+    function isAnswered(q) {
+      if (q.querySelector('input[type="radio"]:checked')) return true;
+      return Array.prototype.some.call(q.querySelectorAll('input.tq-text'), function (t) { return t.value.trim() !== ''; });
+    }
+    function answeredCount() { return Array.prototype.filter.call(form.querySelectorAll('.tq-q'), isAnswered).length; }
     function syncProgress() {
       var n = answeredCount(), left = total - n, pct = Math.round(n / total * 100);
       document.getElementById('tqAnswered').textContent = n;
@@ -290,27 +319,58 @@ $num = fn($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
       else if (inflight) { saveEl.textContent = 'Saving…'; saveEl.classList.remove('is-error'); }
       else               { saveEl.textContent = 'All answers saved'; saveEl.classList.remove('is-error'); }
     }
-    function save(qid, cid) {
+    // $typed = a typed answer (string / JSON array string) instead of a radio choice id.
+    function save(qid, cid, typed) {
       pending[qid] = cid; inflight++; status();
-      var body = new URLSearchParams({ item_id: form.dataset.item, question_id: qid, choice_id: cid });
+      var body = new URLSearchParams({ item_id: form.dataset.item, question_id: qid });
+      body.set(typed ? 'answer_text' : 'choice_id', cid);
       fetch('<?= APP_URL ?>/ajax/quiz_autosave', { method: 'POST', body: body, credentials: 'same-origin' })
         .then(function (r) { return r.json().catch(function () { return { ok: false }; }).then(function (j) { j.status = r.status; return j; }); })
         .then(function (j) {
           inflight--;
           if (j.ok) { if (pending[qid] === cid) delete pending[qid]; failed = Object.keys(pending).length > 0 && failed; }
           else if (j.error === 'time_up' || j.error === 'submitted') { finish(); return; }
-          else { failed = true; setTimeout(function () { if (pending[qid] === cid) save(qid, cid); }, 3000); }
+          else { failed = true; setTimeout(function () { if (pending[qid] === cid) save(qid, cid, typed); }, 3000); }
           status();
         })
         .catch(function () {
           inflight--; failed = true; status();
-          setTimeout(function () { if (pending[qid] === cid) save(qid, cid); }, 3000);
+          setTimeout(function () { if (pending[qid] === cid) save(qid, cid, typed); }, 3000);
         });
     }
     form.addEventListener('change', function (e) {
       if (!e.target.matches('.tq-q input[type="radio"]')) return;
       syncProgress();
       save(e.target.closest('.tq-q').dataset.qid, e.target.value);
+    });
+
+    /* ── Typed answers (identification / fill in the blank / enumeration):
+          saved shortly after typing stops, and immediately when leaving a box. ── */
+    function typedValue(q) {
+      var boxes = q.querySelectorAll('input.tq-text');
+      if (q.querySelector('.tq-typed[data-type="enumeration"]')) {
+        return JSON.stringify(Array.prototype.map.call(boxes, function (b) { return b.value; }));
+      }
+      return boxes[0].value;
+    }
+    var typeTimers = {};
+    function saveTyped(q) {
+      var qid = q.dataset.qid;
+      clearTimeout(typeTimers[qid]);
+      delete typeTimers[qid];
+      save(qid, typedValue(q), true);
+    }
+    form.addEventListener('input', function (e) {
+      if (!e.target.matches('input.tq-text')) return;
+      syncProgress();
+      var q = e.target.closest('.tq-q');
+      clearTimeout(typeTimers[q.dataset.qid]);
+      typeTimers[q.dataset.qid] = setTimeout(function () { saveTyped(q); }, 600);
+    });
+    form.addEventListener('focusout', function (e) {
+      if (!e.target.matches('input.tq-text')) return;
+      var q = e.target.closest('.tq-q');
+      if (typeTimers[q.dataset.qid]) saveTyped(q);
     });
 
     /* ── Submit: one attempt only, so always confirm (and say what's unanswered). ── */

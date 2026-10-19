@@ -1,9 +1,10 @@
 <?php
 declare(strict_types=1);
 // Saves one quiz answer the moment the student picks it (roles/lms/take_quiz.php).
-// POST item_id, question_id, choice_id → {ok, seconds_left}. Only into the
-// student's own open attempt, before the time limit (plus a small grace),
-// and only a choice that belongs to that quiz's question.
+// POST item_id, question_id, choice_id (multiple choice) or answer_text
+// (typed types; enumeration as a JSON array) → {ok, seconds_left}. Only into
+// the student's own open attempt, before the time limit (plus a small
+// grace), and only for a question that belongs to that quiz.
 session_name('STUDENT_LMS_SESSID');
 session_start();
 require_once __DIR__ . '/../bootstrap.php';
@@ -32,6 +33,12 @@ $attempt = quiz_attempt($conn, $item, $student_id);
 if (!$attempt || $attempt['submitted_at'] !== null) $fail(409, 'submitted');
 if (quiz_time_up($attempt, QUIZ_GRACE_SECONDS)) $fail(409, 'time_up');
 
-if (!quiz_save_answer($conn, (int) $attempt['attempt_id'], $item_id, $question_id, $choice_id)) $fail(422, 'choice');
+// Typed answer (identification / fill in the blank / enumeration) or a
+// multiple-choice pick.
+if (isset($_POST['answer_text'])) {
+    if (!quiz_save_text_answer($conn, (int) $attempt['attempt_id'], $item_id, $question_id, (string) $_POST['answer_text'])) $fail(422, 'answer');
+} elseif (!quiz_save_answer($conn, (int) $attempt['attempt_id'], $item_id, $question_id, $choice_id)) {
+    $fail(422, 'choice');
+}
 
 echo json_encode(['ok' => true, 'seconds_left' => $attempt['seconds_left'] === null ? null : (int) $attempt['seconds_left']]);

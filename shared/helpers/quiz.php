@@ -64,7 +64,7 @@ function quiz_time_up(array $attempt, int $grace = 0): bool {
 
 // Questions (in order) with their choices.
 function quiz_questions(mysqli $conn, int $item_id): array {
-    $q = $conn->prepare("SELECT question_id, question_text, points FROM quiz_questions WHERE item_id = ? ORDER BY sort_order, question_id");
+    $q = $conn->prepare("SELECT question_id, question_text, question_type, points FROM quiz_questions WHERE item_id = ? ORDER BY sort_order, question_id");
     $q->bind_param('i', $item_id);
     $q->execute();
     $questions = $q->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -84,13 +84,21 @@ function quiz_questions(mysqli $conn, int $item_id): array {
     return $questions;
 }
 
-// [question_id => choice_id] already saved for an attempt.
+// [question_id => answer] already saved for an attempt: the choice_id (int)
+// for multiple choice, the typed text (string) for the other types
+// (enumeration is a JSON array string).
 function quiz_saved_answers(mysqli $conn, int $attempt_id): array {
-    $st = $conn->prepare("SELECT question_id, choice_id FROM quiz_answers WHERE attempt_id = ? AND choice_id IS NOT NULL");
+    $st = $conn->prepare("SELECT question_id, choice_id, answer_text FROM quiz_answers WHERE attempt_id = ?");
     $st->bind_param('i', $attempt_id);
     $st->execute();
     $out = [];
-    foreach ($st->get_result()->fetch_all(MYSQLI_ASSOC) as $r) $out[(int) $r['question_id']] = (int) $r['choice_id'];
+    foreach ($st->get_result()->fetch_all(MYSQLI_ASSOC) as $r) {
+        if ($r['choice_id'] !== null) {
+            $out[(int) $r['question_id']] = (int) $r['choice_id'];
+        } elseif ($r['answer_text'] !== null && trim($r['answer_text']) !== '') {
+            $out[(int) $r['question_id']] = $r['answer_text'];
+        }
+    }
     $st->close();
     return $out;
 }
@@ -114,6 +122,137 @@ function quiz_save_answer(mysqli $conn, int $attempt_id, int $item_id, int $ques
     return $ok;
 }
 
+const QUIZ_TYPED_TYPES    = ['identification', 'fill_blank', 'enumeration'];
+const QUIZ_MAX_ENUM_ITEMS = 10;
+
+// Forgiving comparison form of a typed answer: case, punctuation, extra
+// spaces and a leading a/an/the are ignored.
+function quiz_norm(string $s): string {
+    $s = mb_strtolower(trim($s), 'UTF-8');
+    $s = preg_replace("/['\u{2019}]/u", '', $s);
+    $s = preg_replace('/[^\p{L}\p{N}]+/u', ' ', $s);
+    $s = trim($s);
+    return preg_replace('/^(a|an|the) /u', '', $s);
+}
+
+// "chloroplast|chloroplasts" -> normalized, non-empty alternates.
+function quiz_alternates(string $row): array {
+    $out = [];
+    foreach (explode('|', $row) as $alt) {
+        $n = quiz_norm($alt);
+        if ($n !== '') $out[] = $n;
+    }
+    return $out;
+}
+
+// Clean a student's typed answer for storage. Enumeration answers are an
+// array of strings (form) or a JSON array string (autosave) and are stored
+// as JSON, capped to $nItems entries. Returns null if the shape is invalid.
+function quiz_clean_text_answer(string $type, $raw, int $nItems): ?string {
+    if ($type === 'enumeration') {
+        if (is_string($raw)) $raw = json_decode($raw, true);
+        if (!is_array($raw)) return null;
+        $items = [];
+        foreach (array_slice(array_values($raw), 0, max(1, min(QUIZ_MAX_ENUM_ITEMS, $nItems))) as $v) {
+            $items[] = is_string($v) ? mb_substr(trim($v), 0, 200) : '';
+        }
+        // Nothing typed in any box = no answer (stored as '' so it reads as unanswered).
+        if (!array_filter($items, fn($v) => $v !== '')) return '';
+        return json_encode($items, JSON_UNESCAPED_UNICODE);
+    }
+    if (!is_string($raw)) return null;
+    return mb_substr(trim($raw), 0, 500);
+}
+
+// Grade one question. $question has question_type, points and choices (with
+// is_correct); $answer is the choice_id (int) for multiple choice or the
+// typed text (string, enumeration = JSON array) otherwise. Pure — no DB.
+// Returns ['earned' => float, 'correct' => bool, 'choice_id' => ?int, 'text' => ?string].
+function quiz_grade_answer(array $question, $answer): array {
+    $type   = $question['question_type'] ?? 'multiple_choice';
+    $points = (float) $question['points'];
+    $res    = ['earned' => 0.0, 'correct' => false, 'choice_id' => null, 'text' => null];
+
+    if ($type === 'multiple_choice') {
+        $valid = []; $correct = null;
+        foreach ($question['choices'] as $c) {
+            $valid[(int) $c['choice_id']] = true;
+            if ((int) $c['is_correct'] === 1) $correct = (int) $c['choice_id'];
+        }
+        if (is_int($answer) && isset($valid[$answer])) {
+            $res['choice_id'] = $answer;
+            if ($answer === $correct) { $res['correct'] = true; $res['earned'] = $points; }
+        }
+        return $res;
+    }
+
+    $rows = [];
+    foreach ($question['choices'] as $c) {
+        if ((int) $c['is_correct'] === 1) $rows[] = quiz_alternates((string) $c['choice_text']);
+    }
+    if (!is_string($answer) || trim($answer) === '' || !$rows) return $res;
+    $res['text'] = $answer;
+
+    if ($type === 'enumeration') {
+        $entries = json_decode($answer, true);
+        if (!is_array($entries)) return $res;
+        $n = count($rows); $used = []; $matched = 0;
+        foreach (array_slice(array_values($entries), 0, $n) as $e) {
+            $norm = quiz_norm(is_string($e) ? $e : '');
+            if ($norm === '') continue;
+            foreach ($rows as $i => $alts) {
+                if (!isset($used[$i]) && in_array($norm, $alts, true)) { $used[$i] = true; $matched++; break; }
+            }
+        }
+        $res['earned']  = round($points * $matched / $n, 2);
+        $res['correct'] = $matched === $n;
+        return $res;
+    }
+
+    // identification / fill_blank: any alternate of the single answer row.
+    if (in_array(quiz_norm($answer), $rows[0], true)) { $res['correct'] = true; $res['earned'] = $points; }
+    return $res;
+}
+
+// Save one typed answer (autosave) for an identification / fill-in-blank /
+// enumeration question that belongs to this quiz.
+function quiz_save_text_answer(mysqli $conn, int $attempt_id, int $item_id, int $question_id, $raw): bool {
+    $st = $conn->prepare("SELECT q.question_type, (SELECT COUNT(*) FROM quiz_choices c WHERE c.question_id = q.question_id AND c.is_correct = 1) AS n
+                          FROM quiz_questions q WHERE q.question_id = ? AND q.item_id = ? AND q.question_type <> 'multiple_choice'");
+    $st->bind_param('ii', $question_id, $item_id);
+    $st->execute();
+    $q = $st->get_result()->fetch_assoc();
+    $st->close();
+    if (!$q) return false;
+
+    $text = quiz_clean_text_answer($q['question_type'], $raw, (int) $q['n']);
+    if ($text === null) return false;
+
+    $up = $conn->prepare("INSERT INTO quiz_answers (attempt_id, question_id, choice_id, answer_text, is_correct) VALUES (?, ?, NULL, ?, 0)
+                          ON DUPLICATE KEY UPDATE choice_id = NULL, answer_text = VALUES(answer_text)");
+    $up->bind_param('iis', $attempt_id, $question_id, $text);
+    $ok = $up->execute();
+    $up->close();
+    return $ok;
+}
+
+// Fold the answers posted with the Submit form into the saved ones, each
+// validated for its question's type. $posted = $_POST['answer'].
+function quiz_merge_posted_answers(array $questions, array $answers, array $posted): array {
+    foreach ($questions as $q) {
+        $qid = (int) $q['question_id'];
+        if (!array_key_exists($qid, $posted)) continue;
+        if (($q['question_type'] ?? 'multiple_choice') === 'multiple_choice') {
+            if ((int) $posted[$qid] > 0) $answers[$qid] = (int) $posted[$qid];
+        } else {
+            $n = count(array_filter($q['choices'], fn($c) => (int) $c['is_correct'] === 1));
+            $text = quiz_clean_text_answer($q['question_type'], $posted[$qid], $n);
+            if ($text !== null && $text !== '') $answers[$qid] = $text;
+        }
+    }
+    return $answers;
+}
+
 // Grade and close the attempt. $answers = [question_id => choice_id]; every
 // question gets a row (unanswered = NULL choice, wrong). The scaled score
 // goes into the gradebook exactly like a teacher-entered score.
@@ -133,22 +272,16 @@ function quiz_finalize(mysqli $conn, array $item, int $attempt_id, int $student_
         if (!$claimed) { $conn->rollback(); return; }
 
         $earned = 0.0; $total = 0.0;
-        $up = $conn->prepare("INSERT INTO quiz_answers (attempt_id, question_id, choice_id, is_correct) VALUES (?, ?, ?, ?)
-                              ON DUPLICATE KEY UPDATE choice_id = VALUES(choice_id), is_correct = VALUES(is_correct)");
+        $up = $conn->prepare("INSERT INTO quiz_answers (attempt_id, question_id, choice_id, answer_text, is_correct, points_earned) VALUES (?, ?, ?, ?, ?, ?)
+                              ON DUPLICATE KEY UPDATE choice_id = VALUES(choice_id), answer_text = VALUES(answer_text),
+                                                      is_correct = VALUES(is_correct), points_earned = VALUES(points_earned)");
         foreach ($questions as $q) {
             $qid = (int) $q['question_id'];
-            $pts = (float) $q['points'];
-            $total += $pts;
-            $correct = null;
-            $valid   = [];
-            foreach ($q['choices'] as $c) {
-                $valid[(int) $c['choice_id']] = true;
-                if ((int) $c['is_correct'] === 1) $correct = (int) $c['choice_id'];
-            }
-            $chosen = isset($answers[$qid], $valid[(int) $answers[$qid]]) ? (int) $answers[$qid] : null;
-            $is_correct = ($chosen !== null && $chosen === $correct) ? 1 : 0;
-            if ($is_correct) $earned += $pts;
-            $up->bind_param('iiii', $attempt_id, $qid, $chosen, $is_correct);
+            $total += (float) $q['points'];
+            $g = quiz_grade_answer($q, $answers[$qid] ?? null);
+            $earned += $g['earned'];
+            $is_correct = $g['correct'] ? 1 : 0;
+            $up->bind_param('iiisid', $attempt_id, $qid, $g['choice_id'], $g['text'], $is_correct, $g['earned']);
             $up->execute();
         }
         $up->close();

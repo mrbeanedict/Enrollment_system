@@ -12,25 +12,7 @@ $teacher_id = (int) ($_SESSION['teacher_id'] ?? 0);
 $item_id    = (int) ($_GET['item_id'] ?? $_POST['item_id'] ?? 0);
 $return_qs  = $_GET['return'] ?? $_POST['return'] ?? '';
 
-// Confirm this item belongs to a class the teacher actually teaches and is
-// genuinely an online quiz — never trust the posted item_id blindly.
-function quiz_item_owned(mysqli $conn, int $item_id, int $teacher_id): ?array {
-    $stmt = $conn->prepare("
-        SELECT gi.item_id, gi.title, gi.max_score, sub.subject_name, sec.section_name
-        FROM gradebook_items gi
-        JOIN subjects sub ON sub.subject_id = gi.subject_id
-        JOIN sections sec ON sec.section_id = gi.section_id
-        JOIN teacher_assignments ta ON ta.teacher_id = gi.teacher_id AND ta.subject_id = gi.subject_id
-            AND ta.section_id = gi.section_id AND ta.school_year = gi.school_year AND ta.is_active = 1
-        WHERE gi.item_id = ? AND gi.teacher_id = ? AND gi.is_quiz = 1
-        LIMIT 1
-    ");
-    $stmt->bind_param('ii', $item_id, $teacher_id);
-    $stmt->execute();
-    $row = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-    return $row ?: null;
-}
+require_once BASE_PATH . '/shared/helpers/quiz_builder.php';
 
 $flash      = '';
 $flash_type = 'info';
@@ -91,6 +73,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_question'])) {
     exit();
 }
 
+// ── Save reviewed AI-generated questions ────────────────────────────────
+// The teacher already reviewed/edited the draft; every question is
+// re-validated here exactly like the manual form (never trust the client).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_generated'])) {
+    $item   = quiz_item_owned($conn, $item_id, $teacher_id);
+    $points = (float) ($_POST['gen_points'] ?? 1);
+    $added  = 0;
+    $skipped = 0;
+    if ($item) {
+        $conn->begin_transaction();
+        try {
+            foreach (($_POST['gen_include'] ?? []) as $i => $_on) {
+                $gtype = (string) ($_POST['gen_type'][$i] ?? 'multiple_choice');
+                if ($gtype === 'multiple_choice') {
+                    $clean = quiz_clean_question(
+                        (string) ($_POST['gen_q'][$i] ?? ''),
+                        $points,
+                        (array) ($_POST['gen_choice'][$i] ?? []),
+                        (int) ($_POST['gen_correct'][$i] ?? -1)
+                    );
+                } else {
+                    // Typed answers arrive as one text field: alternates split on
+                    // "|" (identification / fill in the blank) or one item per
+                    // line (enumeration).
+                    $rawAns = (string) ($_POST['gen_answers'][$i] ?? '');
+                    $parts  = $gtype === 'enumeration' ? preg_split('/\R/u', $rawAns) : explode('|', $rawAns);
+                    $clean  = quiz_clean_typed($gtype, (string) ($_POST['gen_q'][$i] ?? ''), $points, $parts ?: []);
+                }
+                if (!$clean) { $skipped++; continue; }
+                quiz_insert_question($conn, $item_id, $clean);
+                $added++;
+            }
+            $conn->commit();
+        } catch (Throwable $e) {
+            $conn->rollback();
+            $added = 0;
+            error_log('add_generated failed: ' . $e->getMessage());
+        }
+    }
+    if ($added > 0) {
+        $_SESSION['qb_flash'] = $added . ' question' . ($added === 1 ? '' : 's') . ' added.' . ($skipped ? " $skipped skipped (incomplete)." : '');
+        $_SESSION['qb_flash_type'] = 'success';
+    } else {
+        $_SESSION['qb_flash'] = 'No questions were added. Check that each selected question has text, 2+ choices and a correct answer.';
+        $_SESSION['qb_flash_type'] = 'error';
+    }
+    header("Location: teacher_quiz_builder?item_id=" . $item_id . "&return=" . urlencode($return_qs));
+    exit();
+}
+
 // ── Edit an existing question's text/points/choices ─────────────────────
 // Choices are matched to existing rows by position (sort_order) and
 // updated in place rather than deleted+recreated — quiz_answers.choice_id
@@ -110,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_question'])) {
 
     $qOwn = null;
     if ($item) {
-        $qOwnStmt = $conn->prepare("SELECT question_id FROM quiz_questions WHERE question_id=? AND item_id=?");
+        $qOwnStmt = $conn->prepare("SELECT question_id FROM quiz_questions WHERE question_id=? AND item_id=? AND question_type='multiple_choice'");
         $qOwnStmt->bind_param('ii', $question_id, $item_id);
         $qOwnStmt->execute();
         $qOwn = $qOwnStmt->get_result()->fetch_assoc();
@@ -250,6 +282,21 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
       .qb-item-edit { border:none; background:none; cursor:pointer; font-size:12px; color:#8A8A9A; font-family:inherit; }
       .qb-item-edit:hover { color:var(--brand-primary); }
       .qb-edit-form { margin-top:10px; padding-top:10px; border-top:0.5px dashed #EBEBF0; }
+      .qb-gen-form { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:.5rem; }
+      .qb-gen-form label { display:flex; flex-direction:column; gap:3px; font-size:11px; color:#5A5A72; }
+      .qb-gen-form select { height:32px; border:0.5px solid #D4D4E0; border-radius:6px; padding:0 8px; font-size:12px; font-family:inherit; background:#FAFAFC; }
+      .qb-gen-form input[type="number"], .qb-gen-form input[type="text"] { height:32px; border:0.5px solid #D4D4E0; border-radius:6px; padding:0 8px; font-size:12px; font-family:inherit; }
+      .qb-gen-hint { font-size:11px; color:#8A8A9A; margin:0 0 .5rem; }
+      .qb-gen-status { font-size:12px; color:#5A5A72; margin:.5rem 0; min-height:18px; }
+      .qb-gen-status.err { color:#C0392B; }
+      .qb-draft-q { border:0.5px solid #EBEBF0; border-radius:8px; padding:10px 12px; margin-bottom:8px; background:#FAFAFC; }
+      .qb-draft-q.off { opacity:.45; }
+      .qb-draft-head { display:flex; align-items:flex-start; gap:8px; margin-bottom:6px; }
+      .qb-draft-tag { display:inline-block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#2F6B4F; background:#E6F4EC; border-radius:999px; padding:1px 8px; margin-bottom:6px; }
+      .qb-draft-ans-label { display:block; font-size:11px; color:#5A5A72; margin:4px 0 3px; }
+      .qb-draft-q textarea.qb-draft-ans, .qb-draft-q input.qb-draft-ans { width:100%; box-sizing:border-box; border:0.5px solid #D4D4E0; border-radius:6px; padding:6px 8px; font-size:13px; font-family:inherit; }
+      .qb-draft-head textarea { flex:1; border:0.5px solid #D4D4E0; border-radius:6px; padding:6px 8px; font-size:13px; font-family:inherit; }
+      .qb-draft-q .qb-choice-row input[type="text"] { border:0.5px solid #D4D4E0; border-radius:6px; padding:6px 8px; font-size:13px; font-family:inherit; }
     </style>
 </head>
 <body class="teacher-layout">
@@ -263,7 +310,7 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
 
     $questions = [];
     if ($item) {
-        $q_stmt = $conn->prepare("SELECT question_id, question_text, points FROM quiz_questions WHERE item_id=? ORDER BY sort_order");
+        $q_stmt = $conn->prepare("SELECT question_id, question_text, question_type, points FROM quiz_questions WHERE item_id=? ORDER BY sort_order");
         $q_stmt->bind_param('i', $item_id);
         $q_stmt->execute();
         $questions = $q_stmt->get_result()->fetch_all(MYSQLI_ASSOC);
@@ -306,6 +353,34 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
       <?php else: ?>
 
         <div class="teacher-panel-block">
+          <div class="gb-cat-title" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#2F6B4F;margin-bottom:.5rem;">Generate from File (AI)</div>
+          <p class="qb-gen-hint">Upload lesson notes as a PDF and AI drafts multiple-choice questions. You review and edit them before they are added. Students never see the answers.</p>
+          <form id="qbGenForm" class="qb-gen-form" enctype="multipart/form-data">
+            <input type="hidden" name="item_id" value="<?= $item_id ?>">
+            <label>PDF file (10 MB max)<input type="file" name="source_file" accept=".pdf,application/pdf" required></label>
+            <label>Question type
+              <select name="question_type" id="qbGenType">
+                <option value="multiple_choice">Multiple choice</option>
+                <option value="identification">Identification</option>
+                <option value="fill_blank">Fill in the blank</option>
+                <option value="enumeration">Enumeration</option>
+              </select>
+            </label>
+            <label>Questions<input type="number" name="num_questions" value="10" min="1" max="20" style="width:80px;"></label>
+            <label>Focus / difficulty (optional)<input type="text" name="instructions" maxlength="300" placeholder="e.g. Chapter 2 only, easy" style="width:220px;"></label>
+            <button type="submit" class="btn-primary-gb" id="qbGenBtn" style="align-self:flex-end;">Generate</button>
+          </form>
+          <div class="qb-gen-status" id="qbGenStatus"></div>
+          <form method="POST" id="qbDraftForm" style="display:none;">
+            <input type="hidden" name="item_id" value="<?= $item_id ?>">
+            <input type="hidden" name="return" value="<?= htmlspecialchars($return_qs) ?>">
+            <div class="qb-points-row" style="margin-bottom:8px;">Points per question: <input type="number" name="gen_points" value="1" min="0.01" step="0.01"></div>
+            <div id="qbDraftList"></div>
+            <button type="submit" name="add_generated" class="btn-primary-gb">Add selected to quiz</button>
+          </form>
+        </div>
+
+        <div class="teacher-panel-block">
           <div class="gb-cat-title" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#2F6B4F;margin-bottom:.5rem;">Add Question</div>
           <form method="POST" class="qb-add-form">
             <input type="hidden" name="item_id" value="<?= $item_id ?>">
@@ -329,8 +404,9 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
           <?php else: ?>
             <?php foreach ($questions as $q): $qid = (int)$q['question_id']; ?>
               <div class="qb-question">
+                <?php $isMc = ($q['question_type'] ?? 'multiple_choice') === 'multiple_choice'; ?>
                 <span class="qb-question-actions">
-                  <button type="button" class="qb-item-edit" onclick="toggleEditQuestion(<?= $qid ?>)" title="Edit">&#9998; Edit</button>
+                  <?php if ($isMc): ?><button type="button" class="qb-item-edit" onclick="toggleEditQuestion(<?= $qid ?>)" title="Edit">&#9998; Edit</button><?php endif; ?>
                   <form method="POST" style="display:inline;" data-confirm="Delete this question?" data-icon="warning">
                     <input type="hidden" name="item_id" value="<?= $item_id ?>">
                     <input type="hidden" name="return" value="<?= htmlspecialchars($return_qs) ?>">
@@ -339,11 +415,15 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
                   </form>
                 </span>
                 <div class="qb-qtext"><?= htmlspecialchars($q['question_text']) ?></div>
-                <div class="qb-qmeta"><?= rtrim(rtrim(number_format((float)$q['points'], 2), '0'), '.') ?> pt(s)</div>
-                <?php foreach ($q['choices'] as $c): ?>
+                <?php $typeLabels = ['multiple_choice' => 'Multiple choice', 'identification' => 'Identification', 'fill_blank' => 'Fill in the blank', 'enumeration' => 'Enumeration']; ?>
+                <div class="qb-qmeta"><?= $typeLabels[$q['question_type'] ?? 'multiple_choice'] ?? '' ?> · <?= rtrim(rtrim(number_format((float)$q['points'], 2), '0'), '.') ?> pt(s)</div>
+                <?php if ($isMc): foreach ($q['choices'] as $c): ?>
                   <div class="qb-choice <?= $c['is_correct'] ? 'correct' : '' ?>"><?= $c['is_correct'] ? '✓ ' : '— ' ?><?= htmlspecialchars($c['choice_text']) ?></div>
-                <?php endforeach; ?>
+                <?php endforeach; else: foreach ($q['choices'] as $c): ?>
+                  <div class="qb-choice correct">✓ <?= htmlspecialchars(str_replace('|', ' / ', $c['choice_text'])) ?></div>
+                <?php endforeach; endif; ?>
 
+                <?php if ($isMc): ?>
                 <form method="POST" class="qb-add-form qb-edit-form" id="edit-form-<?= $qid ?>" style="display:none;">
                   <input type="hidden" name="item_id" value="<?= $item_id ?>">
                   <input type="hidden" name="return" value="<?= htmlspecialchars($return_qs) ?>">
@@ -361,6 +441,7 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
                     <button type="button" class="btn-sm" onclick="toggleEditQuestion(<?= $qid ?>)">Cancel</button>
                   </div>
                 </form>
+                <?php endif; ?>
               </div>
             <?php endforeach; ?>
           <?php endif; ?>
@@ -374,6 +455,90 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
       var f = document.getElementById('edit-form-' + id);
       if (f) f.style.display = (f.style.display === 'none' || !f.style.display) ? 'flex' : 'none';
     }
+
+    (function () {
+      var form = document.getElementById('qbGenForm');
+      if (!form) return;
+      var btn = document.getElementById('qbGenBtn');
+      var status = document.getElementById('qbGenStatus');
+      var draftForm = document.getElementById('qbDraftForm');
+      var list = document.getElementById('qbDraftList');
+
+      function el(tag, attrs, children) {
+        var e = document.createElement(tag);
+        Object.keys(attrs || {}).forEach(function (k) {
+          if (k === 'text') e.textContent = attrs[k]; else e.setAttribute(k, attrs[k]);
+        });
+        (children || []).forEach(function (c) { e.appendChild(c); });
+        return e;
+      }
+
+      // Built with DOM APIs + .value/textContent (never innerHTML) so AI/PDF
+      // text can't inject markup.
+      var TYPE_LABELS = { multiple_choice: 'Multiple choice', identification: 'Identification', fill_blank: 'Fill in the blank', enumeration: 'Enumeration' };
+
+      function renderDraft(questions) {
+        list.textContent = '';
+        questions.forEach(function (q, i) {
+          var box = el('div', { 'class': 'qb-draft-q' });
+          box.appendChild(el('span', { 'class': 'qb-draft-tag', text: TYPE_LABELS[q.type] || '' }));
+          box.appendChild(el('input', { type: 'hidden', name: 'gen_type[' + i + ']', value: q.type }));
+          var chk = el('input', { type: 'checkbox', name: 'gen_include[' + i + ']', value: '1', checked: 'checked', title: 'Include this question' });
+          chk.addEventListener('change', function () { box.classList.toggle('off', !chk.checked); });
+          var ta = el('textarea', { name: 'gen_q[' + i + ']', rows: '2' });
+          ta.value = q.question;
+          box.appendChild(el('div', { 'class': 'qb-draft-head' }, [chk, ta]));
+
+          if (q.type === 'multiple_choice') {
+            q.choices.forEach(function (c, j) {
+              var radio = el('input', { type: 'radio', name: 'gen_correct[' + i + ']', value: String(j), title: 'Mark as correct' });
+              if (j === q.correct_index) radio.checked = true;
+              var txt = el('input', { type: 'text', name: 'gen_choice[' + i + '][]' });
+              txt.value = c;
+              box.appendChild(el('div', { 'class': 'qb-choice-row' }, [radio, txt]));
+            });
+          } else if (q.type === 'enumeration') {
+            box.appendChild(el('label', { 'class': 'qb-draft-ans-label', text: 'Required items (one per line; use | between acceptable spellings of one item). Students get partial credit per item, in any order.' }));
+            var eta = el('textarea', { 'class': 'qb-draft-ans', name: 'gen_answers[' + i + ']', rows: String(Math.max(3, q.answers.length)) });
+            eta.value = q.answers.join('\n');
+            box.appendChild(eta);
+          } else {
+            box.appendChild(el('label', { 'class': 'qb-draft-ans-label', text: 'Accepted answer (use | between acceptable alternates, e.g. chloroplast|chloroplasts). Capitalization and punctuation are ignored.' }));
+            var ans = el('input', { type: 'text', 'class': 'qb-draft-ans', name: 'gen_answers[' + i + ']' });
+            ans.value = q.answers.join('|');
+            box.appendChild(ans);
+          }
+          list.appendChild(box);
+        });
+        draftForm.style.display = '';
+      }
+
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        btn.disabled = true;
+        btn.textContent = 'Generating…';
+        status.className = 'qb-gen-status';
+        status.textContent = 'Reading your PDF and drafting questions. This can take up to a minute.';
+        draftForm.style.display = 'none';
+
+        fetch('<?= APP_URL ?>/ajax/teacher_generate_quiz', { method: 'POST', body: new FormData(form), credentials: 'same-origin' })
+          .then(function (r) { return r.json(); })
+          .then(function (res) {
+            if (!res.success) throw new Error(res.error || 'Generation failed.');
+            var n = res.questions.length;
+            status.textContent = n + ' draft question' + (n === 1 ? '' : 's') + ' ready. Review and edit them, untick any you do not want, then add them.';
+            renderDraft(res.questions);
+          })
+          .catch(function (err) {
+            status.className = 'qb-gen-status err';
+            status.textContent = err.message || 'Something went wrong. Please try again.';
+          })
+          .finally(function () {
+            btn.disabled = false;
+            btn.textContent = 'Generate';
+          });
+      });
+    })();
   </script>
 <?php endif; ?>
 </body>
