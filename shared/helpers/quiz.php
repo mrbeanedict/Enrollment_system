@@ -9,6 +9,9 @@
 // the server, from MySQL's own clock, not the browser's.
 require_once BASE_PATH . '/shared/helpers/lms_class.php';
 
+const QUIZ_MAX_STRIKES        = 3;   // 2 warnings, then the 3rd strike auto-submits
+const QUIZ_STRIKE_MIN_GAP     = 2;   // seconds: one leave can't burn several strikes at once
+const QUIZ_HEARTBEAT_GAP      = 25;  // seconds of silence that count as a closed browser
 const QUIZ_GRACE_SECONDS = 30; // network slack for an auto-submit fired at 0:00
 
 // The quiz, only if it's in a class the student actually takes (same rule
@@ -34,7 +37,8 @@ function quiz_item_for_student(mysqli $conn, int $item_id, int $student_id): ?ar
 // The student's attempt, with seconds_left computed by MySQL (NULL = no
 // time limit) so the countdown never depends on the device's clock/timezone.
 function quiz_attempt(mysqli $conn, array $item, int $student_id, bool $create = false): ?array {
-    $sql = "SELECT attempt_id, started_at, submitted_at, score,
+    $sql = "SELECT attempt_id, started_at, submitted_at, score, violations, auto_submitted,
+                   TIMESTAMPDIFF(SECOND, last_seen, NOW()) AS idle_seconds,
                    CASE WHEN ? > 0 THEN TIMESTAMPDIFF(SECOND, NOW(), started_at + INTERVAL ? MINUTE) END AS seconds_left
             FROM quiz_attempts WHERE item_id = ? AND student_id = ?";
     $limit = (int) $item['time_limit_minutes'];
@@ -251,6 +255,56 @@ function quiz_merge_posted_answers(array $questions, array $answers, array $post
         }
     }
     return $answers;
+}
+
+// ── Anti-cheat: leaving the quiz ────────────────────────────────────────
+// Every time the student leaves (switches tab/window, closes or reloads the
+// page, or goes silent long enough to have closed the browser) the page
+// reports it and the SERVER counts it. Strikes 1 and 2 are warnings; the 3rd
+// auto-submits with the answers already saved.
+
+// Heartbeat: proves the quiz page is still open.
+function quiz_touch(mysqli $conn, int $attempt_id): void {
+    $st = $conn->prepare("UPDATE quiz_attempts SET last_seen = NOW() WHERE attempt_id = ? AND submitted_at IS NULL");
+    $st->bind_param('i', $attempt_id);
+    $st->execute();
+    $st->close();
+}
+
+// Record one strike. Returns ['counted' => bool, 'violations' => int, 'submitted' => bool].
+// Not counted when the attempt is already submitted, or within
+// QUIZ_STRIKE_MIN_GAP seconds of the previous strike (the same leave).
+function quiz_record_strike(mysqli $conn, array $item, int $attempt_id, int $student_id): array {
+    $up = $conn->prepare("UPDATE quiz_attempts
+                          SET violations = violations + 1, last_violation_at = NOW(), last_seen = NULL
+                          WHERE attempt_id = ? AND submitted_at IS NULL
+                            AND (last_violation_at IS NULL OR TIMESTAMPDIFF(SECOND, last_violation_at, NOW()) >= ?)");
+    $gap = QUIZ_STRIKE_MIN_GAP;
+    $up->bind_param('ii', $attempt_id, $gap);
+    $up->execute();
+    $counted = $up->affected_rows > 0;
+    $up->close();
+
+    $st = $conn->prepare("SELECT violations, submitted_at FROM quiz_attempts WHERE attempt_id = ?");
+    $st->bind_param('i', $attempt_id);
+    $st->execute();
+    $row = $st->get_result()->fetch_assoc();
+    $st->close();
+    $violations = (int) ($row['violations'] ?? 0);
+    $submitted  = ($row['submitted_at'] ?? null) !== null;
+
+    if ($counted && $violations >= QUIZ_MAX_STRIKES && !$submitted) {
+        $flag = $conn->prepare("UPDATE quiz_attempts SET auto_submitted = 1 WHERE attempt_id = ? AND submitted_at IS NULL");
+        $flag->bind_param('i', $attempt_id);
+        $flag->execute();
+        $flag->close();
+        quiz_finalize($conn, $item, $attempt_id, $student_id, quiz_saved_answers($conn, $attempt_id));
+        notify_student_users($conn, [(int) ($_SESSION['user_student_id'] ?? 0)],
+            'Your quiz "' . $item['title'] . '" was submitted automatically because you left it too many times.',
+            'roles/lms/take_quiz?item_id=' . (int) $item['item_id']);
+        $submitted = true;
+    }
+    return ['counted' => $counted, 'violations' => $violations, 'submitted' => $submitted];
 }
 
 // Grade and close the attempt. $answers = [question_id => choice_id]; every

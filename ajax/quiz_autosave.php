@@ -41,4 +41,5 @@ if (isset($_POST['answer_text'])) {
     $fail(422, 'choice');
 }
 
+quiz_touch($conn, (int) $attempt['attempt_id']); // saving an answer also proves the page is open
 echo json_encode(['ok' => true, 'seconds_left' => $attempt['seconds_left'] === null ? null : (int) $attempt['seconds_left']]);

@@ -69,7 +69,15 @@ if ($is_student) {
             $flash_type = 'info';
             $attempt = quiz_attempt($conn, $item, $student_id);
         }
+        // Came back after the page went silent (browser closed without a
+        // "leaving" message getting through): that absence is a strike.
+        // last_seen is NULL when the leave was already counted (or first visit).
+        if ($attempt['submitted_at'] === null && $attempt['idle_seconds'] !== null && (int) $attempt['idle_seconds'] > QUIZ_HEARTBEAT_GAP) {
+            quiz_record_strike($conn, $item, (int) $attempt['attempt_id'], $student_id);
+            $attempt = quiz_attempt($conn, $item, $student_id);
+        }
         if ($attempt['submitted_at'] === null) {
+            quiz_touch($conn, (int) $attempt['attempt_id']);
             $questions = quiz_questions($conn, $item_id);
             $saved     = quiz_saved_answers($conn, (int) $attempt['attempt_id']);
         }
@@ -132,6 +140,9 @@ $num = fn($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
       .tq-opt:has(input:checked) { background:var(--tq-pick); border-color:var(--tq-green-2); }
       .tq-opt-text { flex:1; min-width:0; word-break:break-word; }
       .tq-opt-key { flex:none; font-size:11.5px; color:#A3ADA7; }
+      .tq-rules { margin:0 0 14px; padding:10px 12px; background:var(--tq-warm); border:1px solid var(--tq-warm-line); border-radius:10px; color:var(--tq-warm-ink); font-size:13px; line-height:1.5; }
+      .tq-strikes { display:block; margin-top:4px; font-weight:600; }
+      .tq-strikes.is-hot { color:#B3261E; }
       .tq-typed { display:flex; flex-direction:column; gap:8px; }
       .tq-typed-hint { margin:0; font-size:12.5px; color:var(--tq-muted); }
       .tq-text { width:100%; padding:10px 12px; background:#fff; border:1px solid var(--tq-line); border-radius:10px; font:inherit; color:var(--tq-ink); }
@@ -190,6 +201,9 @@ $num = fn($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
 
           <?php if ($attempt['submitted_at'] !== null): $res = quiz_result($conn, $item, $attempt, $student_id); ?>
             <p class="tq-sub">Submitted <?= date('M j, Y · g:i A', strtotime($attempt['submitted_at'])) ?></p>
+            <?php if (!empty($attempt['auto_submitted'])): ?>
+              <div class="notice notice-error" style="margin-bottom:12px;">This quiz was submitted automatically because you left it <?= QUIZ_MAX_STRIKES ?> times (switching tabs or closing the browser). Only the answers saved before then were graded.</div>
+            <?php endif; ?>
             <div class="tq-result">
               <div class="tq-result-label">Your score</div>
               <div class="tq-result-score"><?= $res['score'] !== null ? $num($res['score']) : '—' ?> / <?= $num($res['max']) ?></div>
@@ -208,6 +222,11 @@ $num = fn($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
             $letters = range('A', 'Z');
           ?>
             <p class="tq-sub">Quiz in progress · autosaves every answer<?= $timed ? ' · the timer keeps running if you leave' : '' ?></p>
+            <div class="tq-rules" role="note">
+              <b>Stay on this page.</b> Switching tabs or windows, or closing or reloading the browser, counts as leaving the quiz.
+              You get 2 warnings; the 3rd time your quiz is submitted automatically.
+              <span class="tq-strikes" id="tqStrikes" data-start="<?= (int) $attempt['violations'] ?>">Leaves so far: <b id="tqStrikeN"><?= (int) $attempt['violations'] ?></b> of <?= QUIZ_MAX_STRIKES ?></span>
+            </div>
 
             <div class="tq-stats">
               <div class="tq-stat"><b><?= $nq ?></b><span>Questions</span></div>
@@ -387,6 +406,86 @@ $num = fn($v) => rtrim(rtrim(number_format((float) $v, 2), '0'), '.');
                   confirmButtonText: 'Submit', cancelButtonText: 'Keep answering', confirmButtonColor: '#1C2628' })
         .then(function (r) { if (r.isConfirmed) finish(); });
     });
+
+
+    /* ── Anti-cheat: leaving the quiz is a strike. The SERVER counts them
+          (2 warnings, the 3rd auto-submits); this only reports. ── */
+    var MAX_STRIKES = <?= QUIZ_MAX_STRIKES ?>;
+    var VIOLATION_URL = '<?= APP_URL ?>/ajax/quiz_violation';
+    var strikeEl = document.getElementById('tqStrikes'), strikeN = document.getElementById('tqStrikeN');
+    var seenKey = 'tq_strikes_seen_' + form.dataset.item;
+    var away = false, awayTimer = null, warnOpen = false, ended = false;
+
+    function body(reason) { return new URLSearchParams({ item_id: form.dataset.item, reason: reason }); }
+    function setStrikes(n) {
+      strikeN.textContent = n;
+      strikeEl.classList.toggle('is-hot', n >= MAX_STRIKES - 1);
+      try { sessionStorage.setItem(seenKey, String(n)); } catch (e) {}
+    }
+    function strikeMessage(n) {
+      if (n === 1) return 'Warning 1 of 2. You left the quiz. If you leave 2 more times, it is submitted automatically.';
+      if (n === 2) return 'FINAL warning (2 of 2). If you leave the quiz once more, it is submitted automatically.';
+      return 'You left the quiz ' + MAX_STRIKES + ' times, so it was submitted automatically.';
+    }
+    function showStrike(n, submitted) {
+      setStrikes(n);
+      if (submitted) {
+        ended = true;
+        var go = function () { window.location.reload(); };
+        if (typeof Swal === 'undefined') { window.alert(strikeMessage(MAX_STRIKES)); go(); return; }
+        Swal.fire({ title: 'Quiz submitted', text: strikeMessage(MAX_STRIKES), icon: 'error', allowOutsideClick: false, confirmButtonColor: '#1C2628' }).then(go);
+        return;
+      }
+      warnOpen = true;
+      var done = function () { warnOpen = false; };
+      if (typeof Swal === 'undefined') { window.alert(strikeMessage(n)); done(); return; }
+      Swal.fire({ title: 'Warning', text: strikeMessage(n), icon: 'warning', confirmButtonColor: '#1C2628', allowOutsideClick: false }).then(done);
+    }
+    function reportLeave(reason) {
+      if (away || warnOpen || ended || submitting) return;
+      away = true; // one absence = one strike, until the student is back
+      fetch(VIOLATION_URL, { method: 'POST', body: body(reason), credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { if (j && j.ok && (j.violations > 0 || j.submitted)) showStrike(j.violations, j.submitted); })
+        .catch(function () {});
+    }
+    function back() { clearTimeout(awayTimer); awayTimer = null; away = false; }
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') { clearTimeout(awayTimer); reportLeave('hidden'); }
+      else { back(); }
+    });
+    // Another window/app took focus without hiding this tab. Short grace so a click
+    // into the browser's own address bar and straight back isn't punished.
+    window.addEventListener('blur', function () {
+      if (away || warnOpen || ended || submitting) return;
+      clearTimeout(awayTimer);
+      awayTimer = setTimeout(function () { if (!document.hasFocus()) reportLeave('blur'); }, 1500);
+    });
+    window.addEventListener('focus', back);
+    // Closing / reloading / navigating away. sendBeacon survives the page going away.
+    window.addEventListener('pagehide', function () {
+      if (away || ended || submitting) return;
+      if (navigator.sendBeacon) navigator.sendBeacon(VIOLATION_URL, body('leave'));
+    });
+    // Heartbeat: if the browser is killed before the beacon goes out, the server
+    // notices the silence when the student next opens the quiz.
+    setInterval(function () {
+      if (ended || submitting) return;
+      fetch(VIOLATION_URL, { method: 'POST', body: body('heartbeat'), credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { if (j && j.ok && j.submitted && !submitting) { ended = true; window.location.reload(); } })
+        .catch(function () {});
+    }, 5000);
+
+    // Strikes that happened while the page was gone (closed tab, reload, long absence):
+    // tell the student now, once.
+    (function () {
+      var n = parseInt(strikeEl.dataset.start, 10) || 0, seen = 0;
+      try { seen = parseInt(sessionStorage.getItem(seenKey) || '0', 10) || 0; } catch (e) {}
+      setStrikes(n);
+      if (n > seen && n < MAX_STRIKES) showStrike(n, false);
+    })();
 
     /* ── Timer: counts down the server's seconds_left (never the device clock);
           submits automatically at 0:00. ── */

@@ -359,6 +359,12 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
       .qb-item-edit { border:none; background:none; cursor:pointer; font-size:12px; color:#8A8A9A; font-family:inherit; }
       .qb-item-edit:hover { color:var(--brand-primary); }
       .qb-edit-form { margin-top:10px; padding-top:10px; border-top:0.5px dashed #EBEBF0; }
+      .qb-flag-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 0; border-top:0.5px solid #EBEBF0; font-size:13px; }
+      .qb-flag-row:first-of-type { border-top:0; }
+      .qb-flag-name { font-weight:600; color:#1A1A2E; }
+      .qb-flag-count { color:#8A8A9A; }
+      .qb-flag-badge { padding:1px 8px; border-radius:999px; background:#FDECEA; color:#B3261E; font-size:11px; font-weight:700; }
+      .qb-flag-badge.qb-flag-live { background:#FFF6CC; color:#8A6D00; }
       .qb-edit-label { font-size:11px; color:#5A5A72; }
       .qb-edit-note { margin:0; font-size:11px; color:#8A8A9A; }
       .qb-edit-form textarea, .qb-edit-form input[type="text"] { border:0.5px solid #D4D4E0; border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; }
@@ -569,6 +575,34 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
             <?php endforeach; ?>
           <?php endif; ?>
         </div>
+
+        <?php
+          // Students who left the quiz (anti-cheat) — read-only, so the teacher can see who was flagged.
+          $flagStmt = $conn->prepare("
+              SELECT s.family_name, s.given_name, a.violations, a.auto_submitted, a.submitted_at, a.score
+              FROM quiz_attempts a JOIN students s ON s.student_id = a.student_id
+              WHERE a.item_id = ? AND a.violations > 0
+              ORDER BY a.auto_submitted DESC, a.violations DESC, s.family_name, s.given_name
+          ");
+          $flagStmt->bind_param('i', $item_id);
+          $flagStmt->execute();
+          $flagged = $flagStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+          $flagStmt->close();
+        ?>
+        <?php if ($flagged): ?>
+        <div class="teacher-panel-block">
+          <div class="gb-cat-title" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#2F6B4F;margin-bottom:.5rem;">Students who left the quiz (<?= count($flagged) ?>)</div>
+          <p class="qb-gen-hint">Switching tabs or closing the browser counts as leaving. 2 warnings, then the quiz is submitted automatically.</p>
+          <?php foreach ($flagged as $f): ?>
+            <div class="qb-flag-row">
+              <span class="qb-flag-name"><?= htmlspecialchars($f['family_name'] . ', ' . $f['given_name']) ?></span>
+              <span class="qb-flag-count">Left <?= (int) $f['violations'] ?> time<?= (int) $f['violations'] === 1 ? '' : 's' ?></span>
+              <?php if ($f['auto_submitted']): ?><span class="qb-flag-badge">Auto-submitted</span>
+              <?php elseif ($f['submitted_at'] === null): ?><span class="qb-flag-badge qb-flag-live">In progress</span><?php endif; ?>
+            </div>
+          <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
 
       <?php endif; ?>
     </div>
