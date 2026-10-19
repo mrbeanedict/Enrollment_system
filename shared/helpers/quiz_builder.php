@@ -103,3 +103,35 @@ function quiz_insert_question(mysqli $conn, int $item_id, array $q): void {
     }
     $insC->close();
 }
+
+// Replace an identification / fill-in-blank / enumeration question's text,
+// points and accepted-answer rows (a $q from quiz_clean_typed). Typed
+// answers never reference quiz_choices (quiz_answers.choice_id is NULL for
+// them), so swapping the rows can't hit that foreign key.
+function quiz_update_typed_question(mysqli $conn, int $question_id, array $q): bool {
+    $conn->begin_transaction();
+    try {
+        $upd = $conn->prepare("UPDATE quiz_questions SET question_text = ?, points = ? WHERE question_id = ?");
+        $upd->bind_param('sdi', $q['text'], $q['points'], $question_id);
+        $upd->execute();
+        $upd->close();
+
+        $del = $conn->prepare("DELETE FROM quiz_choices WHERE question_id = ?");
+        $del->bind_param('i', $question_id);
+        $del->execute();
+        $del->close();
+
+        $ins = $conn->prepare("INSERT INTO quiz_choices (question_id, choice_text, is_correct, sort_order) VALUES (?, ?, 1, ?)");
+        foreach ($q['answers'] as $i => $text) {
+            $ins->bind_param('isi', $question_id, $text, $i);
+            $ins->execute();
+        }
+        $ins->close();
+        $conn->commit();
+        return true;
+    } catch (Throwable $e) {
+        $conn->rollback();
+        error_log('quiz_update_typed_question failed: ' . $e->getMessage());
+        return false;
+    }
+}

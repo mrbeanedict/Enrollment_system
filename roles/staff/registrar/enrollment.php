@@ -1773,10 +1773,21 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
 
   .dtl-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 1rem; padding-top: 1rem; border-top: 0.5px solid #EBEBF0; flex-wrap: wrap; }
   .dtl-actions-left { display: flex; align-items: center; gap: 18px; }
-  .link-muted { font-size: 12.5px; color: #5A5A72; text-decoration: none; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; }
-  .link-muted:hover { color: #1A1A2E; text-decoration: underline; }
-  .link-caution { font-size: 12.5px; color: #C0392B; text-decoration: underline; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; }
-  .link-caution:hover { color: #7F1D1D; }
+  .link-muted, .link-caution {
+    display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; font-size: 12.5px; font-weight: 600;
+    font-family: inherit; background: #fff; border: 0.5px solid #D4D4E0; border-radius: 999px; cursor: pointer; text-decoration: none;
+    transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .1s;
+  }
+  .link-muted { color: #5A5A72; }
+  .link-muted:hover { background: #E6F4EC; border-color: #2F6B4F; color: #1E4D3B; }
+  .link-muted .link-arrow { display: inline-block; transition: transform .18s; }
+  .link-muted:hover .link-arrow { transform: translateX(-4px); }
+  .link-caution { color: #C0392B; border-color: #EBC4C0; }
+  .link-caution:hover { background: #FDECEA; border-color: #D14343; color: #7F1D1D; }
+  .link-muted:active, .link-caution:active { transform: translateY(1px); }
+  .link-muted:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(30,77,59,.25); }
+  .link-caution:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(209,67,67,.25); }
+  @media (prefers-reduced-motion: reduce) { .link-muted, .link-caution, .link-muted .link-arrow { transition: none; } .link-muted:hover .link-arrow { transform: none; } }
 
   .dtl-summary-row { display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 4px 20px; padding: 8px 0; border-bottom: 0.5px solid #EFEFF4; font-size: 12.5px; }
   .dtl-summary-row:last-child { border-bottom: none; padding-bottom: 0; }
@@ -2243,7 +2254,7 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
                   <input type="hidden" name="strand" value="<?= htmlspecialchars($wizard['strand']) ?>">
                   <div class="dtl-actions">
                     <div class="dtl-actions-left">
-                      <button type="submit" form="back-to-step-form" class="link-muted">&larr; Back to search</button>
+                      <button type="submit" form="back-to-step-form" class="link-muted"><span class="link-arrow" aria-hidden="true">&larr;</span> Back to search</button>
                       <button type="submit" form="start-over-form" class="link-caution">Start over</button>
                     </div>
                     <button type="submit" class="btn-primary">Continue to evaluation &rarr;</button>
@@ -2280,7 +2291,7 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
 
                   <div class="dtl-actions">
                     <div class="dtl-actions-left">
-                      <button type="submit" form="back-to-step-form" class="link-muted">&larr; Back to search</button>
+                      <button type="submit" form="back-to-step-form" class="link-muted"><span class="link-arrow" aria-hidden="true">&larr;</span> Back to search</button>
                       <button type="submit" form="start-over-form" class="link-caution">Start over</button>
                     </div>
                     <button type="submit" class="btn-primary">Continue to evaluation &rarr;</button>
@@ -2521,7 +2532,7 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
 
               <div class="dtl-actions" style="margin-top:1.25rem;">
                 <div class="dtl-actions-left">
-                  <button type="submit" form="step3-back-form" class="link-muted">&larr; Back</button>
+                  <button type="submit" form="step3-back-form" class="link-muted"><span class="link-arrow" aria-hidden="true">&larr;</span> Back</button>
                   <button type="submit" form="step3-start-over-form" class="link-caution">Start over</button>
                 </div>
                 <button type="submit" class="btn-primary" id="eval-continue-btn">Continue<?= $needsValidation ? ' to Section Selection' : ' →' ?></button>
@@ -2646,7 +2657,7 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
               </p>
               <div class="dtl-actions" style="border-top:none; padding-top:0; margin-top:0;">
                 <div class="dtl-actions-left">
-                  <button type="submit" form="step4-back-form" class="link-muted">&larr; Back</button>
+                  <button type="submit" form="step4-back-form" class="link-muted"><span class="link-arrow" aria-hidden="true">&larr;</span> Back</button>
                   <button type="submit" form="step4-start-over-form" class="link-caution">Start over</button>
                 </div>
                 <button type="submit" class="btn-primary" <?= $readyToConfirm ? '' : 'disabled' ?>>Continue to Review</button>
@@ -2743,7 +2754,7 @@ if ($step === 6 && $wizard['finalized'] && $wizard['enrollment_id']) {
               <input type="hidden" name="action" value="finalize_preenrollment">
               <div class="dtl-actions" style="border-top:none; padding-top:0; margin-top:0;">
                 <div class="dtl-actions-left">
-                  <button type="submit" form="step5-back-form" class="link-muted">&larr; Back</button>
+                  <button type="submit" form="step5-back-form" class="link-muted"><span class="link-arrow" aria-hidden="true">&larr;</span> Back</button>
                   <button type="submit" form="step5-start-over-form" class="link-caution">Start over</button>
                 </div>
                 <button type="submit" class="btn-primary" <?= ($reviewAssessment && !$reviewAssessment['fees_configured']) ? 'disabled' : '' ?>>Confirm Enrollment</button>

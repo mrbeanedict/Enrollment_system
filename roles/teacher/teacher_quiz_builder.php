@@ -244,6 +244,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_question'])) {
     exit();
 }
 
+// ── Edit an identification / fill-in-the-blank / enumeration question ───
+// Multiple choice has its own handler above. Re-validated like the AI draft
+// review: one answers field ("|" alternates, or one item per line for
+// enumeration).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_typed_question'])) {
+    $question_id = (int) ($_POST['question_id'] ?? 0);
+    $item  = quiz_item_owned($conn, $item_id, $teacher_id);
+    $qType = null;
+    if ($item) {
+        $tStmt = $conn->prepare("SELECT question_type FROM quiz_questions WHERE question_id=? AND item_id=? AND question_type<>'multiple_choice'");
+        $tStmt->bind_param('ii', $question_id, $item_id);
+        $tStmt->execute();
+        $qType = $tStmt->get_result()->fetch_row()[0] ?? null;
+        $tStmt->close();
+    }
+    $clean = null;
+    if ($qType) {
+        $rawAns = (string) ($_POST['answers'] ?? '');
+        $parts  = $qType === 'enumeration' ? preg_split('/\R/u', $rawAns) : explode('|', $rawAns);
+        $clean  = quiz_clean_typed($qType, (string) ($_POST['question_text'] ?? ''), (float) ($_POST['points'] ?? 1), $parts ?: []);
+    }
+    if (!$item || !$qType) {
+        $_SESSION['qb_flash'] = 'That question was not found among your assignments.';
+        $_SESSION['qb_flash_type'] = 'error';
+    } elseif (!$clean) {
+        $_SESSION['qb_flash'] = 'Please provide the question, a valid point value and the answer(s). Enumeration needs 2 to ' . QUIZ_MAX_ENUM_ITEMS . ' items.';
+        $_SESSION['qb_flash_type'] = 'error';
+    } elseif (quiz_update_typed_question($conn, $question_id, $clean)) {
+        $_SESSION['qb_flash'] = 'Question updated.';
+        $_SESSION['qb_flash_type'] = 'success';
+    } else {
+        $_SESSION['qb_flash'] = 'Could not save the question. Please try again.';
+        $_SESSION['qb_flash_type'] = 'error';
+    }
+    header("Location: teacher_quiz_builder?item_id=" . $item_id . "&return=" . urlencode($return_qs));
+    exit();
+}
+
+// ── Delete ALL questions of this quiz (choices/answers cascade) ─────────
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_all_questions'])) {
+    $item = quiz_item_owned($conn, $item_id, $teacher_id);
+    if ($item) {
+        $del = $conn->prepare("DELETE FROM quiz_questions WHERE item_id=?");
+        $del->bind_param('i', $item_id);
+        $del->execute();
+        $n = $del->affected_rows;
+        $del->close();
+        $_SESSION['qb_flash'] = $n > 0 ? $n . ' question' . ($n === 1 ? '' : 's') . ' deleted.' : 'There were no questions to delete.';
+        $_SESSION['qb_flash_type'] = $n > 0 ? 'success' : 'info';
+    } else {
+        $_SESSION['qb_flash'] = 'That quiz was not found among your assignments.';
+        $_SESSION['qb_flash_type'] = 'error';
+    }
+    header("Location: teacher_quiz_builder?item_id=" . $item_id . "&return=" . urlencode($return_qs));
+    exit();
+}
+
 $flash      = $_SESSION['qb_flash']      ?? '';
 $flash_type = $_SESSION['qb_flash_type'] ?? 'info';
 unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
@@ -256,8 +313,28 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
     <title>Quiz Builder — SHS Enrollment</title>
     <link rel="stylesheet" href="<?= APP_URL ?>/assets/css/css_teacher.css?v=<?= filemtime(__DIR__ . '/../../assets/css/css_teacher.css') ?>">
     <style>
-      .qb-back { font-size:12px; color:#5A5A72; text-decoration:none; display:inline-block; margin-bottom:.75rem; }
-      .qb-back:hover { color:var(--brand-primary); }
+      .qb-back {
+        display:inline-flex; align-items:center; gap:8px; height:34px; padding:0 14px 0 10px; margin-bottom:.75rem;
+        font-size:12.5px; font-weight:600; color:#2F6B4F; text-decoration:none; background:#fff;
+        border:0.5px solid #C9D8CF; border-radius:999px; transition:background .15s, border-color .15s, color .15s, box-shadow .15s;
+      }
+      .qb-back-arrow { display:inline-block; font-size:15px; line-height:1; transition:transform .18s; }
+      .qb-back:hover { background:#E6F4EC; border-color:#2F6B4F; color:#1E4D3B; }
+      .qb-back:hover .qb-back-arrow { transform:translateX(-4px); }
+      .qb-back:active { transform:translateY(1px); }
+      .qb-back:focus-visible { outline:none; box-shadow:0 0 0 3px rgba(30,77,59,.25); }
+      .qb-panel-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:.5rem; }
+      .qb-panel-head .gb-cat-title { margin-bottom:0 !important; }
+      .qb-delete-all-form { margin:0; }
+      .qb-act {
+        display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 10px; font-size:12px; font-weight:600; font-family:inherit;
+        background:#fff; border:0.5px solid #D4D4E0; border-radius:6px; color:#5A5A72; cursor:pointer;
+        transition:background .15s, border-color .15s, color .15s, box-shadow .15s;
+      }
+      .qb-act:focus-visible { outline:none; box-shadow:0 0 0 3px rgba(30,77,59,.2); }
+      .qb-act-edit:hover, .qb-act-edit[aria-expanded="true"] { background:#E6F4EC; border-color:#2F6B4F; color:#1E4D3B; }
+      .qb-act-delete:hover, .qb-act-deleteall:hover { background:#FDECEA; border-color:#D14343; color:#B3261E; }
+      .qb-act-delete:focus-visible, .qb-act-deleteall:focus-visible { box-shadow:0 0 0 3px rgba(209,67,67,.2); }
       .qb-question { border-bottom:0.5px solid #EBEBF0; padding:12px 0; }
       .qb-question:last-child { border-bottom:none; }
       .qb-qtext { font-weight:600; font-size:14px; color:#1A1A2E; }
@@ -282,6 +359,9 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
       .qb-item-edit { border:none; background:none; cursor:pointer; font-size:12px; color:#8A8A9A; font-family:inherit; }
       .qb-item-edit:hover { color:var(--brand-primary); }
       .qb-edit-form { margin-top:10px; padding-top:10px; border-top:0.5px dashed #EBEBF0; }
+      .qb-edit-label { font-size:11px; color:#5A5A72; }
+      .qb-edit-note { margin:0; font-size:11px; color:#8A8A9A; }
+      .qb-edit-form textarea, .qb-edit-form input[type="text"] { border:0.5px solid #D4D4E0; border-radius:6px; padding:8px 10px; font-size:13px; font-family:inherit; }
       .qb-gen-form { display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:.5rem; }
       .qb-gen-form label { display:flex; flex-direction:column; gap:3px; font-size:11px; color:#5A5A72; }
       .qb-gen-form select { height:32px; border:0.5px solid #D4D4E0; border-radius:6px; padding:0 8px; font-size:12px; font-family:inherit; background:#FAFAFC; }
@@ -309,7 +389,14 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
     $item = quiz_item_owned($conn, $item_id, $teacher_id);
 
     $questions = [];
+    $submittedCount = 0; // students who already submitted — shown in the "Delete all" warning
     if ($item) {
+        $sc = $conn->prepare("SELECT COUNT(*) FROM quiz_attempts WHERE item_id = ? AND submitted_at IS NOT NULL");
+        $sc->bind_param('i', $item_id);
+        $sc->execute();
+        $submittedCount = (int) $sc->get_result()->fetch_row()[0];
+        $sc->close();
+
         $q_stmt = $conn->prepare("SELECT question_id, question_text, question_type, points FROM quiz_questions WHERE item_id=? ORDER BY sort_order");
         $q_stmt->bind_param('i', $item_id);
         $q_stmt->execute();
@@ -344,7 +431,7 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
     </div>
 
     <div class="teacher-content">
-      <a class="qb-back" href="teacher_gradebook?<?= htmlspecialchars($return_qs) ?>">&larr; Back to Assessment</a>
+      <a class="qb-back" id="qbBack" href="teacher_gradebook?<?= htmlspecialchars($return_qs) ?>"><span class="qb-back-arrow" aria-hidden="true">&larr;</span> Back to Assessment</a>
 
       <?php if ($flash): ?><div class="notice notice-<?= htmlspecialchars($flash_type) ?>" data-ui-toast><?= htmlspecialchars($flash) ?></div><?php endif; ?>
 
@@ -354,10 +441,10 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
 
         <div class="teacher-panel-block">
           <div class="gb-cat-title" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#2F6B4F;margin-bottom:.5rem;">Generate from File (AI)</div>
-          <p class="qb-gen-hint">Upload lesson notes as a PDF and AI drafts multiple-choice questions. You review and edit them before they are added. Students never see the answers.</p>
+          <p class="qb-gen-hint">Upload lesson notes as a PDF or PowerPoint (.pptx) and AI drafts multiple-choice questions. You review and edit them before they are added. Students never see the answers.</p>
           <form id="qbGenForm" class="qb-gen-form" enctype="multipart/form-data">
             <input type="hidden" name="item_id" value="<?= $item_id ?>">
-            <label>PDF file (10 MB max)<input type="file" name="source_file" accept=".pdf,application/pdf" required></label>
+            <label>PDF or PowerPoint (.pptx), 10 MB max<input type="file" name="source_file" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation" required></label>
             <label>Question type
               <select name="question_type" id="qbGenType">
                 <option value="multiple_choice">Multiple choice</option>
@@ -398,7 +485,20 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
         </div>
 
         <div class="teacher-panel-block">
-          <div class="gb-cat-title" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#2F6B4F;margin-bottom:.5rem;">Questions (<?= count($questions) ?>)</div>
+          <div class="qb-panel-head">
+            <div class="gb-cat-title" style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#2F6B4F;">Questions (<?= count($questions) ?>)</div>
+            <?php if (!empty($questions)):
+              $nQ = count($questions);
+              $delAllMsg = 'Delete all ' . $nQ . ' question' . ($nQ === 1 ? '' : 's') . ' in this quiz? This cannot be undone.'
+                         . ($submittedCount > 0 ? ' ' . $submittedCount . ' student' . ($submittedCount === 1 ? ' has' : 's have') . ' already submitted it: their scores stay in the gradebook, but their answer details are removed.' : '');
+            ?>
+              <form method="POST" class="qb-delete-all-form" data-confirm="<?= htmlspecialchars($delAllMsg, ENT_QUOTES) ?>" data-icon="warning">
+                <input type="hidden" name="item_id" value="<?= $item_id ?>">
+                <input type="hidden" name="return" value="<?= htmlspecialchars($return_qs) ?>">
+                <button type="submit" name="delete_all_questions" class="qb-act qb-act-deleteall" title="Delete every question in this quiz">&#128465; Delete all</button>
+              </form>
+            <?php endif; ?>
+          </div>
           <?php if (empty($questions)): ?>
             <p class="empty-state">No questions added yet.</p>
           <?php else: ?>
@@ -406,12 +506,12 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
               <div class="qb-question">
                 <?php $isMc = ($q['question_type'] ?? 'multiple_choice') === 'multiple_choice'; ?>
                 <span class="qb-question-actions">
-                  <?php if ($isMc): ?><button type="button" class="qb-item-edit" onclick="toggleEditQuestion(<?= $qid ?>)" title="Edit">&#9998; Edit</button><?php endif; ?>
+                  <button type="button" class="qb-act qb-act-edit" id="edit-btn-<?= $qid ?>" onclick="toggleEditQuestion(<?= $qid ?>)" aria-expanded="false" aria-controls="edit-form-<?= $qid ?>" title="Edit this question">&#9998; Edit</button>
                   <form method="POST" style="display:inline;" data-confirm="Delete this question?" data-icon="warning">
                     <input type="hidden" name="item_id" value="<?= $item_id ?>">
                     <input type="hidden" name="return" value="<?= htmlspecialchars($return_qs) ?>">
                     <input type="hidden" name="question_id" value="<?= $qid ?>">
-                    <button type="submit" name="delete_question" class="qb-item-delete" title="Delete">&times; Delete</button>
+                    <button type="submit" name="delete_question" class="qb-act qb-act-delete" title="Delete this question">&#128465; Delete</button>
                   </form>
                 </span>
                 <div class="qb-qtext"><?= htmlspecialchars($q['question_text']) ?></div>
@@ -441,6 +541,29 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
                     <button type="button" class="btn-sm" onclick="toggleEditQuestion(<?= $qid ?>)">Cancel</button>
                   </div>
                 </form>
+                <?php else:
+                  $ansLines = array_column($q['choices'], 'choice_text');
+                  $isEnum   = $q['question_type'] === 'enumeration';
+                ?>
+                <form method="POST" class="qb-add-form qb-edit-form" id="edit-form-<?= $qid ?>" style="display:none;">
+                  <input type="hidden" name="item_id" value="<?= $item_id ?>">
+                  <input type="hidden" name="return" value="<?= htmlspecialchars($return_qs) ?>">
+                  <input type="hidden" name="question_id" value="<?= $qid ?>">
+                  <textarea name="question_text" rows="2" placeholder="Question text" required><?= htmlspecialchars($q['question_text']) ?></textarea>
+                  <div class="qb-points-row">Points: <input type="number" name="points" value="<?= htmlspecialchars($q['points']) ?>" min="0.01" step="0.01"></div>
+                  <?php if ($isEnum): ?>
+                    <label class="qb-edit-label">Required items, one per line (use | between acceptable spellings of one item). Students get partial credit per item, in any order.</label>
+                    <textarea name="answers" rows="<?= max(3, count($ansLines)) ?>" required><?= htmlspecialchars(implode("\n", $ansLines)) ?></textarea>
+                  <?php else: ?>
+                    <label class="qb-edit-label">Accepted answer (use | between acceptable alternates, e.g. chloroplast|chloroplasts). Capitalization and punctuation are ignored.</label>
+                    <input type="text" name="answers" value="<?= htmlspecialchars($ansLines[0] ?? '') ?>" required>
+                  <?php endif; ?>
+                  <p class="qb-edit-note">Changes apply to future grading only. Students who already submitted keep their scores.</p>
+                  <div>
+                    <button type="submit" name="edit_typed_question" class="btn-primary-gb">Save Changes</button>
+                    <button type="button" class="btn-sm" onclick="toggleEditQuestion(<?= $qid ?>)">Cancel</button>
+                  </div>
+                </form>
                 <?php endif; ?>
               </div>
             <?php endforeach; ?>
@@ -453,8 +576,30 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
   <script>
     function toggleEditQuestion(id) {
       var f = document.getElementById('edit-form-' + id);
-      if (f) f.style.display = (f.style.display === 'none' || !f.style.display) ? 'flex' : 'none';
+      if (!f) return;
+      var open = (f.style.display === 'none' || !f.style.display);
+      f.style.display = open ? 'flex' : 'none';
+      var b = document.getElementById('edit-btn-' + id);
+      if (b) b.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) { var first = f.querySelector('textarea, input[type="text"]'); if (first) first.focus(); }
     }
+
+    // Leaving with generated questions that were never added would lose them: confirm first.
+    (function () {
+      var back = document.getElementById('qbBack');
+      var draft = document.getElementById('qbDraftForm');
+      if (!back || !draft) return;
+      back.addEventListener('click', function (e) {
+        if (draft.style.display === 'none') return; // nothing unsaved
+        e.preventDefault();
+        var go = function () { window.location.href = back.href; };
+        var msg = "You have generated questions that haven't been added to the quiz yet. Leave anyway?";
+        if (typeof Swal === 'undefined') { if (window.confirm(msg)) go(); return; }
+        Swal.fire({ title: 'Unsaved questions', text: msg, icon: 'warning', showCancelButton: true,
+                    confirmButtonText: 'Leave', cancelButtonText: 'Stay', confirmButtonColor: '#1E4D3B', cancelButtonColor: '#aaa' })
+          .then(function (r) { if (r.isConfirmed) go(); });
+      });
+    })();
 
     (function () {
       var form = document.getElementById('qbGenForm');
@@ -518,7 +663,7 @@ unset($_SESSION['qb_flash'], $_SESSION['qb_flash_type']);
         btn.disabled = true;
         btn.textContent = 'Generating…';
         status.className = 'qb-gen-status';
-        status.textContent = 'Reading your PDF and drafting questions. This can take up to a minute.';
+        status.textContent = 'Reading your file and drafting questions. This can take up to a minute.';
         draftForm.style.display = 'none';
 
         fetch('<?= APP_URL ?>/ajax/teacher_generate_quiz', { method: 'POST', body: new FormData(form), credentials: 'same-origin' })

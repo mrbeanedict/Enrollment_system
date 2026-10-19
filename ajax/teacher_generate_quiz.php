@@ -8,6 +8,7 @@ session_start();
 require_once __DIR__ . '/../bootstrap.php';
 require_once BASE_PATH . '/shared/helpers/quiz_builder.php';
 require_once BASE_PATH . '/shared/helpers/ai_quiz.php';
+require_once BASE_PATH . '/shared/helpers/doc_text.php';
 
 header('Content-Type: application/json');
 
@@ -33,11 +34,14 @@ if (count($_SESSION['ai_quiz_calls']) >= 5) gen_fail('Too many generations. Plea
 
 $file = $_FILES['source_file'] ?? null;
 if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-    gen_fail('Please choose a PDF file to upload.');
+    gen_fail('Please choose a PDF or PowerPoint file to upload.');
 }
 $ext = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
-if ($ext !== 'pdf' || !upload_content_matches_ext($file['tmp_name'], 'pdf')) gen_fail('Only PDF files are supported.');
-if ($file['size'] > 10 * 1024 * 1024) gen_fail('The PDF is too large (10 MB max).');
+if ($ext === 'ppt') gen_fail("Old .ppt files aren't supported. In PowerPoint, use Save As .pptx or PDF.");
+if (!in_array($ext, ['pdf', 'pptx'], true) || !upload_content_matches_ext($file['tmp_name'], $ext)) {
+    gen_fail('Only PDF or PowerPoint (.pptx) files are supported.');
+}
+if ($file['size'] > 10 * 1024 * 1024) gen_fail('The file is too large (10 MB max).');
 
 $n            = max(1, min(AI_QUIZ_MAX_QUESTIONS, (int) ($_POST['num_questions'] ?? 10)));
 $instructions = (string) ($_POST['instructions'] ?? '');
@@ -46,12 +50,21 @@ if (!in_array($type, AI_QUIZ_TYPES, true)) gen_fail('Please choose a valid quest
 
 $_SESSION['ai_quiz_calls'][] = $now;
 // Read once and discard — the upload is never stored.
-$pdf = file_get_contents($file['tmp_name']);
+$bytes = file_get_contents($file['tmp_name']);
 @unlink($file['tmp_name']);
+if ($ext === 'pptx') {
+    // The AI can't read PowerPoint directly: send the slide + speaker-notes text instead.
+    $slideText = doc_pptx_text($bytes);
+    if ($slideText === null) gen_fail('That file is not a valid PowerPoint (.pptx) presentation.');
+    if ($slideText === '') gen_fail('No readable text found in the slides. Export the presentation as a PDF and upload that instead.');
+    $source = ['text' => $slideText];
+} else {
+    $source = $bytes;
+}
 session_write_close(); // don't hold the session lock during the slow API call
 
 try {
-    $questions = ai_generate_quiz($pdf, $n, $instructions, $type);
+    $questions = ai_generate_quiz($source, $n, $instructions, $type);
 } catch (RuntimeException $e) {
     gen_fail($e->getMessage());
 }
